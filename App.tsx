@@ -25,7 +25,9 @@ import {
   ArrowDownTrayIcon,
   CloudIcon,
   Cog6ToothIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  SignalIcon,
+  SignalSlashIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -80,9 +82,16 @@ declare global {
 
 const DB_CONFIG_KEY = 'inss_db_config';
 
-// Helper to safely attempt getting Env Vars (Vercel Integration)
+// Helper to safely attempt getting Env Vars (Supports Next.js, Create React App, and Vite)
 const getEnvVar = (key: string): string | undefined => {
     try {
+        // 1. Try Vite / Modern Browsers
+        // @ts-ignore
+        if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
+             // @ts-ignore
+            return import.meta.env[key];
+        }
+        // 2. Try Node / Next.js / CRA
         // @ts-ignore
         if (typeof process !== 'undefined' && process.env && process.env[key]) {
             // @ts-ignore
@@ -93,13 +102,14 @@ const getEnvVar = (key: string): string | undefined => {
 };
 
 const getDbConfig = () => {
-    // 1. Try LocalStorage (Manual Override)
+    // 1. Try LocalStorage (Manual Override takes precedence if explicitly set by user to override env)
     const stored = localStorage.getItem(DB_CONFIG_KEY);
     if (stored) return JSON.parse(stored);
 
-    // 2. Try Vercel Environment Variables (Auto-Integration)
-    const envUrl = getEnvVar('NEXT_PUBLIC_SUPABASE_URL');
-    const envKey = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    // 2. Try Environment Variables (Auto-Integration)
+    // We try variations of the key names to support different frameworks
+    const envUrl = getEnvVar('NEXT_PUBLIC_SUPABASE_URL') || getEnvVar('VITE_SUPABASE_URL');
+    const envKey = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY') || getEnvVar('VITE_SUPABASE_ANON_KEY');
 
     if (envUrl && envKey) {
         return { url: envUrl, key: envKey, isEnv: true };
@@ -220,13 +230,29 @@ const SettingsModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: 
                     </div>
                 </div>
 
-                {isEnvManaged && (
-                    <div className="mb-4 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800 flex items-start gap-2">
-                        <CheckIcon className="h-5 w-5 text-green-600 mt-0.5" />
-                        <p className="text-xs text-green-700 dark:text-green-300">
-                            <strong>Conexão Automática Ativa!</strong><br/>
-                            O sistema detectou a integração da Vercel. Não é necessário configurar manualmente.
-                        </p>
+                {isEnvManaged ? (
+                    <div className="mb-4 bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800 flex items-start gap-3">
+                        <CheckIcon className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                            <p className="text-sm font-bold text-green-700 dark:text-green-300">
+                                Conexão Automática Ativa!
+                            </p>
+                            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                O sistema detectou a integração da Vercel com o Supabase.
+                            </p>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="mb-4 bg-amber-50 dark:bg-amber-900/20 p-4 rounded-lg border border-amber-200 dark:border-amber-800 flex items-start gap-3">
+                        <ExclamationTriangleIcon className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
+                        <div>
+                            <p className="text-sm font-bold text-amber-700 dark:text-amber-300">
+                                Modo Local (Offline)
+                            </p>
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                                Para ativar o modo online, faça um <strong>Redeploy</strong> na Vercel ou insira as chaves manualmente abaixo.
+                            </p>
+                        </div>
                     </div>
                 )}
 
@@ -238,7 +264,7 @@ const SettingsModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: 
                             value={url} 
                             onChange={e => setUrl(e.target.value)} 
                             disabled={isEnvManaged}
-                            className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
+                            className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed font-mono text-slate-600 dark:text-slate-300" 
                             placeholder="https://xyz.supabase.co" 
                         />
                     </div>
@@ -249,22 +275,22 @@ const SettingsModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: 
                             value={key} 
                             onChange={e => setKey(e.target.value)} 
                             disabled={isEnvManaged}
-                            className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
+                            className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed font-mono text-slate-600 dark:text-slate-300" 
                             placeholder="eyJhbGciOiJIUzI1NiIsInR5..." 
                         />
                     </div>
                     
                     {!isEnvManaged && (
-                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800/50">
-                            <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
-                                <strong>Manual:</strong> Se a integração automática falhar, copie as chaves do painel da Vercel (Configurações &rarr; Environment Variables) e cole aqui.
+                        <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                                <strong>Dica:</strong> Você pode obter essas chaves no painel do Supabase (Project Settings &rarr; API) ou nas configurações de Variáveis de Ambiente do seu projeto na Vercel.
                             </p>
                         </div>
                     )}
                 </div>
 
                 <div className="flex gap-3 mt-6">
-                    {!isEnvManaged && <button onClick={handleClear} className="px-4 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium transition">Limpar</button>}
+                    {!isEnvManaged && url && key && <button onClick={handleClear} className="px-4 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium transition">Desconectar</button>}
                     <div className="flex-1 flex justify-end gap-2">
                         <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-sm font-medium transition">Cancelar</button>
                         {!isEnvManaged && <button onClick={handleSave} className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-bold shadow-lg shadow-primary-500/30 transition">Salvar & Conectar</button>}
@@ -308,8 +334,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigure
       <InstallPrompt />
       
       <div className="max-w-md w-full bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/10 relative z-10">
-        <button onClick={onOpenSettings} className="absolute top-4 right-4 text-slate-400 hover:text-white transition p-2 rounded-full hover:bg-white/10" title="Configurar Banco de Dados">
-            <Cog6ToothIcon className={`h-5 w-5 ${isCloudConfigured ? 'text-green-400' : ''}`} />
+        <button onClick={onOpenSettings} className="absolute top-4 right-4 text-slate-400 hover:text-white transition p-2 rounded-full hover:bg-white/10 group" title="Configurar Banco de Dados">
+            <Cog6ToothIcon className={`h-5 w-5 ${isCloudConfigured ? 'text-green-400' : 'text-slate-400 group-hover:text-white'}`} />
         </button>
 
         <div className="text-center mb-8">
@@ -319,10 +345,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigure
           <h2 className="text-3xl font-bold text-white tracking-tight">Gestão INSS</h2>
           <p className="text-slate-300 mt-2 font-medium">Acesso Exclusivo Jurídico</p>
           {!isCloudConfigured && (
-              <span className="inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">MODO LOCAL (OFFLINE)</span>
+              <span className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700/50">
+                  <SignalSlashIcon className="h-3 w-3" />
+                  MODO LOCAL (OFFLINE)
+              </span>
           )}
           {isCloudConfigured && (
-              <span className="inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold bg-green-900/50 text-green-300 border border-green-800">NUVEM CONECTADA</span>
+              <span className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full text-[10px] font-bold bg-green-900/40 text-green-400 border border-green-800/50 shadow-[0_0_10px_rgba(74,222,128,0.2)]">
+                  <SignalIcon className="h-3 w-3" />
+                  NUVEM CONECTADA
+              </span>
           )}
         </div>
 
