@@ -27,7 +27,8 @@ import {
   Cog6ToothIcon,
   ArrowPathIcon,
   SignalIcon,
-  SignalSlashIcon
+  SignalSlashIcon,
+  ArrowPathRoundedSquareIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -85,20 +86,16 @@ const DB_CONFIG_KEY = 'inss_db_config';
 // ------------------------------------------------------------------
 // CONFIGURAÇÃO GLOBAL DO BANCO DE DADOS (AUTO-CONFIG)
 // ------------------------------------------------------------------
-// Estas chaves garantem a conexão automática para todos os usuários.
 const GLOBAL_SUPABASE_URL = "https://nnhatyvrtlbkyfadumqo.supabase.co";
 const GLOBAL_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uaGF0eXZydGxia3lmYWR1bXFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1Mzk1NDYsImV4cCI6MjA4MTExNTU0Nn0.F_020GSnZ_jQiSSPFfAxY9Q8dU6FmjUDixOeZl4YHDg";
 
-// Helper to safely attempt getting Env Vars (Supports Next.js, Create React App, and Vite)
 const getEnvVar = (key: string): string | undefined => {
     try {
-        // 1. Try Vite / Modern Browsers
         // @ts-ignore
         if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env[key]) {
              // @ts-ignore
             return import.meta.env[key];
         }
-        // 2. Try Node / Next.js / CRA
         // @ts-ignore
         if (typeof process !== 'undefined' && process.env && process.env[key]) {
             // @ts-ignore
@@ -109,11 +106,9 @@ const getEnvVar = (key: string): string | undefined => {
 };
 
 const getDbConfig = () => {
-    // 1. Try LocalStorage (Manual Override takes precedence if explicitly set by user)
     const stored = localStorage.getItem(DB_CONFIG_KEY);
     if (stored) return JSON.parse(stored);
 
-    // 2. Try Environment Variables (Vercel Integration)
     const envUrl = getEnvVar('NEXT_PUBLIC_SUPABASE_URL') || getEnvVar('VITE_SUPABASE_URL');
     const envKey = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY') || getEnvVar('VITE_SUPABASE_ANON_KEY');
 
@@ -121,7 +116,6 @@ const getDbConfig = () => {
         return { url: envUrl, key: envKey, isEnv: true };
     }
 
-    // 3. Fallback to Hardcoded Global Config (Guarantees connection for everyone)
     if (GLOBAL_SUPABASE_URL && GLOBAL_SUPABASE_KEY) {
         return { url: GLOBAL_SUPABASE_URL, key: GLOBAL_SUPABASE_KEY, isEnv: true };
     }
@@ -622,37 +616,37 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  // --- Data Fetching Logic ---
+  // --- Realtime & Data Fetching Logic ---
   const fetchData = async () => {
     setIsLoading(true);
     try {
         const supabase = initSupabase();
         
         if (supabase) {
-            // Cloud Fetch
+            // Cloud Fetch - Always prioritize cloud
             const { data, error } = await supabase.from('clients').select('data').limit(1).single();
-            if (error && error.code !== 'PGRST116') { // Ignore 'row not found'
+            
+            if (error && error.code !== 'PGRST116') { 
                 console.error("Erro ao buscar dados na nuvem", error);
-                // Fallback to local if fetch fails
+                // Fallback to local only on error
                 const storedData = localStorage.getItem('inss_records');
                 setRecords(storedData ? JSON.parse(storedData) : INITIAL_DATA);
             } else if (data && data.data) {
+                // Cloud has data - Use it!
                 setRecords(data.data);
-                // Update local storage as cache
                 localStorage.setItem('inss_records', JSON.stringify(data.data));
             } else {
-                // First time cloud setup, use initial data
-                const storedData = localStorage.getItem('inss_records');
-                setRecords(storedData ? JSON.parse(storedData) : INITIAL_DATA);
+                // First time ever? Push initial data to cloud
+                await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
+                setRecords(INITIAL_DATA);
             }
         } else {
-            // Local Fetch
+            // Offline mode fallback
             const storedData = localStorage.getItem('inss_records');
             if (storedData) {
                 setRecords(JSON.parse(storedData));
             } else {
                 setRecords(INITIAL_DATA);
-                localStorage.setItem('inss_records', JSON.stringify(INITIAL_DATA));
             }
         }
     } catch (e) {
@@ -663,7 +657,38 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
   };
 
   useEffect(() => {
+    const supabase = initSupabase();
+    if (!supabase) {
+        fetchData();
+        return;
+    }
+
     fetchData();
+
+    // SETUP REALTIME SUBSCRIPTION
+    const channel = supabase
+        .channel('db-changes')
+        .on(
+            'postgres_changes',
+            {
+                event: '*', // Listen to all events
+                schema: 'public',
+                table: 'clients'
+            },
+            (payload: any) => {
+                // When cloud changes, update local state immediately
+                if (payload.new && payload.new.data) {
+                    console.log("Recebendo atualização em tempo real!");
+                    setRecords(payload.new.data);
+                    localStorage.setItem('inss_records', JSON.stringify(payload.new.data));
+                }
+            }
+        )
+        .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
   }, [isCloudConfigured]);
 
   useEffect(() => {
@@ -672,25 +697,22 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
 
   const saveRecords = async (newRecords: ClientRecord[]) => {
     setIsSyncing(true);
-    setRecords(newRecords);
+    setRecords(newRecords); // Optimistic UI update
     
-    // Always save local first for instant UI feedback
+    // Save to local cache immediately
     localStorage.setItem('inss_records', JSON.stringify(newRecords));
 
-    // Try cloud save
+    // Push to cloud
     const supabase = initSupabase();
     if (supabase) {
-        // We store the entire JSON blob in a single row for simplicity in this no-backend demo
-        // Table 'clients' must have columns: id (primary key), data (jsonb)
-        // We use ID 1 as the singleton record container
         const { error } = await supabase.from('clients').upsert({ id: 1, data: newRecords });
         if (error) {
             console.error("Falha ao salvar na nuvem:", error);
-            alert("Atenção: Dados salvos localmente, mas houve erro na sincronização com a nuvem.");
+            alert("Erro de conexão. As alterações foram salvas apenas neste computador.");
         }
     }
     
-    setTimeout(() => setIsSyncing(false), 500);
+    setTimeout(() => setIsSyncing(false), 800);
   };
 
   const handleCreate = (data: ClientRecord) => {
@@ -798,10 +820,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
                 <h1 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">Gestão INSS</h1>
                 <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold tracking-wide uppercase flex items-center gap-2">
                     Painel Administrativo
-                    {isLoading || isSyncing ? (
-                         <ArrowPathIcon className="h-3 w-3 animate-spin text-primary-500" />
+                    {isSyncing ? (
+                         <span className="text-blue-500 flex items-center gap-1"><ArrowPathRoundedSquareIcon className="h-3 w-3 animate-spin" /> Salvando...</span>
+                    ) : isLoading ? (
+                         <span className="text-slate-500 flex items-center gap-1"><ArrowPathIcon className="h-3 w-3 animate-spin" /> Carregando...</span>
                     ) : isCloudConfigured ? (
-                        <span className="text-green-500 flex items-center gap-1"><CloudIcon className="h-3 w-3" /> Online</span>
+                        <span className="text-green-500 flex items-center gap-1"><CloudIcon className="h-3 w-3" /> Online (Realtime)</span>
                     ) : (
                         <span className="text-slate-400 flex items-center gap-1">Local (Offline)</span>
                     )}
