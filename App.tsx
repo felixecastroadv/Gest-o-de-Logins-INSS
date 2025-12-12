@@ -20,7 +20,9 @@ import {
   ChevronDownIcon,
   UserGroupIcon,
   DocumentTextIcon,
-  ScaleIcon
+  ScaleIcon,
+  ComputerDesktopIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -68,6 +70,63 @@ const isUrgentDate = (dateStr: string): boolean => {
 
 // --- Components ---
 
+// 0. Install Prompt Component
+const InstallPrompt = () => {
+    const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+    const [isVisible, setIsVisible] = useState(false);
+    const [isInstalled, setIsInstalled] = useState(false);
+
+    useEffect(() => {
+        // Check if already installed
+        if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
+            setIsInstalled(true);
+        }
+
+        const handleBeforeInstallPrompt = (e: any) => {
+            e.preventDefault();
+            setDeferredPrompt(e);
+            setIsVisible(true);
+        };
+
+        window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+
+        return () => {
+            window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+        };
+    }, []);
+
+    const handleInstallClick = async () => {
+        if (!deferredPrompt) return;
+
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        
+        if (outcome === 'accepted') {
+            setDeferredPrompt(null);
+            setIsVisible(false);
+        }
+    };
+
+    if (isInstalled || !isVisible) return null;
+
+    return (
+        <div className="absolute top-6 right-6 z-50 animate-bounce-slow">
+            <button
+                onClick={handleInstallClick}
+                className="flex items-center gap-3 bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/40 text-white px-5 py-3 rounded-full shadow-2xl transition-all transform hover:scale-105 group"
+            >
+                <div className="bg-white text-primary-600 p-2 rounded-full shadow-sm">
+                    <ArrowDownTrayIcon className="h-5 w-5" />
+                </div>
+                <div className="text-left">
+                    <p className="text-xs font-medium text-slate-200 uppercase tracking-wider">Disponível</p>
+                    <p className="font-bold text-sm">Instalar App no PC</p>
+                </div>
+            </button>
+        </div>
+    );
+};
+
 // 1. Login Component
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -93,8 +152,11 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-primary-900 to-slate-900 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-primary-900 to-slate-900 px-4 relative overflow-hidden">
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
+      
+      {/* Install Button Integration */}
+      <InstallPrompt />
       
       <div className="max-w-md w-full bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/10 relative z-10">
         <div className="text-center mb-8">
