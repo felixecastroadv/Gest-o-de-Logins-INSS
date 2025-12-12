@@ -28,7 +28,8 @@ import {
   ArrowPathIcon,
   SignalIcon,
   SignalSlashIcon,
-  ArrowPathRoundedSquareIcon
+  ArrowPathRoundedSquareIcon,
+  ArchiveBoxArrowDownIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -185,7 +186,7 @@ const InstallPrompt = () => {
 };
 
 // 0.1 Settings Modal
-const SettingsModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: () => void, onSave: () => void }) => {
+const SettingsModal = ({ isOpen, onClose, onSave, onRestoreBackup }: { isOpen: boolean, onClose: () => void, onSave: () => void, onRestoreBackup: () => void }) => {
     const [url, setUrl] = useState('');
     const [key, setKey] = useState('');
     const [isEnvManaged, setIsEnvManaged] = useState(false);
@@ -216,6 +217,13 @@ const SettingsModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: 
             setKey('');
             setIsEnvManaged(false);
             onSave();
+            onClose();
+        }
+    };
+    
+    const handleRestore = () => {
+        if (confirm("ATENÇÃO: Isso irá apagar os dados atuais da nuvem e substituí-los pelos dados originais de backup (data.ts). Tem certeza?")) {
+            onRestoreBackup();
             onClose();
         }
     };
@@ -284,6 +292,19 @@ const SettingsModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: 
                             placeholder="eyJhbGciOiJIUzI1NiIsInR5..." 
                         />
                     </div>
+                </div>
+                
+                <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+                    <button 
+                        onClick={handleRestore}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-sm font-medium transition"
+                    >
+                        <ArchiveBoxArrowDownIcon className="h-4 w-4" />
+                        Restaurar Dados Iniciais (Backup)
+                    </button>
+                    <p className="text-[10px] text-center text-slate-400 mt-2">
+                        Use isto caso a tabela esteja vazia (0 registros).
+                    </p>
                 </div>
 
                 <div className="flex gap-3 mt-6">
@@ -602,9 +623,22 @@ interface DashboardProps {
   toggleDarkMode: () => void;
   onOpenSettings: () => void;
   isCloudConfigured: boolean;
+  isSettingsOpen: boolean;
+  onCloseSettings: () => void;
+  onSettingsSaved: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleDarkMode, onOpenSettings, isCloudConfigured }) => {
+const Dashboard: React.FC<DashboardProps> = ({ 
+  user, 
+  onLogout, 
+  darkMode, 
+  toggleDarkMode, 
+  onOpenSettings, 
+  isCloudConfigured,
+  isSettingsOpen,
+  onCloseSettings,
+  onSettingsSaved
+}) => {
   const [records, setRecords] = useState<ClientRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -637,9 +671,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
                 const storedData = localStorage.getItem('inss_records');
                 setRecords(storedData ? JSON.parse(storedData) : INITIAL_DATA);
             } else if (data && data.data) {
-                // Cloud has data - Use it!
-                setRecords(data.data);
-                localStorage.setItem('inss_records', JSON.stringify(data.data));
+                // Cloud has data. Check if it's empty array
+                if (Array.isArray(data.data) && data.data.length > 0) {
+                     setRecords(data.data);
+                     localStorage.setItem('inss_records', JSON.stringify(data.data));
+                } else {
+                     // Cloud exists but is empty (which happens after SQL create). Auto-restore backup.
+                     console.log("Banco de dados vazio. Restaurando backup automático.");
+                     setRecords(INITIAL_DATA);
+                     await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
+                }
             } else {
                 // First time ever? Push initial data to cloud
                 const { error: insertError } = await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
@@ -727,6 +768,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
     }
     
     setTimeout(() => setIsSyncing(false), 800);
+  };
+  
+  const handleRestoreBackup = () => {
+      saveRecords(INITIAL_DATA);
+      alert("Dados restaurados com sucesso a partir do backup do sistema!");
   };
 
   const handleCreate = (data: ClientRecord) => {
@@ -1089,6 +1135,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
         onSave={currentRecord ? handleUpdate : handleCreate}
         initialData={currentRecord}
       />
+      
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={onCloseSettings} 
+        onSave={onSettingsSaved}
+        onRestoreBackup={handleRestoreBackup}
+      />
     </div>
   );
 };
@@ -1140,6 +1193,15 @@ export default function App() {
   const handleSettingsSave = () => {
       checkCloudStatus();
   };
+  
+  const handleAppRestoreBackup = async () => {
+      localStorage.setItem('inss_records', JSON.stringify(INITIAL_DATA));
+      const supabase = initSupabase();
+      if (supabase) {
+          await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
+      }
+      alert("Dados restaurados com sucesso a partir do backup do sistema!");
+  };
 
   return (
     <>
@@ -1151,20 +1213,25 @@ export default function App() {
             toggleDarkMode={toggleDarkMode}
             onOpenSettings={() => setIsSettingsOpen(true)}
             isCloudConfigured={isCloudConfigured}
+            isSettingsOpen={isSettingsOpen}
+            onCloseSettings={() => setIsSettingsOpen(false)}
+            onSettingsSaved={handleSettingsSave}
         />
       ) : (
-        <Login 
-            onLogin={handleLogin} 
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            isCloudConfigured={isCloudConfigured}
-        />
+        <>
+            <Login 
+                onLogin={handleLogin} 
+                onOpenSettings={() => setIsSettingsOpen(true)}
+                isCloudConfigured={isCloudConfigured}
+            />
+            <SettingsModal 
+                isOpen={isSettingsOpen} 
+                onClose={() => setIsSettingsOpen(false)} 
+                onSave={handleSettingsSave}
+                onRestoreBackup={handleAppRestoreBackup}
+            />
+        </>
       )}
-      
-      <SettingsModal 
-        isOpen={isSettingsOpen} 
-        onClose={() => setIsSettingsOpen(false)} 
-        onSave={handleSettingsSave}
-      />
     </>
   );
 }
