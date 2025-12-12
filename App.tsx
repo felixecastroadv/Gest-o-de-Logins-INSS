@@ -82,6 +82,13 @@ declare global {
 
 const DB_CONFIG_KEY = 'inss_db_config';
 
+// ------------------------------------------------------------------
+// CONFIGURAÇÃO GLOBAL DO BANCO DE DADOS (AUTO-CONFIG)
+// ------------------------------------------------------------------
+// Estas chaves garantem a conexão automática para todos os usuários.
+const GLOBAL_SUPABASE_URL = "https://nnhatyvrtlbkyfadumqo.supabase.co";
+const GLOBAL_SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5uaGF0eXZydGxia3lmYWR1bXFvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1Mzk1NDYsImV4cCI6MjA4MTExNTU0Nn0.F_020GSnZ_jQiSSPFfAxY9Q8dU6FmjUDixOeZl4YHDg";
+
 // Helper to safely attempt getting Env Vars (Supports Next.js, Create React App, and Vite)
 const getEnvVar = (key: string): string | undefined => {
     try {
@@ -102,17 +109,21 @@ const getEnvVar = (key: string): string | undefined => {
 };
 
 const getDbConfig = () => {
-    // 1. Try LocalStorage (Manual Override takes precedence if explicitly set by user to override env)
+    // 1. Try LocalStorage (Manual Override takes precedence if explicitly set by user)
     const stored = localStorage.getItem(DB_CONFIG_KEY);
     if (stored) return JSON.parse(stored);
 
-    // 2. Try Environment Variables (Auto-Integration)
-    // We try variations of the key names to support different frameworks
+    // 2. Try Environment Variables (Vercel Integration)
     const envUrl = getEnvVar('NEXT_PUBLIC_SUPABASE_URL') || getEnvVar('VITE_SUPABASE_URL');
     const envKey = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY') || getEnvVar('VITE_SUPABASE_ANON_KEY');
 
     if (envUrl && envKey) {
         return { url: envUrl, key: envKey, isEnv: true };
+    }
+
+    // 3. Fallback to Hardcoded Global Config (Guarantees connection for everyone)
+    if (GLOBAL_SUPABASE_URL && GLOBAL_SUPABASE_KEY) {
+        return { url: GLOBAL_SUPABASE_URL, key: GLOBAL_SUPABASE_KEY, isEnv: true };
     }
 
     return null;
@@ -238,7 +249,7 @@ const SettingsModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: 
                                 Conexão Automática Ativa!
                             </p>
                             <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                                O sistema detectou a integração da Vercel com o Supabase.
+                                O sistema já está configurado para acessar a nuvem.
                             </p>
                         </div>
                     </div>
@@ -250,7 +261,7 @@ const SettingsModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: 
                                 Modo Local (Offline)
                             </p>
                             <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
-                                Para ativar o modo online, faça um <strong>Redeploy</strong> na Vercel ou insira as chaves manualmente abaixo.
+                                Para ativar o modo online, insira as chaves abaixo.
                             </p>
                         </div>
                     </div>
@@ -279,14 +290,6 @@ const SettingsModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: 
                             placeholder="eyJhbGciOiJIUzI1NiIsInR5..." 
                         />
                     </div>
-                    
-                    {!isEnvManaged && (
-                        <div className="bg-slate-50 dark:bg-slate-800/50 p-3 rounded-lg border border-slate-100 dark:border-slate-800">
-                            <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-relaxed">
-                                <strong>Dica:</strong> Você pode obter essas chaves no painel do Supabase (Project Settings &rarr; API) ou nas configurações de Variáveis de Ambiente do seu projeto na Vercel.
-                            </p>
-                        </div>
-                    )}
                 </div>
 
                 <div className="flex gap-3 mt-6">
