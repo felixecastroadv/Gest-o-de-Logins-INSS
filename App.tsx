@@ -22,7 +22,10 @@ import {
   DocumentTextIcon,
   ScaleIcon,
   ComputerDesktopIcon,
-  ArrowDownTrayIcon
+  ArrowDownTrayIcon,
+  CloudIcon,
+  Cog6ToothIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -68,6 +71,51 @@ const isUrgentDate = (dateStr: string): boolean => {
   return diffDays >= 0 && diffDays <= 7;
 };
 
+// --- Database Service (Supabase Wrapper) ---
+declare global {
+  interface Window {
+    supabase: any;
+  }
+}
+
+const DB_CONFIG_KEY = 'inss_db_config';
+
+// Helper to safely attempt getting Env Vars (Vercel Integration)
+const getEnvVar = (key: string): string | undefined => {
+    try {
+        // @ts-ignore
+        if (typeof process !== 'undefined' && process.env && process.env[key]) {
+            // @ts-ignore
+            return process.env[key];
+        }
+    } catch (e) {}
+    return undefined;
+};
+
+const getDbConfig = () => {
+    // 1. Try LocalStorage (Manual Override)
+    const stored = localStorage.getItem(DB_CONFIG_KEY);
+    if (stored) return JSON.parse(stored);
+
+    // 2. Try Vercel Environment Variables (Auto-Integration)
+    const envUrl = getEnvVar('NEXT_PUBLIC_SUPABASE_URL');
+    const envKey = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+
+    if (envUrl && envKey) {
+        return { url: envUrl, key: envKey, isEnv: true };
+    }
+
+    return null;
+};
+
+const initSupabase = () => {
+    const config = getDbConfig();
+    if (config && config.url && config.key && window.supabase) {
+        return window.supabase.createClient(config.url, config.key);
+    }
+    return null;
+};
+
 // --- Components ---
 
 // 0. Install Prompt Component
@@ -77,19 +125,15 @@ const InstallPrompt = () => {
     const [isInstalled, setIsInstalled] = useState(false);
 
     useEffect(() => {
-        // Check if already installed
         if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone) {
             setIsInstalled(true);
         }
-
         const handleBeforeInstallPrompt = (e: any) => {
             e.preventDefault();
             setDeferredPrompt(e);
             setIsVisible(true);
         };
-
         window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-
         return () => {
             window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
         };
@@ -97,10 +141,8 @@ const InstallPrompt = () => {
 
     const handleInstallClick = async () => {
         if (!deferredPrompt) return;
-
         deferredPrompt.prompt();
         const { outcome } = await deferredPrompt.userChoice;
-        
         if (outcome === 'accepted') {
             setDeferredPrompt(null);
             setIsVisible(false);
@@ -110,7 +152,7 @@ const InstallPrompt = () => {
     if (isInstalled || !isVisible) return null;
 
     return (
-        <div className="absolute top-6 right-6 z-50 animate-bounce-slow">
+        <div className="absolute top-6 right-6 z-50 animate-bounce-slow hidden md:block">
             <button
                 onClick={handleInstallClick}
                 className="flex items-center gap-3 bg-white/20 hover:bg-white/30 backdrop-blur-md border border-white/40 text-white px-5 py-3 rounded-full shadow-2xl transition-all transform hover:scale-105 group"
@@ -127,12 +169,120 @@ const InstallPrompt = () => {
     );
 };
 
+// 0.1 Settings Modal
+const SettingsModal = ({ isOpen, onClose, onSave }: { isOpen: boolean, onClose: () => void, onSave: () => void }) => {
+    const [url, setUrl] = useState('');
+    const [key, setKey] = useState('');
+    const [isEnvManaged, setIsEnvManaged] = useState(false);
+
+    useEffect(() => {
+        if (isOpen) {
+            const config = getDbConfig();
+            if (config) {
+                setUrl(config.url || '');
+                setKey(config.key || '');
+                setIsEnvManaged(!!config.isEnv);
+            }
+        }
+    }, [isOpen]);
+
+    const handleSave = () => {
+        if (!isEnvManaged) {
+            localStorage.setItem(DB_CONFIG_KEY, JSON.stringify({ url, key }));
+        }
+        onSave();
+        onClose();
+    };
+
+    const handleClear = () => {
+        if(confirm("Isso desconectará o banco de dados. Deseja continuar?")) {
+            localStorage.removeItem(DB_CONFIG_KEY);
+            setUrl('');
+            setKey('');
+            setIsEnvManaged(false);
+            onSave();
+            onClose();
+        }
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-slate-800 p-6">
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="bg-primary-100 dark:bg-primary-900/30 p-2 rounded-lg text-primary-600 dark:text-primary-400">
+                        <CloudIcon className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold text-slate-900 dark:text-white">Conexão Nuvem</h3>
+                        <p className="text-xs text-slate-500">Sincronize dados entre computadores</p>
+                    </div>
+                </div>
+
+                {isEnvManaged && (
+                    <div className="mb-4 bg-green-50 dark:bg-green-900/20 p-3 rounded-lg border border-green-200 dark:border-green-800 flex items-start gap-2">
+                        <CheckIcon className="h-5 w-5 text-green-600 mt-0.5" />
+                        <p className="text-xs text-green-700 dark:text-green-300">
+                            <strong>Conexão Automática Ativa!</strong><br/>
+                            O sistema detectou a integração da Vercel. Não é necessário configurar manualmente.
+                        </p>
+                    </div>
+                )}
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Supabase URL</label>
+                        <input 
+                            type="text" 
+                            value={url} 
+                            onChange={e => setUrl(e.target.value)} 
+                            disabled={isEnvManaged}
+                            className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
+                            placeholder="https://xyz.supabase.co" 
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Supabase Anon Key</label>
+                        <input 
+                            type="password" 
+                            value={key} 
+                            onChange={e => setKey(e.target.value)} 
+                            disabled={isEnvManaged}
+                            className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed" 
+                            placeholder="eyJhbGciOiJIUzI1NiIsInR5..." 
+                        />
+                    </div>
+                    
+                    {!isEnvManaged && (
+                        <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-100 dark:border-blue-800/50">
+                            <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+                                <strong>Manual:</strong> Se a integração automática falhar, copie as chaves do painel da Vercel (Configurações &rarr; Environment Variables) e cole aqui.
+                            </p>
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                    {!isEnvManaged && <button onClick={handleClear} className="px-4 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium transition">Limpar</button>}
+                    <div className="flex-1 flex justify-end gap-2">
+                        <button onClick={onClose} className="px-4 py-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-sm font-medium transition">Cancelar</button>
+                        {!isEnvManaged && <button onClick={handleSave} className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-bold shadow-lg shadow-primary-500/30 transition">Salvar & Conectar</button>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // 1. Login Component
 interface LoginProps {
   onLogin: (user: User) => void;
+  onOpenSettings: () => void;
+  isCloudConfigured: boolean;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigured }) => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [error, setError] = useState('');
@@ -155,16 +305,25 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-primary-900 to-slate-900 px-4 relative overflow-hidden">
       <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 pointer-events-none"></div>
       
-      {/* Install Button Integration */}
       <InstallPrompt />
       
       <div className="max-w-md w-full bg-white/10 backdrop-blur-xl rounded-2xl shadow-2xl p-8 border border-white/10 relative z-10">
+        <button onClick={onOpenSettings} className="absolute top-4 right-4 text-slate-400 hover:text-white transition p-2 rounded-full hover:bg-white/10" title="Configurar Banco de Dados">
+            <Cog6ToothIcon className={`h-5 w-5 ${isCloudConfigured ? 'text-green-400' : ''}`} />
+        </button>
+
         <div className="text-center mb-8">
           <div className="bg-gradient-to-tr from-primary-600 to-primary-400 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-primary-500/30 transform rotate-3 hover:rotate-6 transition-transform duration-300">
             <ScaleIcon className="h-10 w-10 text-white" />
           </div>
           <h2 className="text-3xl font-bold text-white tracking-tight">Gestão INSS</h2>
           <p className="text-slate-300 mt-2 font-medium">Acesso Exclusivo Jurídico</p>
+          {!isCloudConfigured && (
+              <span className="inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">MODO LOCAL (OFFLINE)</span>
+          )}
+          {isCloudConfigured && (
+              <span className="inline-block mt-2 px-2 py-0.5 rounded text-[10px] font-bold bg-green-900/50 text-green-300 border border-green-800">NUVEM CONECTADA</span>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
@@ -412,35 +571,91 @@ interface DashboardProps {
   onLogout: () => void;
   darkMode: boolean;
   toggleDarkMode: () => void;
+  onOpenSettings: () => void;
+  isCloudConfigured: boolean;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleDarkMode }) => {
+const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleDarkMode, onOpenSettings, isCloudConfigured }) => {
   const [records, setRecords] = useState<ClientRecord[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentRecord, setCurrentRecord] = useState<ClientRecord | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   
   const [sortConfig, setSortConfig] = useState<{ key: keyof ClientRecord; direction: 'ascending' | 'descending' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
-  useEffect(() => {
-    const storedData = localStorage.getItem('inss_records');
-    if (storedData) {
-      setRecords(JSON.parse(storedData));
-    } else {
-      setRecords(INITIAL_DATA);
-      localStorage.setItem('inss_records', JSON.stringify(INITIAL_DATA));
+  // --- Data Fetching Logic ---
+  const fetchData = async () => {
+    setIsLoading(true);
+    try {
+        const supabase = initSupabase();
+        
+        if (supabase) {
+            // Cloud Fetch
+            const { data, error } = await supabase.from('clients').select('data').limit(1).single();
+            if (error && error.code !== 'PGRST116') { // Ignore 'row not found'
+                console.error("Erro ao buscar dados na nuvem", error);
+                // Fallback to local if fetch fails
+                const storedData = localStorage.getItem('inss_records');
+                setRecords(storedData ? JSON.parse(storedData) : INITIAL_DATA);
+            } else if (data && data.data) {
+                setRecords(data.data);
+                // Update local storage as cache
+                localStorage.setItem('inss_records', JSON.stringify(data.data));
+            } else {
+                // First time cloud setup, use initial data
+                const storedData = localStorage.getItem('inss_records');
+                setRecords(storedData ? JSON.parse(storedData) : INITIAL_DATA);
+            }
+        } else {
+            // Local Fetch
+            const storedData = localStorage.getItem('inss_records');
+            if (storedData) {
+                setRecords(JSON.parse(storedData));
+            } else {
+                setRecords(INITIAL_DATA);
+                localStorage.setItem('inss_records', JSON.stringify(INITIAL_DATA));
+            }
+        }
+    } catch (e) {
+        console.error("Erro geral", e);
+    } finally {
+        setIsLoading(false);
     }
-  }, []);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, [isCloudConfigured]);
 
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, itemsPerPage]);
 
-  const saveRecords = (newRecords: ClientRecord[]) => {
+  const saveRecords = async (newRecords: ClientRecord[]) => {
+    setIsSyncing(true);
     setRecords(newRecords);
+    
+    // Always save local first for instant UI feedback
     localStorage.setItem('inss_records', JSON.stringify(newRecords));
+
+    // Try cloud save
+    const supabase = initSupabase();
+    if (supabase) {
+        // We store the entire JSON blob in a single row for simplicity in this no-backend demo
+        // Table 'clients' must have columns: id (primary key), data (jsonb)
+        // We use ID 1 as the singleton record container
+        const { error } = await supabase.from('clients').upsert({ id: 1, data: newRecords });
+        if (error) {
+            console.error("Falha ao salvar na nuvem:", error);
+            alert("Atenção: Dados salvos localmente, mas houve erro na sincronização com a nuvem.");
+        }
+    }
+    
+    setTimeout(() => setIsSyncing(false), 500);
   };
 
   const handleCreate = (data: ClientRecord) => {
@@ -546,10 +761,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
               </div>
               <div className="hidden sm:block">
                 <h1 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">Gestão INSS</h1>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold tracking-wide uppercase">Painel Administrativo</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold tracking-wide uppercase flex items-center gap-2">
+                    Painel Administrativo
+                    {isLoading || isSyncing ? (
+                         <ArrowPathIcon className="h-3 w-3 animate-spin text-primary-500" />
+                    ) : isCloudConfigured ? (
+                        <span className="text-green-500 flex items-center gap-1"><CloudIcon className="h-3 w-3" /> Online</span>
+                    ) : (
+                        <span className="text-slate-400 flex items-center gap-1">Local (Offline)</span>
+                    )}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
+              <button onClick={onOpenSettings} className="p-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition" title="Configurações">
+                 <Cog6ToothIcon className={`h-5 w-5 ${isCloudConfigured ? 'text-primary-500' : ''}`} />
+              </button>
+
               <button 
                 onClick={toggleDarkMode}
                 className="p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all active:scale-95"
@@ -602,13 +830,22 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
             />
           </div>
           
-          <button
-            onClick={openNewModal}
-            className="w-full md:w-auto bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-all transform active:scale-95 flex items-center justify-center gap-2"
-          >
-            <PlusIcon className="h-5 w-5" />
-            Novo Cadastro
-          </button>
+          <div className="flex gap-2 w-full md:w-auto">
+             <button
+                onClick={fetchData}
+                className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-primary-600 rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+                title="Atualizar Dados"
+              >
+                <ArrowPathIcon className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={openNewModal}
+                className="flex-1 md:flex-none bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-all transform active:scale-95 flex items-center justify-center gap-2"
+              >
+                <PlusIcon className="h-5 w-5" />
+                Novo Cadastro
+              </button>
+          </div>
         </div>
 
         {/* Data Table */}
@@ -777,35 +1014,40 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
   );
 };
 
-// 5. Main App Component
-const App: React.FC = () => {
+export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [darkMode, setDarkMode] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isCloudConfigured, setIsCloudConfigured] = useState(false);
 
   useEffect(() => {
-    const isDark = localStorage.getItem('theme') === 'dark' || 
-        (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    
+    // Check local storage for dark mode preference
+    const isDark = localStorage.getItem('inss_theme') === 'dark';
     setDarkMode(isDark);
     if (isDark) {
+      document.documentElement.classList.add('dark');
+    }
+  }, []);
+  
+  const checkCloudStatus = () => {
+      const config = getDbConfig();
+      setIsCloudConfigured(!!(config && config.url && config.key));
+  };
+
+  useEffect(() => {
+      checkCloudStatus();
+  }, []);
+
+  const toggleDarkMode = () => {
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    localStorage.setItem('inss_theme', newMode ? 'dark' : 'light');
+    
+    if (newMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, []);
-
-  const toggleDarkMode = () => {
-    setDarkMode((prev) => {
-      const newMode = !prev;
-      if (newMode) {
-        document.documentElement.classList.add('dark');
-        localStorage.setItem('theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-        localStorage.setItem('theme', 'light');
-      }
-      return newMode;
-    });
   };
 
   const handleLogin = (authenticatedUser: User) => {
@@ -816,20 +1058,34 @@ const App: React.FC = () => {
     setUser(null);
   };
 
+  const handleSettingsSave = () => {
+      checkCloudStatus();
+  };
+
   return (
     <>
-      {!user ? (
-        <Login onLogin={handleLogin} />
-      ) : (
+      {user ? (
         <Dashboard 
-          user={user} 
-          onLogout={handleLogout} 
-          darkMode={darkMode}
-          toggleDarkMode={toggleDarkMode}
+            user={user} 
+            onLogout={handleLogout} 
+            darkMode={darkMode} 
+            toggleDarkMode={toggleDarkMode}
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            isCloudConfigured={isCloudConfigured}
+        />
+      ) : (
+        <Login 
+            onLogin={handleLogin} 
+            onOpenSettings={() => setIsSettingsOpen(true)}
+            isCloudConfigured={isCloudConfigured}
         />
       )}
+      
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+        onSave={handleSettingsSave}
+      />
     </>
   );
-};
-
-export default App;
+}
