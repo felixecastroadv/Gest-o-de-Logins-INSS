@@ -611,6 +611,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
   const [currentRecord, setCurrentRecord] = useState<ClientRecord | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [dbError, setDbError] = useState<string | null>(null);
   
   const [sortConfig, setSortConfig] = useState<{ key: keyof ClientRecord; direction: 'ascending' | 'descending' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -619,6 +620,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
   // --- Realtime & Data Fetching Logic ---
   const fetchData = async () => {
     setIsLoading(true);
+    setDbError(null);
     try {
         const supabase = initSupabase();
         
@@ -626,8 +628,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
             // Cloud Fetch - Always prioritize cloud
             const { data, error } = await supabase.from('clients').select('data').limit(1).single();
             
-            if (error && error.code !== 'PGRST116') { 
-                console.error("Erro ao buscar dados na nuvem", error);
+            if (error) { 
+                if(error.code !== 'PGRST116') {
+                    console.error("Erro ao buscar dados na nuvem", error);
+                    setDbError(`Erro ao conectar: ${error.message}. Verifique as permissões (RLS) no Supabase.`);
+                }
                 // Fallback to local only on error
                 const storedData = localStorage.getItem('inss_records');
                 setRecords(storedData ? JSON.parse(storedData) : INITIAL_DATA);
@@ -637,7 +642,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
                 localStorage.setItem('inss_records', JSON.stringify(data.data));
             } else {
                 // First time ever? Push initial data to cloud
-                await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
+                const { error: insertError } = await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
+                if (insertError) {
+                    console.error("Erro ao criar tabela inicial", insertError);
+                    setDbError("Tabela 'clients' não encontrada ou permissão negada. Execute o SQL no Supabase.");
+                }
                 setRecords(INITIAL_DATA);
             }
         } else {
@@ -651,6 +660,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
         }
     } catch (e) {
         console.error("Erro geral", e);
+        setDbError("Erro inesperado na aplicação.");
     } finally {
         setIsLoading(false);
     }
@@ -708,7 +718,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
         const { error } = await supabase.from('clients').upsert({ id: 1, data: newRecords });
         if (error) {
             console.error("Falha ao salvar na nuvem:", error);
-            alert("Erro de conexão. As alterações foram salvas apenas neste computador.");
+            // Show specific error to help user debug
+            alert(`ATENÇÃO: Erro de Permissão no Banco de Dados!\n\nDetalhe: ${error.message}\n\nVocê precisa ir no Supabase > SQL Editor e rodar o script para criar a tabela 'clients' e liberar as permissões (RLS).`);
+            setDbError(`Falha de sincronização: ${error.message}`);
+        } else {
+            setDbError(null);
         }
     }
     
@@ -833,6 +847,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, darkMode, toggleD
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {dbError && (
+                  <div className="hidden md:flex items-center px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs rounded-full border border-red-200 dark:border-red-800 animate-pulse" title={dbError}>
+                      <ExclamationTriangleIcon className="h-4 w-4 mr-1" />
+                      Erro de Conexão
+                  </div>
+              )}
               <button onClick={onOpenSettings} className="p-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition" title="Configurações">
                  <Cog6ToothIcon className={`h-5 w-5 ${isCloudConfigured ? 'text-primary-500' : ''}`} />
               </button>
