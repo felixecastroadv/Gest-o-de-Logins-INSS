@@ -29,7 +29,10 @@ import {
   SignalIcon,
   SignalSlashIcon,
   ArrowPathRoundedSquareIcon,
-  ArchiveBoxArrowDownIcon
+  ArchiveBoxArrowDownIcon,
+  BellIcon,
+  BellAlertIcon,
+  CalendarDaysIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -72,6 +75,7 @@ const isUrgentDate = (dateStr: string): boolean => {
   const diffTime = target.getTime() - today.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
+  // Returns true if date is today or in the next 7 days
   return diffDays >= 0 && diffDays <= 7;
 };
 
@@ -318,6 +322,65 @@ const SettingsModal = ({ isOpen, onClose, onSave, onRestoreBackup }: { isOpen: b
         </div>
     );
 };
+
+// 0.2 Notifications Modal
+interface NotificationItem {
+    id: string;
+    clientName: string;
+    type: 'Prorrogação' | 'Perícia Médica' | 'Perícia Social' | 'Mandado de Segurança';
+    date: string;
+}
+
+const NotificationsModal = ({ isOpen, onClose, notifications }: { isOpen: boolean, onClose: () => void, notifications: NotificationItem[] }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-start justify-end z-[90] p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-sm border border-slate-200 dark:border-slate-800 mt-16 mr-0 md:mr-4 overflow-hidden animate-in slide-in-from-right duration-200">
+                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-800/50">
+                    <div className="flex items-center gap-2">
+                         <div className="bg-orange-100 dark:bg-orange-900/30 p-1.5 rounded-lg text-orange-600 dark:text-orange-400">
+                             <BellAlertIcon className="h-5 w-5" />
+                         </div>
+                         <h3 className="font-bold text-slate-800 dark:text-white">Alertas Urgentes</h3>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <XMarkIcon className="h-5 w-5" />
+                    </button>
+                </div>
+                
+                <div className="max-h-[60vh] overflow-y-auto p-2">
+                    {notifications.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400 dark:text-slate-500">
+                            <CheckIcon className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                            <p className="text-sm">Nenhuma pendência urgente para os próximos 7 dias.</p>
+                        </div>
+                    ) : (
+                        <ul className="space-y-1">
+                            {notifications.map((notif, idx) => (
+                                <li key={`${notif.id}-${idx}`} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition border border-transparent hover:border-slate-100 dark:hover:border-slate-700/50">
+                                    <div className="flex justify-between items-start mb-1">
+                                        <span className="font-bold text-slate-800 dark:text-slate-200 text-sm line-clamp-1">{notif.clientName}</span>
+                                        <span className="text-[10px] font-mono bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded border border-orange-200 dark:border-orange-800/30">
+                                            {notif.date}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                                        <ExclamationTriangleIcon className="h-3.5 w-3.5 text-orange-500" />
+                                        {notif.type}
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 text-center">
+                    <p className="text-[10px] text-slate-400">Alertas para hoje e próximos 7 dias</p>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // 1. Login Component
 interface LoginProps {
@@ -646,6 +709,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   
   const [sortConfig, setSortConfig] = useState<{ key: keyof ClientRecord; direction: 'ascending' | 'descending' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -745,6 +809,26 @@ const Dashboard: React.FC<DashboardProps> = ({
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, itemsPerPage]);
+
+  // Compute Alerts
+  const activeAlerts = useMemo(() => {
+      const alerts: NotificationItem[] = [];
+      records.forEach(r => {
+          if (isUrgentDate(r.extensionDate)) {
+              alerts.push({ id: r.id + '_ext', clientName: r.name, type: 'Prorrogação', date: r.extensionDate });
+          }
+          if (isUrgentDate(r.medExpertiseDate)) {
+              alerts.push({ id: r.id + '_med', clientName: r.name, type: 'Perícia Médica', date: r.medExpertiseDate });
+          }
+          if (isUrgentDate(r.socialExpertiseDate)) {
+              alerts.push({ id: r.id + '_soc', clientName: r.name, type: 'Perícia Social', date: r.socialExpertiseDate });
+          }
+          if (isUrgentDate(r.securityMandateDate)) {
+              alerts.push({ id: r.id + '_mand', clientName: r.name, type: 'Mandado de Segurança', date: r.securityMandateDate });
+          }
+      });
+      return alerts;
+  }, [records]);
 
   const saveRecords = async (newRecords: ClientRecord[]) => {
     setIsSyncing(true);
@@ -899,6 +983,18 @@ const Dashboard: React.FC<DashboardProps> = ({
                       Erro de Conexão
                   </div>
               )}
+              
+              <button 
+                  onClick={() => setIsNotificationsOpen(true)}
+                  className="p-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition relative group" 
+                  title="Notificações"
+              >
+                 <BellIcon className="h-5 w-5 group-hover:text-primary-500 transition-colors" />
+                 {activeAlerts.length > 0 && (
+                     <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-red-500 border border-white dark:border-slate-900 animate-pulse"></span>
+                 )}
+              </button>
+
               <button onClick={onOpenSettings} className="p-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition" title="Configurações">
                  <Cog6ToothIcon className={`h-5 w-5 ${isCloudConfigured ? 'text-primary-500' : ''}`} />
               </button>
@@ -1043,10 +1139,17 @@ const Dashboard: React.FC<DashboardProps> = ({
                             {record.socialExpertiseDate || '-'}
                         </td>
 
-                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">{record.extensionDate || '-'}</td>
+                        <td className={`px-4 py-3 text-sm ${isUrgentDate(record.extensionDate) ? 'text-orange-600 dark:text-orange-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}>
+                            {isUrgentDate(record.extensionDate) && <ExclamationTriangleIcon className="h-4 w-4 inline mr-1 mb-0.5 animate-pulse" />}
+                            {record.extensionDate || '-'}
+                        </td>
                         <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">{record.dcbDate || '-'}</td>
                         <td className="px-4 py-3 text-slate-500 dark:text-slate-500 text-xs italic">{record.ninetyDaysDate || '-'}</td>
-                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">{record.securityMandateDate || '-'}</td>
+                        
+                        <td className={`px-4 py-3 text-sm ${isUrgentDate(record.securityMandateDate) ? 'text-orange-600 dark:text-orange-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}>
+                            {isUrgentDate(record.securityMandateDate) && <ExclamationTriangleIcon className="h-4 w-4 inline mr-1 mb-0.5 animate-pulse" />}
+                            {record.securityMandateDate || '-'}
+                        </td>
                         
                         <td className="px-4 py-3 text-right sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 transition-colors shadow-[-5px_0_10px_-5px_rgba(0,0,0,0.05)]">
                             <div className="flex items-center justify-end gap-1">
@@ -1134,6 +1237,12 @@ const Dashboard: React.FC<DashboardProps> = ({
         onClose={() => setIsModalOpen(false)}
         onSave={currentRecord ? handleUpdate : handleCreate}
         initialData={currentRecord}
+      />
+      
+      <NotificationsModal 
+          isOpen={isNotificationsOpen} 
+          onClose={() => setIsNotificationsOpen(false)} 
+          notifications={activeAlerts} 
       />
       
       <SettingsModal 
