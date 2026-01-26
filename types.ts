@@ -50,6 +50,7 @@ export interface ContractRecord {
   totalFee: number;
   status: 'Pendente' | 'Em Andamento' | 'Concluído';
   paymentMethod: 'À Vista' | 'Parcelado';
+  installmentsCount?: number; // Novo campo para quantidade de parcelas
   payments: PaymentEntry[];
   createdAt: string;
 }
