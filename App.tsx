@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, AUTHORIZED_USERS, ClientRecord, UserRole } from './types';
-import { INITIAL_DATA } from './data';
+import { User, AUTHORIZED_USERS, ClientRecord, UserRole, ContractRecord, PaymentEntry } from './types';
+import { INITIAL_DATA, INITIAL_CONTRACTS } from './data';
 import { 
   LockClosedIcon, 
   ArrowRightOnRectangleIcon, 
@@ -32,7 +32,13 @@ import {
   ArchiveBoxArrowDownIcon,
   BellIcon,
   BellAlertIcon,
-  CalendarDaysIcon
+  CalendarDaysIcon,
+  BanknotesIcon,
+  BriefcaseIcon,
+  ChartBarIcon,
+  ClipboardDocumentCheckIcon,
+  CurrencyDollarIcon,
+  WalletIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -77,6 +83,10 @@ const isUrgentDate = (dateStr: string): boolean => {
   
   // Returns true if date is today or in the next 7 days
   return diffDays >= 0 && diffDays <= 7;
+};
+
+const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 };
 
 // --- Database Service (Supabase Wrapper) ---
@@ -382,6 +392,208 @@ const NotificationsModal = ({ isOpen, onClose, notifications }: { isOpen: boolea
     );
 }
 
+// 0.3 Contract Modal (NOVO)
+interface ContractModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (record: ContractRecord) => void;
+  initialData?: ContractRecord | null;
+}
+
+const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+    const [formData, setFormData] = useState<Partial<ContractRecord>>({
+        payments: []
+    });
+    const [newPaymentAmount, setNewPaymentAmount] = useState('');
+    const [newPaymentDate, setNewPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+
+    useEffect(() => {
+        if (initialData) {
+            setFormData(initialData);
+        } else {
+            setFormData({ 
+                status: 'Pendente', 
+                paymentMethod: 'Parcelado', 
+                payments: [],
+                createdAt: new Date().toISOString().split('T')[0]
+            });
+        }
+        setNewPaymentAmount('');
+    }, [initialData, isOpen]);
+
+    if (!isOpen) return null;
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+    };
+
+    const handleAddPayment = () => {
+        if (!newPaymentAmount || Number(newPaymentAmount) <= 0) return;
+        const payment: PaymentEntry = {
+            id: Math.random().toString(36).substr(2, 9),
+            date: newPaymentDate,
+            amount: Number(newPaymentAmount),
+            note: 'Pagamento registrado'
+        };
+        const updatedPayments = [...(formData.payments || []), payment];
+        setFormData({ ...formData, payments: updatedPayments });
+        setNewPaymentAmount('');
+    };
+
+    const handleRemovePayment = (id: string) => {
+        const updatedPayments = (formData.payments || []).filter(p => p.id !== id);
+        setFormData({ ...formData, payments: updatedPayments });
+    }
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        onSave(formData as ContractRecord);
+    };
+
+    const totalPaid = (formData.payments || []).reduce((sum, p) => sum + p.amount, 0);
+    const totalFee = Number(formData.totalFee) || 0;
+    const remaining = Math.max(0, totalFee - totalPaid);
+    const progress = totalFee > 0 ? (totalPaid / totalFee) * 100 : 0;
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-slate-200 dark:border-slate-800 flex flex-col">
+                <div className="flex justify-between items-center p-6 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 sticky top-0 z-10">
+                    <div className="flex items-center gap-3">
+                         <div className="bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 p-2 rounded-lg">
+                             <BriefcaseIcon className="h-6 w-6" />
+                         </div>
+                         <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+                             {initialData ? 'Editar Contrato' : 'Novo Contrato'}
+                         </h3>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                        <XMarkIcon className="h-6 w-6" />
+                    </button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+                     <div className="md:col-span-2">
+                        <h4 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide border-b border-slate-100 dark:border-slate-800 pb-2 mb-4">Dados do Cliente</h4>
+                     </div>
+
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Nome</label>
+                        <input type="text" name="firstName" required value={formData.firstName || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
+                     </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Sobrenome</label>
+                        <input type="text" name="lastName" required value={formData.lastName || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
+                     </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">CPF</label>
+                        <input type="text" name="cpf" required value={formData.cpf || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
+                     </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Tipo de Serviço</label>
+                        <input type="text" name="serviceType" required value={formData.serviceType || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
+                     </div>
+
+                     <div className="md:col-span-2 mt-2">
+                        <h4 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide border-b border-slate-100 dark:border-slate-800 pb-2 mb-4">Financeiro & Responsável</h4>
+                     </div>
+
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Advogado Responsável</label>
+                         <select name="lawyer" required value={formData.lawyer || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white">
+                             <option value="">Selecione...</option>
+                             <option value="Michel">Dr. Michel</option>
+                             <option value="Luana">Dra. Luana</option>
+                         </select>
+                         <p className="text-[10px] text-slate-400 mt-1">Define a divisão de lucros (60/40).</p>
+                     </div>
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Valor Total Honorários (R$)</label>
+                         <input type="number" name="totalFee" required value={formData.totalFee || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white font-mono" placeholder="0.00" />
+                     </div>
+
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Status do Processo</label>
+                         <select name="status" value={formData.status || 'Pendente'} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white">
+                             <option value="Pendente">Pendente</option>
+                             <option value="Em Andamento">Em Andamento</option>
+                             <option value="Concluído">Concluído</option>
+                         </select>
+                     </div>
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Forma de Pagamento</label>
+                         <select name="paymentMethod" value={formData.paymentMethod || 'Parcelado'} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white">
+                             <option value="À Vista">À Vista</option>
+                             <option value="Parcelado">Parcelado</option>
+                         </select>
+                     </div>
+
+                     {/* Payment Section */}
+                     <div className="md:col-span-2 bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mt-2">
+                        <div className="flex justify-between items-end mb-4">
+                            <div>
+                                <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">Registro de Pagamentos</h4>
+                                <div className="mt-2 w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 w-64">
+                                    <div className="bg-green-500 h-2.5 rounded-full transition-all duration-500" style={{ width: `${Math.min(progress, 100)}%` }}></div>
+                                </div>
+                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                    Pago: <span className="text-green-600 dark:text-green-400 font-bold">{formatCurrency(totalPaid)}</span> • 
+                                    Restante: <span className="text-red-500 dark:text-red-400 font-bold">{formatCurrency(remaining)}</span>
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div className="flex gap-2 mb-4 items-end">
+                            <div className="flex-1">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Valor do Pagamento</label>
+                                <input type="number" value={newPaymentAmount} onChange={e => setNewPaymentAmount(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-sm" placeholder="R$ 0,00" />
+                            </div>
+                            <div className="flex-1">
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data</label>
+                                <input type="date" value={newPaymentDate} onChange={e => setNewPaymentDate(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-sm" />
+                            </div>
+                            <button type="button" onClick={handleAddPayment} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition">
+                                <PlusIcon className="h-5 w-5" />
+                            </button>
+                        </div>
+
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                            {formData.payments && formData.payments.length > 0 ? (
+                                formData.payments.map((p, idx) => (
+                                    <div key={idx} className="flex justify-between items-center bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm">
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 p-1.5 rounded">
+                                                <BanknotesIcon className="h-4 w-4" />
+                                            </div>
+                                            <div>
+                                                <span className="block font-bold dark:text-slate-200">{formatCurrency(p.amount)}</span>
+                                                <span className="text-[10px] text-slate-500 uppercase">{new Date(p.date).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</span>
+                                            </div>
+                                        </div>
+                                        <button type="button" onClick={() => handleRemovePayment(p.id)} className="text-slate-400 hover:text-red-500 transition">
+                                            <TrashIcon className="h-4 w-4" />
+                                        </button>
+                                    </div>
+                                ))
+                            ) : (
+                                <p className="text-center text-xs text-slate-400 py-2">Nenhum pagamento registrado.</p>
+                            )}
+                        </div>
+                     </div>
+
+                     <div className="md:col-span-2 flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+                        <button type="button" onClick={onClose} className="px-5 py-2.5 text-slate-600 dark:text-slate-300 font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 rounded-xl transition">Cancelar</button>
+                        <button type="submit" className="px-5 py-2.5 text-white font-medium bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-500/30 transition flex items-center gap-2">
+                            <CheckIcon className="h-5 w-5" />
+                            Salvar Contrato
+                        </button>
+                     </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
 // 1. Login Component
 interface LoginProps {
   onLogin: (user: User) => void;
@@ -489,7 +701,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigure
   );
 };
 
-// 2. Modal Component
+// 2. Record Modal Component (Mantido o original para Clientes)
 interface RecordModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -678,6 +890,92 @@ const StatsCards = ({ records }: { records: ClientRecord[] }) => {
     )
 }
 
+// 4. Financial Stats Component (NOVO)
+const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
+    const stats = useMemo(() => {
+        const totalPortfolio = contracts.reduce((acc, c) => acc + (Number(c.totalFee) || 0), 0);
+        
+        const currentMonth = new Date().getMonth();
+        const currentYear = new Date().getFullYear();
+        
+        let monthlyIncome = 0;
+        let michelIncome = 0;
+        let luanaIncome = 0;
+        let michelPortfolio = 0;
+        let luanaPortfolio = 0;
+
+        contracts.forEach(c => {
+            const contractTotal = Number(c.totalFee) || 0;
+            const responsible = c.lawyer;
+
+            // Portfolio Split (Potencial)
+            if (responsible === 'Michel') {
+                michelPortfolio += contractTotal * 0.6;
+                luanaPortfolio += contractTotal * 0.4;
+            } else if (responsible === 'Luana') {
+                luanaPortfolio += contractTotal * 0.6;
+                michelPortfolio += contractTotal * 0.4;
+            }
+
+            // Monthly Cash Flow
+            (c.payments || []).forEach(p => {
+                const pDate = new Date(p.date);
+                if (pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear) {
+                    const amount = Number(p.amount);
+                    monthlyIncome += amount;
+                    
+                    if (responsible === 'Michel') {
+                        michelIncome += amount * 0.6;
+                        luanaIncome += amount * 0.4;
+                    } else if (responsible === 'Luana') {
+                        luanaIncome += amount * 0.6;
+                        michelIncome += amount * 0.4;
+                    }
+                }
+            });
+        });
+
+        return { totalPortfolio, monthlyIncome, michelIncome, luanaIncome, michelPortfolio, luanaPortfolio };
+    }, [contracts]);
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden group">
+                 <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                     <WalletIcon className="h-24 w-24 text-indigo-600" />
+                 </div>
+                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Valor em Carteira (Total)</p>
+                 <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">{formatCurrency(stats.totalPortfolio)}</p>
+                 <div className="mt-3 text-[10px] text-slate-400 flex justify-between">
+                     <span>Dr. Michel: {formatCurrency(stats.michelPortfolio)}</span>
+                     <span>Dra. Luana: {formatCurrency(stats.luanaPortfolio)}</span>
+                 </div>
+             </div>
+
+             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden group">
+                 <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                     <BanknotesIcon className="h-24 w-24 text-green-600" />
+                 </div>
+                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Receita do Mês</p>
+                 <p className="text-2xl font-extrabold text-green-600 dark:text-green-400 mt-1">{formatCurrency(stats.monthlyIncome)}</p>
+                 <p className="text-[10px] text-slate-400 mt-1">Entradas em caixa neste mês</p>
+             </div>
+
+             <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-4 rounded-xl shadow-lg shadow-blue-500/20 text-white relative overflow-hidden">
+                 <p className="text-xs font-bold text-blue-200 uppercase tracking-wide">Repasse Dr. Michel</p>
+                 <p className="text-2xl font-extrabold mt-1">{formatCurrency(stats.michelIncome)}</p>
+                 <p className="text-[10px] text-blue-200 mt-1">Mês Atual (60% Próprios / 40% Luana)</p>
+             </div>
+
+             <div className="bg-gradient-to-br from-purple-600 to-purple-800 p-4 rounded-xl shadow-lg shadow-purple-500/20 text-white relative overflow-hidden">
+                 <p className="text-xs font-bold text-purple-200 uppercase tracking-wide">Repasse Dra. Luana</p>
+                 <p className="text-2xl font-extrabold mt-1">{formatCurrency(stats.luanaIncome)}</p>
+                 <p className="text-[10px] text-purple-200 mt-1">Mês Atual (60% Próprios / 40% Michel)</p>
+             </div>
+        </div>
+    );
+};
+
 // 4. Dashboard Component
 interface DashboardProps {
   user: User;
@@ -702,16 +1000,26 @@ const Dashboard: React.FC<DashboardProps> = ({
   onCloseSettings,
   onSettingsSaved
 }) => {
+  const [currentView, setCurrentView] = useState<'clients' | 'contracts'>('clients');
+
   const [records, setRecords] = useState<ClientRecord[]>([]);
+  const [contracts, setContracts] = useState<ContractRecord[]>([]);
+  
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentRecord, setCurrentRecord] = useState<ClientRecord | null>(null);
+  
+  const [isContractModalOpen, setIsContractModalOpen] = useState(false);
+  const [currentContract, setCurrentContract] = useState<ContractRecord | null>(null);
+
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   
-  const [sortConfig, setSortConfig] = useState<{ key: keyof ClientRecord; direction: 'ascending' | 'descending' } | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
@@ -719,96 +1027,58 @@ const Dashboard: React.FC<DashboardProps> = ({
   const fetchData = async () => {
     setIsLoading(true);
     setDbError(null);
+    const supabase = initSupabase();
+
     try {
-        const supabase = initSupabase();
-        
+        // Fetch Clients
+        let fetchedClients = INITIAL_DATA;
+        let fetchedContracts = INITIAL_CONTRACTS;
+
         if (supabase) {
-            // Cloud Fetch - Always prioritize cloud
-            const { data, error } = await supabase.from('clients').select('data').limit(1).single();
-            
-            if (error) { 
-                if(error.code !== 'PGRST116') {
-                    console.error("Erro ao buscar dados na nuvem", error);
-                    setDbError(`Erro ao conectar: ${error.message}. Verifique as permissões (RLS) no Supabase.`);
-                }
-                // Fallback to local only on error
-                const storedData = localStorage.getItem('inss_records');
-                setRecords(storedData ? JSON.parse(storedData) : INITIAL_DATA);
-            } else if (data && data.data) {
-                // Cloud has data. Check if it's empty array
-                if (Array.isArray(data.data) && data.data.length > 0) {
-                     setRecords(data.data);
-                     localStorage.setItem('inss_records', JSON.stringify(data.data));
-                } else {
-                     // Cloud exists but is empty (which happens after SQL create). Auto-restore backup.
-                     console.log("Banco de dados vazio. Restaurando backup automático.");
-                     setRecords(INITIAL_DATA);
-                     await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
-                }
-            } else {
-                // First time ever? Push initial data to cloud
-                const { error: insertError } = await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
-                if (insertError) {
-                    console.error("Erro ao criar tabela inicial", insertError);
-                    setDbError("Tabela 'clients' não encontrada ou permissão negada. Execute o SQL no Supabase.");
-                }
-                setRecords(INITIAL_DATA);
+            // Cloud Fetch - Clients
+            const { data: clientData, error: clientError } = await supabase.from('clients').select('data').limit(1).single();
+            if (clientData && clientData.data) {
+                fetchedClients = clientData.data;
+                localStorage.setItem('inss_records', JSON.stringify(clientData.data));
+            }
+
+            // Cloud Fetch - Contracts (simulated via separate table or key if user creates it, fallback local)
+            const { data: contractData, error: contractError } = await supabase.from('contracts').select('data').limit(1).single();
+            if (contractData && contractData.data) {
+                fetchedContracts = contractData.data;
+                localStorage.setItem('inss_contracts', JSON.stringify(contractData.data));
+            } else if (contractError && contractError.code === 'PGRST116') {
+                 // Table might exist but is empty
+                 await supabase.from('contracts').upsert({ id: 1, data: INITIAL_CONTRACTS });
             }
         } else {
-            // Offline mode fallback
-            const storedData = localStorage.getItem('inss_records');
-            if (storedData) {
-                setRecords(JSON.parse(storedData));
-            } else {
-                setRecords(INITIAL_DATA);
-            }
+             // Local Fallback
+             const localClients = localStorage.getItem('inss_records');
+             if (localClients) fetchedClients = JSON.parse(localClients);
+
+             const localContracts = localStorage.getItem('inss_contracts');
+             if (localContracts) fetchedContracts = JSON.parse(localContracts);
         }
+
+        setRecords(fetchedClients);
+        setContracts(fetchedContracts);
+
     } catch (e) {
         console.error("Erro geral", e);
-        setDbError("Erro inesperado na aplicação.");
+        setDbError("Erro de conexão local/nuvem.");
     } finally {
         setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    const supabase = initSupabase();
-    if (!supabase) {
-        fetchData();
-        return;
-    }
-
     fetchData();
-
-    // SETUP REALTIME SUBSCRIPTION
-    const channel = supabase
-        .channel('db-changes')
-        .on(
-            'postgres_changes',
-            {
-                event: '*', // Listen to all events
-                schema: 'public',
-                table: 'clients'
-            },
-            (payload: any) => {
-                // When cloud changes, update local state immediately
-                if (payload.new && payload.new.data) {
-                    console.log("Recebendo atualização em tempo real!");
-                    setRecords(payload.new.data);
-                    localStorage.setItem('inss_records', JSON.stringify(payload.new.data));
-                }
-            }
-        )
-        .subscribe();
-
-    return () => {
-        supabase.removeChannel(channel);
-    };
+    // Realtime setup could go here for both tables
   }, [isCloudConfigured]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, itemsPerPage]);
+  }, [searchTerm, itemsPerPage, currentView]);
 
   // Compute Alerts
   const activeAlerts = useMemo(() => {
@@ -830,76 +1100,71 @@ const Dashboard: React.FC<DashboardProps> = ({
       return alerts;
   }, [records]);
 
-  const saveRecords = async (newRecords: ClientRecord[]) => {
-    setIsSyncing(true);
-    setRecords(newRecords); // Optimistic UI update
-    
-    // Save to local cache immediately
-    localStorage.setItem('inss_records', JSON.stringify(newRecords));
+  // Save Logic (Generic)
+  const saveData = async (type: 'clients' | 'contracts', newData: any[]) => {
+      setIsSyncing(true);
+      const supabase = initSupabase();
 
-    // Push to cloud
-    const supabase = initSupabase();
-    if (supabase) {
-        const { error } = await supabase.from('clients').upsert({ id: 1, data: newRecords });
-        if (error) {
-            console.error("Falha ao salvar na nuvem:", error);
-            // Show specific error to help user debug
-            alert(`ATENÇÃO: Erro de Permissão no Banco de Dados!\n\nDetalhe: ${error.message}\n\nVocê precisa ir no Supabase > SQL Editor e rodar o script para criar a tabela 'clients' e liberar as permissões (RLS).`);
-            setDbError(`Falha de sincronização: ${error.message}`);
-        } else {
-            setDbError(null);
-        }
-    }
-    
-    setTimeout(() => setIsSyncing(false), 800);
-  };
+      if (type === 'clients') {
+          setRecords(newData);
+          localStorage.setItem('inss_records', JSON.stringify(newData));
+          if (supabase) await supabase.from('clients').upsert({ id: 1, data: newData });
+      } else {
+          setContracts(newData);
+          localStorage.setItem('inss_contracts', JSON.stringify(newData));
+          if (supabase) await supabase.from('contracts').upsert({ id: 1, data: newData });
+      }
+      
+      setTimeout(() => setIsSyncing(false), 800);
+  }
   
   const handleRestoreBackup = () => {
-      saveRecords(INITIAL_DATA);
-      alert("Dados restaurados com sucesso a partir do backup do sistema!");
+      saveData('clients', INITIAL_DATA);
+      saveData('contracts', INITIAL_CONTRACTS);
+      alert("Dados restaurados com sucesso!");
   };
 
-  const handleCreate = (data: ClientRecord) => {
+  // Handlers for Clients
+  const handleClientCreate = (data: ClientRecord) => {
     const newRecord = { ...data, id: Math.random().toString(36).substr(2, 9) };
-    saveRecords([newRecord, ...records]);
+    saveData('clients', [newRecord, ...records]);
     setIsModalOpen(false);
   };
-
-  const handleUpdate = (data: ClientRecord) => {
-    const updatedRecords = records.map(r => r.id === data.id ? data : r);
-    saveRecords(updatedRecords);
+  const handleClientUpdate = (data: ClientRecord) => {
+    const updated = records.map(r => r.id === data.id ? data : r);
+    saveData('clients', updated);
     setIsModalOpen(false);
   };
-
-  const handleDelete = (id: string) => {
-    if (window.confirm('Tem certeza que deseja excluir este registro?')) {
-      const filtered = records.filter(r => r.id !== id);
-      saveRecords(filtered);
+  const handleClientDelete = (id: string) => {
+    if (confirm('Excluir cliente?')) {
+        saveData('clients', records.filter(r => r.id !== id));
     }
   };
-  
   const toggleDailyAttention = (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      const updatedRecords = records.map(r => {
-          if (r.id === id) {
-              return { ...r, isDailyAttention: !r.isDailyAttention };
-          }
-          return r;
-      });
-      saveRecords(updatedRecords);
+      const updated = records.map(r => r.id === id ? { ...r, isDailyAttention: !r.isDailyAttention } : r);
+      saveData('clients', updated);
   }
 
-  const openNewModal = () => {
-    setCurrentRecord(null);
-    setIsModalOpen(true);
-  };
+  // Handlers for Contracts
+  const handleContractCreate = (data: ContractRecord) => {
+      const newRec = { ...data, id: Math.random().toString(36).substr(2, 9) };
+      saveData('contracts', [newRec, ...contracts]);
+      setIsContractModalOpen(false);
+  }
+  const handleContractUpdate = (data: ContractRecord) => {
+      const updated = contracts.map(c => c.id === data.id ? data : c);
+      saveData('contracts', updated);
+      setIsContractModalOpen(false);
+  }
+  const handleContractDelete = (id: string) => {
+      if (confirm('Excluir contrato e histórico financeiro?')) {
+          saveData('contracts', contracts.filter(c => c.id !== id));
+      }
+  }
 
-  const openEditModal = (record: ClientRecord) => {
-    setCurrentRecord(record);
-    setIsModalOpen(true);
-  };
-
-  const requestSort = (key: keyof ClientRecord) => {
+  // Sorting and Filtering Logic
+  const requestSort = (key: string) => {
     let direction: 'ascending' | 'descending' = 'ascending';
     if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
       direction = 'descending';
@@ -907,38 +1172,53 @@ const Dashboard: React.FC<DashboardProps> = ({
     setSortConfig({ key, direction });
   };
 
-  const filteredRecords = useMemo(() => {
-    const lowerSearch = searchTerm.toLowerCase();
-    const filtered = records.filter(r => 
-      (r.name && r.name.toLowerCase().includes(lowerSearch)) ||
-      (r.cpf && r.cpf.includes(lowerSearch))
-    );
-    
-    return filtered.sort((a, b) => {
-        if (a.isDailyAttention !== b.isDailyAttention) {
-             return a.isDailyAttention ? -1 : 1;
-        }
-        if (sortConfig) {
-             const aValue = a[sortConfig.key] || '';
-             const bValue = b[sortConfig.key] || '';
-             if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
-             if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
-             return 0;
-        }
-        return a.name.localeCompare(b.name);
-    });
-  }, [records, searchTerm, sortConfig]);
+  const getFilteredData = () => {
+      const lowerSearch = searchTerm.toLowerCase();
+      
+      if (currentView === 'clients') {
+          return records.filter(r => 
+            (r.name && r.name.toLowerCase().includes(lowerSearch)) ||
+            (r.cpf && r.cpf.includes(lowerSearch))
+          ).sort((a, b) => {
+              if (a.isDailyAttention !== b.isDailyAttention) return a.isDailyAttention ? -1 : 1;
+              if (sortConfig) {
+                  const aVal = (a as any)[sortConfig.key] || '';
+                  const bVal = (b as any)[sortConfig.key] || '';
+                  if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
+                  if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
+              }
+              return a.name.localeCompare(b.name);
+          });
+      } else {
+          return contracts.filter(c => 
+            (c.firstName.toLowerCase().includes(lowerSearch)) ||
+            (c.lastName.toLowerCase().includes(lowerSearch)) ||
+            (c.cpf.includes(lowerSearch))
+          ).sort((a, b) => {
+             // Contracts sort logic
+             if (sortConfig) {
+                  const aVal = (a as any)[sortConfig.key] || '';
+                  const bVal = (b as any)[sortConfig.key] || '';
+                  if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
+                  if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
+             }
+             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // Default new first
+          });
+      }
+  }
 
-  const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
+  const filteredList = getFilteredData();
+  const totalPages = Math.ceil(filteredList.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedRecords = filteredRecords.slice(startIndex, startIndex + itemsPerPage);
+  const paginatedList = filteredList.slice(startIndex, startIndex + itemsPerPage);
 
-  const renderSortIcon = (columnKey: keyof ClientRecord) => {
+  // Render Helpers
+  const renderSortIcon = (columnKey: string) => {
      if (sortConfig?.key !== columnKey) return null;
      return sortConfig.direction === 'ascending' ? <ChevronUpIcon className="w-3 h-3 ml-1 inline" /> : <ChevronDownIcon className="w-3 h-3 ml-1 inline" />;
   };
 
-  const ThSortable = ({ label, columnKey, align = "left" }: { label: string, columnKey: keyof ClientRecord, align?: "left"|"center"|"right" }) => (
+  const ThSortable = ({ label, columnKey, align = "left" }: { label: string, columnKey: string, align?: "left"|"center"|"right" }) => (
       <th 
         className={`px-4 py-3.5 font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 cursor-pointer hover:bg-slate-200 dark:hover:bg-slate-700 transition select-none text-xs uppercase tracking-wider text-${align}`}
         onClick={() => requestSort(columnKey)}
@@ -951,306 +1231,294 @@ const Dashboard: React.FC<DashboardProps> = ({
   );
 
   return (
-    <div className="h-screen bg-slate-50 dark:bg-slate-950 flex flex-col transition-colors duration-200 overflow-hidden font-sans">
-      {/* Navbar */}
-      <nav className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 flex-none z-30">
-        <div className="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-br from-primary-600 to-primary-800 text-white p-2 rounded-lg shadow-lg shadow-primary-500/20">
-                <ScaleIcon className="h-6 w-6" />
-              </div>
-              <div className="hidden sm:block">
-                <h1 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">Gestão INSS</h1>
-                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold tracking-wide uppercase flex items-center gap-2">
-                    Painel Administrativo
-                    {isSyncing ? (
-                         <span className="text-blue-500 flex items-center gap-1"><ArrowPathRoundedSquareIcon className="h-3 w-3 animate-spin" /> Salvando...</span>
-                    ) : isLoading ? (
-                         <span className="text-slate-500 flex items-center gap-1"><ArrowPathIcon className="h-3 w-3 animate-spin" /> Carregando...</span>
-                    ) : isCloudConfigured ? (
-                        <span className="text-green-500 flex items-center gap-1"><CloudIcon className="h-3 w-3" /> Online (Realtime)</span>
-                    ) : (
-                        <span className="text-slate-400 flex items-center gap-1">Local (Offline)</span>
-                    )}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {dbError && (
-                  <div className="hidden md:flex items-center px-3 py-1 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs rounded-full border border-red-200 dark:border-red-800 animate-pulse" title={dbError}>
-                      <ExclamationTriangleIcon className="h-4 w-4 mr-1" />
-                      Erro de Conexão
-                  </div>
-              )}
-              
-              <button 
-                  onClick={() => setIsNotificationsOpen(true)}
-                  className="p-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition relative group" 
-                  title="Notificações"
-              >
-                 <BellIcon className="h-5 w-5 group-hover:text-primary-500 transition-colors" />
-                 {activeAlerts.length > 0 && (
-                     <span className="absolute top-2 right-2 h-2.5 w-2.5 rounded-full bg-red-500 border border-white dark:border-slate-900 animate-pulse"></span>
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200 overflow-hidden">
+      
+      {/* SIDEBAR NAVIGATION */}
+      <aside className="w-20 lg:w-64 bg-slate-900 text-white flex flex-col flex-shrink-0 transition-all duration-300 z-40">
+           <div className="h-16 flex items-center justify-center lg:justify-start lg:px-6 border-b border-slate-800">
+               <div className="bg-gradient-to-br from-primary-500 to-indigo-600 p-1.5 rounded-lg mr-0 lg:mr-3 shadow-lg shadow-indigo-500/30">
+                   <ScaleIcon className="h-6 w-6 text-white" />
+               </div>
+               <span className="font-bold text-lg hidden lg:block tracking-tight">Gestão INSS</span>
+           </div>
+
+           <div className="flex-1 py-6 px-3 space-y-2">
+               <button 
+                   onClick={() => setCurrentView('clients')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'clients' ? 'bg-primary-600 shadow-lg shadow-primary-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <UserGroupIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Processos</span>
+               </button>
+
+               <button 
+                   onClick={() => setCurrentView('contracts')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'contracts' ? 'bg-indigo-600 shadow-lg shadow-indigo-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <BriefcaseIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Contratos & Fin.</span>
+               </button>
+           </div>
+           
+           <div className="p-4 border-t border-slate-800">
+               <div className="flex items-center justify-center lg:justify-start gap-3">
+                   <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold">
+                       {user.firstName[0]}
+                   </div>
+                   <div className="hidden lg:block">
+                       <p className="text-xs font-bold text-white">{user.firstName}</p>
+                       <p className="text-[10px] text-slate-400">{user.role}</p>
+                   </div>
+               </div>
+               <button onClick={onLogout} className="mt-4 w-full flex items-center justify-center lg:justify-start p-2 text-slate-400 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition">
+                   <ArrowRightOnRectangleIcon className="h-5 w-5 lg:mr-2" />
+                   <span className="hidden lg:block text-xs font-bold uppercase">Sair</span>
+               </button>
+           </div>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Navbar (Top) */}
+        <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 h-16 flex items-center justify-between px-6 z-30">
+             <div className="flex items-center gap-4">
+                 <h2 className="text-xl font-bold text-slate-800 dark:text-white">
+                     {currentView === 'clients' ? 'Painel de Processos' : 'Gestão de Contratos'}
+                 </h2>
+                 {isSyncing ? (
+                      <span className="text-xs text-blue-500 flex items-center gap-1"><ArrowPathRoundedSquareIcon className="h-3 w-3 animate-spin" /> Salvando...</span>
+                 ) : isCloudConfigured ? (
+                     <span className="text-xs text-green-500 flex items-center gap-1 font-medium bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-full border border-green-100 dark:border-green-800"><CloudIcon className="h-3 w-3" /> Online</span>
+                 ) : (
+                     <span className="text-xs text-slate-400 flex items-center gap-1">Local</span>
                  )}
-              </button>
+             </div>
 
-              <button onClick={onOpenSettings} className="p-2.5 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition" title="Configurações">
-                 <Cog6ToothIcon className={`h-5 w-5 ${isCloudConfigured ? 'text-primary-500' : ''}`} />
-              </button>
+             <div className="flex items-center gap-3">
+                 <button onClick={() => setIsNotificationsOpen(true)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative">
+                     <BellIcon className="h-5 w-5" />
+                     {activeAlerts.length > 0 && <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 border border-white dark:border-slate-900"></span>}
+                 </button>
+                 <button onClick={onOpenSettings} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+                     <Cog6ToothIcon className={`h-5 w-5 ${isCloudConfigured ? 'text-primary-500' : ''}`} />
+                 </button>
+                 <button onClick={toggleDarkMode} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
+                     {darkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
+                 </button>
+             </div>
+        </header>
 
-              <button 
-                onClick={toggleDarkMode}
-                className="p-2.5 text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all active:scale-95"
-              >
-                  {darkMode ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
-              </button>
+        <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
+             
+             {/* CONTENT SWITCHER */}
+             {currentView === 'clients' ? (
+                 <>
+                    <StatsCards records={records} />
+                    
+                    {/* Action Bar Clients */}
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                        <div className="relative w-full md:w-[400px] group">
+                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                            <MagnifyingGlassIcon className="h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
+                            </div>
+                            <input
+                            type="text"
+                            placeholder="Buscar cliente por nome ou CPF..."
+                            className="pl-11 pr-4 py-3 w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl focus:ring-2 focus:ring-primary-500 outline-none shadow-sm transition-all"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <button
+                            onClick={() => { setCurrentRecord(null); setIsModalOpen(true); }}
+                            className="bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-primary-500/25 flex items-center gap-2"
+                        >
+                            <PlusIcon className="h-5 w-5" />
+                            Novo Processo
+                        </button>
+                    </div>
 
-              <div className="h-8 w-px bg-slate-200 dark:bg-slate-800 mx-2"></div>
+                    {/* Clients Table */}
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm whitespace-nowrap">
+                                <thead className="bg-slate-50 dark:bg-slate-800/80">
+                                    <tr>
+                                        <th className="px-4 py-3.5 text-center w-14 font-bold text-slate-600 dark:text-slate-400">★</th>
+                                        <ThSortable label="Nome" columnKey="name" />
+                                        <ThSortable label="CPF" columnKey="cpf" />
+                                        <th className="px-4 py-3.5 font-bold text-slate-700 dark:text-slate-300">Senha</th>
+                                        <ThSortable label="Tipo" columnKey="type" />
+                                        <ThSortable label="DER" columnKey="der" />
+                                        <ThSortable label="P. Médica" columnKey="medExpertiseDate" />
+                                        <ThSortable label="P. Social" columnKey="socialExpertiseDate" />
+                                        <ThSortable label="Prorrog." columnKey="extensionDate" />
+                                        <ThSortable label="DCB" columnKey="dcbDate" />
+                                        <ThSortable label="90 Dias" columnKey="ninetyDaysDate" />
+                                        <ThSortable label="Mandado" columnKey="securityMandateDate" />
+                                        <th className="px-4 py-3.5 text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {paginatedList.map((record: any) => {
+                                        const isPriority = record.isDailyAttention;
+                                        const rowClass = isPriority 
+                                            ? 'bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20' 
+                                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50';
+                                        return (
+                                            <tr key={record.id} className={`${rowClass} transition-colors`}>
+                                                <td className="px-4 py-3 text-center">
+                                                    <button onClick={(e) => toggleDailyAttention(record.id, e)}>
+                                                        {isPriority ? <StarIconSolid className="h-5 w-5 text-yellow-400" /> : <StarIcon className="h-5 w-5 text-slate-300 hover:text-yellow-400" />}
+                                                    </button>
+                                                </td>
+                                                <td className="px-4 py-3 font-semibold dark:text-slate-200">{record.name}</td>
+                                                <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono text-xs">{record.cpf}</td>
+                                                <td className="px-4 py-3"><span className="font-mono text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">{record.password}</span></td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${!record.type ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800'}`}>{record.type || 'N/D'}</span>
+                                                </td>
+                                                <td className="px-4 py-3 dark:text-slate-400">{record.der || '-'}</td>
+                                                <td className={`px-4 py-3 ${isUrgentDate(record.medExpertiseDate) ? 'text-orange-600 font-bold' : 'dark:text-slate-400'}`}>{record.medExpertiseDate || '-'}</td>
+                                                <td className={`px-4 py-3 ${isUrgentDate(record.socialExpertiseDate) ? 'text-orange-600 font-bold' : 'dark:text-slate-400'}`}>{record.socialExpertiseDate || '-'}</td>
+                                                <td className={`px-4 py-3 ${isUrgentDate(record.extensionDate) ? 'text-orange-600 font-bold' : 'dark:text-slate-400'}`}>{record.extensionDate || '-'}</td>
+                                                <td className="px-4 py-3 dark:text-slate-400">{record.dcbDate || '-'}</td>
+                                                <td className="px-4 py-3 text-xs italic text-slate-400">{record.ninetyDaysDate || '-'}</td>
+                                                <td className={`px-4 py-3 ${isUrgentDate(record.securityMandateDate) ? 'text-orange-600 font-bold' : 'dark:text-slate-400'}`}>{record.securityMandateDate || '-'}</td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <div className="flex justify-end gap-1">
+                                                        <button onClick={() => { setCurrentRecord(record); setIsModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><PencilSquareIcon className="h-4 w-4" /></button>
+                                                        <button onClick={() => handleClientDelete(record.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"><TrashIcon className="h-4 w-4" /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                 </>
+             ) : (
+                 <>
+                    <FinancialStats contracts={contracts} />
 
-              <div className="flex items-center gap-3 bg-slate-50 dark:bg-slate-800 py-1.5 px-3 rounded-full border border-slate-200 dark:border-slate-700">
-                 <div className="w-8 h-8 rounded-full bg-primary-100 dark:bg-primary-900/50 flex items-center justify-center text-primary-700 dark:text-primary-300 font-bold text-sm">
-                    {user.firstName[0]}{user.lastName[0]}
-                 </div>
-                 <div className="hidden md:flex flex-col">
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200 leading-none">{user.firstName} {user.lastName}</span>
-                    <span className="text-[10px] text-primary-600 dark:text-primary-400 font-medium">{user.role}</span>
-                 </div>
-              </div>
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                        <div className="relative w-full md:w-[400px] group">
+                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                <MagnifyingGlassIcon className="h-5 w-5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                            </div>
+                            <input
+                                type="text"
+                                placeholder="Buscar contrato por nome ou CPF..."
+                                className="pl-11 pr-4 py-3 w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm transition-all"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <button
+                            onClick={() => { setCurrentContract(null); setIsContractModalOpen(true); }}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-indigo-500/25 flex items-center gap-2"
+                        >
+                            <PlusIcon className="h-5 w-5" />
+                            Novo Contrato
+                        </button>
+                    </div>
 
-              <button
-                onClick={onLogout}
-                className="ml-2 p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 dark:hover:text-red-400 rounded-xl transition-all active:scale-95"
-                title="Sair"
-              >
-                <ArrowRightOnRectangleIcon className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col">
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm whitespace-nowrap">
+                                <thead className="bg-slate-50 dark:bg-slate-800/80">
+                                    <tr>
+                                        <ThSortable label="Cliente" columnKey="firstName" />
+                                        <ThSortable label="Serviço" columnKey="serviceType" />
+                                        <ThSortable label="Responsável" columnKey="lawyer" />
+                                        <ThSortable label="Valor Total" columnKey="totalFee" />
+                                        <th className="px-4 py-3.5 font-bold text-slate-700 dark:text-slate-300">Pagamento</th>
+                                        <ThSortable label="Status" columnKey="status" />
+                                        <th className="px-4 py-3.5 text-right">Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                    {paginatedList.map((contract: any) => {
+                                        const totalPaid = (contract.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+                                        const totalFee = Number(contract.totalFee) || 0;
+                                        const percentPaid = totalFee > 0 ? (totalPaid / totalFee) * 100 : 0;
+                                        
+                                        return (
+                                            <tr key={contract.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                                <td className="px-4 py-3">
+                                                    <div className="font-semibold dark:text-slate-200">{contract.firstName} {contract.lastName}</div>
+                                                    <div className="text-xs text-slate-400 font-mono">{contract.cpf}</div>
+                                                </td>
+                                                <td className="px-4 py-3 dark:text-slate-300">{contract.serviceType}</td>
+                                                <td className="px-4 py-3">
+                                                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${contract.lawyer === 'Michel' ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20' : 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20'}`}>
+                                                        {contract.lawyer === 'Michel' ? '👨‍⚖️ Dr. Michel' : '👩‍⚖️ Dra. Luana'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 py-3 font-mono font-bold dark:text-slate-200">{formatCurrency(totalFee)}</td>
+                                                <td className="px-4 py-3 w-48">
+                                                    <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2 mb-1">
+                                                        <div className={`h-2 rounded-full ${percentPaid >= 100 ? 'bg-green-500' : 'bg-indigo-500'}`} style={{ width: `${Math.min(percentPaid, 100)}%` }}></div>
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-500 dark:text-slate-400 flex justify-between">
+                                                        <span>Pago: {formatCurrency(totalPaid)}</span>
+                                                        <span>{Math.round(percentPaid)}%</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border 
+                                                        ${contract.status === 'Concluído' ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400' : 
+                                                          contract.status === 'Em Andamento' ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/20 dark:text-amber-400' : 
+                                                          'bg-slate-100 text-slate-500 border-slate-200'}`}>
+                                                         {contract.status}
+                                                     </span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <div className="flex justify-end gap-1">
+                                                        <button onClick={() => { setCurrentContract(contract); setIsContractModalOpen(true); }} className="p-1.5 text-indigo-600 hover:bg-indigo-50 rounded"><PencilSquareIcon className="h-4 w-4" /></button>
+                                                        <button onClick={() => handleContractDelete(contract.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"><TrashIcon className="h-4 w-4" /></button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                 </>
+             )}
+        </main>
 
-      {/* Main Content Area */}
-      <main className="flex-1 flex flex-col max-w-[1920px] w-full mx-auto p-4 sm:p-6 overflow-hidden">
+        <RecordModal
+            isOpen={isModalOpen}
+            onClose={() => setIsModalOpen(false)}
+            onSave={currentRecord ? handleClientUpdate : handleClientCreate}
+            initialData={currentRecord}
+        />
+
+        <ContractModal 
+            isOpen={isContractModalOpen}
+            onClose={() => setIsContractModalOpen(false)}
+            onSave={currentContract ? handleContractUpdate : handleContractCreate}
+            initialData={currentContract}
+        />
         
-        {/* Stats Summary */}
-        <StatsCards records={records} />
-
-        {/* Actions Bar */}
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4 flex-none">
-          <div className="relative w-full md:w-[400px] group">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-              <MagnifyingGlassIcon className="h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
-            </div>
-            <input
-              type="text"
-              placeholder="Buscar cliente por nome ou CPF..."
-              className="pl-11 pr-4 py-3 w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none shadow-sm transition-all"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          
-          <div className="flex gap-2 w-full md:w-auto">
-             <button
-                onClick={fetchData}
-                className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-primary-600 rounded-xl shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition"
-                title="Atualizar Dados"
-              >
-                <ArrowPathIcon className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
-              </button>
-              <button
-                onClick={openNewModal}
-                className="flex-1 md:flex-none bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-primary-500/25 hover:shadow-primary-500/40 transition-all transform active:scale-95 flex items-center justify-center gap-2"
-              >
-                <PlusIcon className="h-5 w-5" />
-                Novo Cadastro
-              </button>
-          </div>
-        </div>
-
-        {/* Data Table */}
-        <div className="flex-1 overflow-hidden bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200 dark:border-slate-800 flex flex-col">
-            <div className="overflow-auto flex-1">
-                <table className="w-full text-left text-sm whitespace-nowrap">
-                <thead className="sticky top-0 z-20">
-                    <tr>
-                    <th className="px-4 py-3.5 bg-slate-100 dark:bg-slate-800/80 text-center w-14 font-bold text-slate-600 dark:text-slate-400 text-xs border-r border-slate-200 dark:border-slate-700">★</th>
-                    <ThSortable label="Nome do Cliente" columnKey="name" />
-                    <ThSortable label="CPF" columnKey="cpf" />
-                    <th className="px-4 py-3.5 font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 text-xs uppercase">Senha</th>
-                    <ThSortable label="Tipo" columnKey="type" />
-                    <ThSortable label="DER" columnKey="der" />
-                    <ThSortable label="P. Médica" columnKey="medExpertiseDate" />
-                    <ThSortable label="P. Social" columnKey="socialExpertiseDate" />
-                    <ThSortable label="Prorrog." columnKey="extensionDate" />
-                    <ThSortable label="DCB" columnKey="dcbDate" />
-                    <ThSortable label="90 Dias" columnKey="ninetyDaysDate" />
-                    <ThSortable label="Mand. Seg." columnKey="securityMandateDate" />
-                    <th className="px-4 py-3.5 font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800/80 text-right text-xs uppercase sticky right-0 shadow-[-5px_0_10px_-5px_rgba(0,0,0,0.1)]">Ações</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {paginatedRecords.length > 0 ? (
-                    paginatedRecords.map((record) => {
-                        const isPriority = record.isDailyAttention;
-                        const rowClass = isPriority 
-                            ? 'bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20' 
-                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50';
-                        
-                        return (
-                        <tr key={record.id} className={`${rowClass} transition-colors duration-150 group`}>
-                        <td className="px-4 py-3 text-center border-r border-slate-100 dark:border-slate-800/50">
-                            <button onClick={(e) => toggleDailyAttention(record.id, e)} className="focus:outline-none transition-transform active:scale-90">
-                                {isPriority ? (
-                                    <StarIconSolid className="h-5 w-5 text-yellow-400 drop-shadow-sm" />
-                                ) : (
-                                    <StarIcon className="h-5 w-5 text-slate-300 hover:text-yellow-400 transition-colors" />
-                                )}
-                            </button>
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-200">{record.name}</td>
-                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono text-xs tracking-tight">{record.cpf}</td>
-                        <td className="px-4 py-3">
-                            <span className="font-mono text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-md px-2 py-1 select-all border border-slate-200 dark:border-slate-700">
-                                {record.password}
-                            </span>
-                        </td>
-                        <td className="px-4 py-3">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide border ${
-                            !record.type ? 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700' :
-                            record.type.toLowerCase().includes('bpc') ? 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-900/20 dark:text-purple-300 dark:border-purple-800' :
-                            record.type.toLowerCase().includes('aux') ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300 dark:border-emerald-800' :
-                            record.type.toLowerCase().includes('apo') ? 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-900/20 dark:text-orange-300 dark:border-orange-800' :
-                            'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800'
-                            }`}>
-                            {record.type || 'N/D'}
-                            </span>
-                        </td>
-                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">{record.der || '-'}</td>
-                        
-                        <td className={`px-4 py-3 text-sm ${isUrgentDate(record.medExpertiseDate) ? 'text-orange-600 dark:text-orange-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}>
-                            {isUrgentDate(record.medExpertiseDate) && <ExclamationTriangleIcon className="h-4 w-4 inline mr-1 mb-0.5 animate-pulse" />}
-                            {record.medExpertiseDate || '-'}
-                        </td>
-                        
-                        <td className={`px-4 py-3 text-sm ${isUrgentDate(record.socialExpertiseDate) ? 'text-orange-600 dark:text-orange-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}>
-                            {isUrgentDate(record.socialExpertiseDate) && <ExclamationTriangleIcon className="h-4 w-4 inline mr-1 mb-0.5 animate-pulse" />}
-                            {record.socialExpertiseDate || '-'}
-                        </td>
-
-                        <td className={`px-4 py-3 text-sm ${isUrgentDate(record.extensionDate) ? 'text-orange-600 dark:text-orange-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}>
-                            {isUrgentDate(record.extensionDate) && <ExclamationTriangleIcon className="h-4 w-4 inline mr-1 mb-0.5 animate-pulse" />}
-                            {record.extensionDate || '-'}
-                        </td>
-                        <td className="px-4 py-3 text-slate-600 dark:text-slate-400 text-sm">{record.dcbDate || '-'}</td>
-                        <td className="px-4 py-3 text-slate-500 dark:text-slate-500 text-xs italic">{record.ninetyDaysDate || '-'}</td>
-                        
-                        <td className={`px-4 py-3 text-sm ${isUrgentDate(record.securityMandateDate) ? 'text-orange-600 dark:text-orange-400 font-bold' : 'text-slate-600 dark:text-slate-400'}`}>
-                            {isUrgentDate(record.securityMandateDate) && <ExclamationTriangleIcon className="h-4 w-4 inline mr-1 mb-0.5 animate-pulse" />}
-                            {record.securityMandateDate || '-'}
-                        </td>
-                        
-                        <td className="px-4 py-3 text-right sticky right-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 transition-colors shadow-[-5px_0_10px_-5px_rgba(0,0,0,0.05)]">
-                            <div className="flex items-center justify-end gap-1">
-                            <button 
-                                onClick={() => openEditModal(record)}
-                                className="p-1.5 text-blue-600 hover:text-white hover:bg-blue-600 dark:text-blue-400 dark:hover:bg-blue-600 dark:hover:text-white transition rounded-lg"
-                                title="Editar"
-                            >
-                                <PencilSquareIcon className="h-4 w-4" />
-                            </button>
-                            <button 
-                                onClick={() => handleDelete(record.id)}
-                                className="p-1.5 text-slate-400 hover:text-white hover:bg-red-500 dark:text-slate-500 dark:hover:bg-red-500 dark:hover:text-white transition rounded-lg"
-                                title="Excluir"
-                            >
-                                <TrashIcon className="h-4 w-4" />
-                            </button>
-                            </div>
-                        </td>
-                        </tr>
-                    )})
-                    ) : (
-                    <tr>
-                        <td colSpan={13} className="px-6 py-24 text-center">
-                            <div className="flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
-                                <MagnifyingGlassIcon className="h-12 w-12 mb-3 opacity-20" />
-                                <p className="text-lg font-medium">Nenhum registro encontrado</p>
-                                <p className="text-sm">Tente buscar por outro nome ou CPF</p>
-                            </div>
-                        </td>
-                    </tr>
-                    )}
-                </tbody>
-                </table>
-            </div>
-
-            {/* Pagination */}
-            <div className="bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between flex-none">
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">Exibir</span>
-                        <select 
-                            value={itemsPerPage}
-                            onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                            className="border border-slate-300 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-sm px-2 py-1.5 outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer shadow-sm"
-                        >
-                            <option value={10}>10</option>
-                            <option value={20}>20</option>
-                            <option value={50}>50</option>
-                            <option value={100}>100</option>
-                        </select>
-                    </div>
-                    <span className="text-sm text-slate-500 dark:text-slate-400 border-l border-slate-300 dark:border-slate-700 pl-4">
-                        Total: <span className="font-bold text-slate-700 dark:text-slate-200">{filteredRecords.length}</span> registros
-                    </span>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <span className="text-sm text-slate-600 dark:text-slate-400">
-                        Página <span className="font-semibold text-slate-900 dark:text-white">{currentPage}</span> de {totalPages || 1}
-                    </span>
-                    <div className="flex gap-1">
-                        <button 
-                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                            disabled={currentPage === 1}
-                            className="p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
-                        >
-                            <ChevronLeftIcon className="h-5 w-5" />
-                        </button>
-                        <button 
-                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                            disabled={currentPage >= totalPages}
-                            className="p-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800 hover:text-primary-600 dark:hover:text-primary-400 disabled:opacity-50 disabled:cursor-not-allowed transition shadow-sm"
-                        >
-                            <ChevronRightIcon className="h-5 w-5" />
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-      </main>
-
-      <RecordModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSave={currentRecord ? handleUpdate : handleCreate}
-        initialData={currentRecord}
-      />
-      
-      <NotificationsModal 
-          isOpen={isNotificationsOpen} 
-          onClose={() => setIsNotificationsOpen(false)} 
-          notifications={activeAlerts} 
-      />
-      
-      <SettingsModal 
-        isOpen={isSettingsOpen} 
-        onClose={onCloseSettings} 
-        onSave={onSettingsSaved}
-        onRestoreBackup={handleRestoreBackup}
-      />
+        <NotificationsModal 
+            isOpen={isNotificationsOpen} 
+            onClose={() => setIsNotificationsOpen(false)} 
+            notifications={activeAlerts} 
+        />
+        
+        <SettingsModal 
+            isOpen={isSettingsOpen} 
+            onClose={onCloseSettings} 
+            onSave={onSettingsSaved}
+            onRestoreBackup={handleRestoreBackup}
+        />
+      </div>
     </div>
   );
 };
