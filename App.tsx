@@ -84,7 +84,7 @@ const isUrgentDate = (dateStr: string): boolean => {
   const diffTime = target.getTime() - today.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
-  // Alterado para 15 dias conforme solicitado
+  // Prazo de 15 dias para alerta
   return diffDays >= 0 && diffDays <= 15;
 };
 
@@ -1100,21 +1100,31 @@ const Dashboard: React.FC<DashboardProps> = ({
         let fetchedContracts = INITIAL_CONTRACTS;
 
         if (supabase) {
-            // Cloud Fetch - Clients
-            const { data: clientData, error: clientError } = await supabase.from('clients').select('data').limit(1).single();
+            // Cloud Fetch - Clients (ID 1)
+            const { data: clientData, error: clientError } = await supabase
+                .from('clients')
+                .select('data')
+                .eq('id', 1) // Explicitly ID 1
+                .single();
+                
             if (clientData && clientData.data) {
                 fetchedClients = clientData.data;
                 localStorage.setItem('inss_records', JSON.stringify(clientData.data));
             }
 
-            // Cloud Fetch - Contracts (simulated via separate table or key if user creates it, fallback local)
-            const { data: contractData, error: contractError } = await supabase.from('contracts').select('data').limit(1).single();
+            // Cloud Fetch - Contracts (Stored in 'clients' table as ID 2 to share table)
+            const { data: contractData, error: contractError } = await supabase
+                .from('clients') // Using 'clients' table instead of 'contracts'
+                .select('data')
+                .eq('id', 2) // Explicitly ID 2
+                .single();
+
             if (contractData && contractData.data) {
                 fetchedContracts = contractData.data;
                 localStorage.setItem('inss_contracts', JSON.stringify(contractData.data));
             } else if (contractError && contractError.code === 'PGRST116') {
-                 // Table might exist but is empty
-                 await supabase.from('contracts').upsert({ id: 1, data: INITIAL_CONTRACTS });
+                 // Row 2 doesn't exist yet, initialize it
+                 await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS });
             }
         } else {
              // Local Fallback
@@ -1148,27 +1158,18 @@ const Dashboard: React.FC<DashboardProps> = ({
                 {
                     event: '*',
                     schema: 'public',
-                    table: 'clients'
+                    table: 'clients' // Listen only to clients table
                 },
                 (payload: any) => {
-                     // Check if it matches our data ID (1)
-                     if (payload.new && payload.new.id === 1 && payload.new.data) {
-                         setRecords(payload.new.data);
-                         localStorage.setItem('inss_records', JSON.stringify(payload.new.data));
-                     }
-                }
-            )
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'contracts'
-                },
-                (payload: any) => {
-                     if (payload.new && payload.new.id === 1 && payload.new.data) {
-                         setContracts(payload.new.data);
-                         localStorage.setItem('inss_contracts', JSON.stringify(payload.new.data));
+                     // Check ID to determine if it is Client Data (1) or Contract Data (2)
+                     if (payload.new && payload.new.data) {
+                         if (payload.new.id === 1) {
+                             setRecords(payload.new.data);
+                             localStorage.setItem('inss_records', JSON.stringify(payload.new.data));
+                         } else if (payload.new.id === 2) {
+                             setContracts(payload.new.data);
+                             localStorage.setItem('inss_contracts', JSON.stringify(payload.new.data));
+                         }
                      }
                 }
             )
@@ -1216,7 +1217,8 @@ const Dashboard: React.FC<DashboardProps> = ({
       } else {
           setContracts(newData);
           localStorage.setItem('inss_contracts', JSON.stringify(newData));
-          if (supabase) await supabase.from('contracts').upsert({ id: 1, data: newData });
+          // FIX: Save contracts to ID 2 in 'clients' table
+          if (supabase) await supabase.from('clients').upsert({ id: 2, data: newData });
       }
       
       setTimeout(() => setIsSyncing(false), 800);
