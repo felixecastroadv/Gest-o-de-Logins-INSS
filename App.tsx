@@ -84,8 +84,8 @@ const isUrgentDate = (dateStr: string): boolean => {
   const diffTime = target.getTime() - today.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
-  // Returns true if date is today or in the next 7 days
-  return diffDays >= 0 && diffDays <= 7;
+  // Alterado para 15 dias conforme solicitado
+  return diffDays >= 0 && diffDays <= 15;
 };
 
 const formatCurrency = (value: number) => {
@@ -366,7 +366,7 @@ const NotificationsModal = ({ isOpen, onClose, notifications }: { isOpen: boolea
                     {notifications.length === 0 ? (
                         <div className="p-8 text-center text-slate-400 dark:text-slate-500">
                             <CheckIcon className="h-10 w-10 mx-auto mb-2 opacity-20" />
-                            <p className="text-sm">Nenhuma pendência urgente para os próximos 7 dias.</p>
+                            <p className="text-sm">Nenhuma pendência urgente para os próximos 15 dias.</p>
                         </div>
                     ) : (
                         <ul className="space-y-1">
@@ -388,7 +388,7 @@ const NotificationsModal = ({ isOpen, onClose, notifications }: { isOpen: boolea
                     )}
                 </div>
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/50 border-t border-slate-100 dark:border-slate-800 text-center">
-                    <p className="text-[10px] text-slate-400">Alertas para hoje e próximos 7 dias</p>
+                    <p className="text-[10px] text-slate-400">Alertas para hoje e próximos 15 dias</p>
                 </div>
             </div>
         </div>
@@ -1334,6 +1334,58 @@ const Dashboard: React.FC<DashboardProps> = ({
       </th>
   );
 
+  // Helper for Date Cells with Alerts
+  const renderDateCell = (dateStr: string) => {
+      const urgent = isUrgentDate(dateStr);
+      return (
+          <td className="px-4 py-3">
+              <div className={`flex items-center gap-1.5 ${urgent ? 'text-red-600 dark:text-red-400 font-bold' : 'dark:text-slate-400'}`}>
+                  {urgent && <ExclamationTriangleIcon className="h-4 w-4 animate-pulse" />}
+                  {dateStr || '-'}
+              </div>
+          </td>
+      );
+  };
+
+  const PaginationControls = () => (
+      <div className="flex flex-col md:flex-row items-center justify-between gap-4 p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30">
+          <div className="flex items-center gap-3">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Linhas por página:</span>
+              <select 
+                  value={itemsPerPage} 
+                  onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold py-1.5 px-2 outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
+              >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value={200}>200</option>
+              </select>
+          </div>
+          
+          <div className="flex items-center gap-2">
+              <button 
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                  <ChevronLeftIcon className="h-4 w-4" />
+              </button>
+              <span className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                  Página {currentPage} de {totalPages || 1}
+              </span>
+              <button 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages || totalPages === 0}
+                  className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition"
+              >
+                  <ChevronRightIcon className="h-4 w-4" />
+              </button>
+          </div>
+      </div>
+  );
+
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 font-sans transition-colors duration-200 overflow-hidden">
       
@@ -1401,7 +1453,7 @@ const Dashboard: React.FC<DashboardProps> = ({
              <div className="flex items-center gap-3">
                  <button onClick={() => setIsNotificationsOpen(true)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative">
                      <BellIcon className="h-5 w-5" />
-                     {activeAlerts.length > 0 && <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 border border-white dark:border-slate-900"></span>}
+                     {activeAlerts.length > 0 && <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 border border-white dark:border-slate-900 animate-pulse"></span>}
                  </button>
                  <button onClick={onOpenSettings} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
                      <Cog6ToothIcon className={`h-5 w-5 ${isCloudConfigured ? 'text-primary-500' : ''}`} />
@@ -1483,12 +1535,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${!record.type ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800'}`}>{record.type || 'N/D'}</span>
                                                 </td>
                                                 <td className="px-4 py-3 dark:text-slate-400">{record.der || '-'}</td>
-                                                <td className={`px-4 py-3 ${isUrgentDate(record.medExpertiseDate) ? 'text-orange-600 font-bold' : 'dark:text-slate-400'}`}>{record.medExpertiseDate || '-'}</td>
-                                                <td className={`px-4 py-3 ${isUrgentDate(record.socialExpertiseDate) ? 'text-orange-600 font-bold' : 'dark:text-slate-400'}`}>{record.socialExpertiseDate || '-'}</td>
-                                                <td className={`px-4 py-3 ${isUrgentDate(record.extensionDate) ? 'text-orange-600 font-bold' : 'dark:text-slate-400'}`}>{record.extensionDate || '-'}</td>
-                                                <td className="px-4 py-3 dark:text-slate-400">{record.dcbDate || '-'}</td>
+                                                {renderDateCell(record.medExpertiseDate)}
+                                                {renderDateCell(record.socialExpertiseDate)}
+                                                {renderDateCell(record.extensionDate)}
+                                                {renderDateCell(record.dcbDate)}
                                                 <td className="px-4 py-3 text-xs italic text-slate-400">{record.ninetyDaysDate || '-'}</td>
-                                                <td className={`px-4 py-3 ${isUrgentDate(record.securityMandateDate) ? 'text-orange-600 font-bold' : 'dark:text-slate-400'}`}>{record.securityMandateDate || '-'}</td>
+                                                {renderDateCell(record.securityMandateDate)}
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex justify-end gap-1">
                                                         <button onClick={() => { setCurrentRecord(record); setIsModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><PencilSquareIcon className="h-4 w-4" /></button>
@@ -1501,6 +1553,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                 </tbody>
                             </table>
                         </div>
+                        <PaginationControls />
                     </div>
                  </>
              ) : (
@@ -1591,6 +1644,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                 </tbody>
                             </table>
                         </div>
+                        <PaginationControls />
                     </div>
                  </>
              )}
