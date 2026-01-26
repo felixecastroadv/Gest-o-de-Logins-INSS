@@ -39,7 +39,8 @@ import {
   ClipboardDocumentCheckIcon,
   CurrencyDollarIcon,
   WalletIcon,
-  CalculatorIcon
+  CalculatorIcon,
+  DocumentDuplicateIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -199,6 +200,33 @@ const InstallPrompt = () => {
                 </div>
             </button>
         </div>
+    );
+};
+
+// 0.0 Copy Button Component
+const CopyButton = ({ text }: { text: string }) => {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!text) return;
+        
+        navigator.clipboard.writeText(text).then(() => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        });
+    };
+
+    if (!text) return null;
+
+    return (
+        <button 
+            onClick={handleCopy} 
+            className={`p-1.5 rounded-lg transition-all duration-200 flex-shrink-0 ${copied ? 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400' : 'text-slate-400 hover:text-primary-600 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+            title="Copiar"
+        >
+            {copied ? <CheckIcon className="h-3.5 w-3.5" /> : <DocumentDuplicateIcon className="h-3.5 w-3.5" />}
+        </button>
     );
 };
 
@@ -1531,8 +1559,18 @@ const Dashboard: React.FC<DashboardProps> = ({
                                                     </button>
                                                 </td>
                                                 <td className="px-4 py-3 font-semibold dark:text-slate-200">{record.name}</td>
-                                                <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono text-xs">{record.cpf}</td>
-                                                <td className="px-4 py-3"><span className="font-mono text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">{record.password}</span></td>
+                                                <td className="px-4 py-3 text-slate-500 dark:text-slate-400 font-mono text-xs">
+                                                    <div className="flex items-center gap-2">
+                                                        <span>{record.cpf}</span>
+                                                        <CopyButton text={record.cpf} />
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="font-mono text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">{record.password}</span>
+                                                        <CopyButton text={record.password} />
+                                                    </div>
+                                                </td>
                                                 <td className="px-4 py-3">
                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${!record.type ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800'}`}>{record.type || 'N/D'}</span>
                                                 </td>
