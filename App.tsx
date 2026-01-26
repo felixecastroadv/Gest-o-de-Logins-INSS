@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, AUTHORIZED_USERS, ClientRecord, UserRole, ContractRecord, PaymentEntry } from './types';
-import { INITIAL_DATA, INITIAL_CONTRACTS } from './data';
+import { INITIAL_DATA } from './data';
 import { 
   LockClosedIcon, 
   ArrowRightOnRectangleIcon, 
@@ -41,6 +41,8 @@ import {
   WalletIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
+
+const INITIAL_CONTRACTS: ContractRecord[] = [];
 
 // --- Helpers ---
 
