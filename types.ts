@@ -30,3 +30,26 @@ export const AUTHORIZED_USERS = [
   { firstName: 'Luana', lastName: 'Castro', role: UserRole.ADVOGADO },
   { firstName: 'Fabrícia', lastName: 'Sousa', role: UserRole.SECRETARIA },
 ];
+
+// --- NOVOS TIPOS PARA CONTRATOS ---
+
+export interface PaymentEntry {
+  id: string;
+  date: string; // ISO Date YYYY-MM-DD
+  amount: number;
+  note?: string;
+}
+
+export interface ContractRecord {
+  id: string;
+  firstName: string;
+  lastName: string;
+  cpf: string;
+  serviceType: string;
+  lawyer: 'Michel' | 'Luana';
+  totalFee: number;
+  status: 'Pendente' | 'Em Andamento' | 'Concluído';
+  paymentMethod: 'À Vista' | 'Parcelado';
+  payments: PaymentEntry[];
+  createdAt: string;
+}
