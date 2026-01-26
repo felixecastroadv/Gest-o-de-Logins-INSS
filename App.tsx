@@ -40,7 +40,9 @@ import {
   CurrencyDollarIcon,
   WalletIcon,
   CalculatorIcon,
-  DocumentDuplicateIcon
+  DocumentDuplicateIcon,
+  ArchiveBoxIcon,
+  ArrowUturnLeftIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -1094,6 +1096,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSettingsSaved
 }) => {
   const [currentView, setCurrentView] = useState<'clients' | 'contracts'>('clients');
+  const [showArchived, setShowArchived] = useState(false);
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
@@ -1211,12 +1214,13 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, itemsPerPage, currentView]);
+  }, [searchTerm, itemsPerPage, currentView, showArchived]);
 
   // Compute Alerts
   const activeAlerts = useMemo(() => {
       const alerts: NotificationItem[] = [];
       records.forEach(r => {
+          if (r.isArchived) return; // Ignorar arquivados
           if (isUrgentDate(r.extensionDate)) {
               alerts.push({ id: r.id + '_ext', clientName: r.name, type: 'Prorrogação', date: r.extensionDate });
           }
@@ -1270,10 +1274,22 @@ const Dashboard: React.FC<DashboardProps> = ({
     setIsModalOpen(false);
   };
   const handleClientDelete = (id: string) => {
-    if (confirm('Excluir cliente?')) {
+    if (confirm('Excluir cliente permanentemente?')) {
         saveData('clients', records.filter(r => r.id !== id));
     }
   };
+  const handleToggleArchive = (id: string) => {
+      const record = records.find(r => r.id === id);
+      if (!record) return;
+      const newValue = !record.isArchived;
+      const action = newValue ? 'arquivar' : 'restaurar';
+      
+      if (confirm(`Deseja realmente ${action} este cliente?`)) {
+          const updated = records.map(r => r.id === id ? { ...r, isArchived: newValue } : r);
+          saveData('clients', updated);
+      }
+  }
+
   const toggleDailyAttention = (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
       const updated = records.map(r => r.id === id ? { ...r, isDailyAttention: !r.isDailyAttention } : r);
@@ -1311,8 +1327,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       
       if (currentView === 'clients') {
           return records.filter(r => 
-            (r.name && r.name.toLowerCase().includes(lowerSearch)) ||
-            (r.cpf && r.cpf.includes(lowerSearch))
+            ((r.name && r.name.toLowerCase().includes(lowerSearch)) ||
+            (r.cpf && r.cpf.includes(lowerSearch))) &&
+            (showArchived ? r.isArchived : !r.isArchived)
           ).sort((a, b) => {
               if (a.isDailyAttention !== b.isDailyAttention) return a.isDailyAttention ? -1 : 1;
               if (sortConfig) {
@@ -1499,29 +1516,55 @@ const Dashboard: React.FC<DashboardProps> = ({
              {/* CONTENT SWITCHER */}
              {currentView === 'clients' ? (
                  <>
-                    <StatsCards records={records} />
+                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
+                        <div className="flex-1">
+                             <StatsCards records={records.filter(r => !r.isArchived)} />
+                        </div>
+                    </div>
                     
                     {/* Action Bar Clients */}
-                    <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                        <div className="relative w-full md:w-[400px] group">
-                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                            <MagnifyingGlassIcon className="h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
+                    <div className="flex flex-col gap-4 mb-6">
+                         {/* Toggle Tabs */}
+                         <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-xl w-fit">
+                            <button 
+                                onClick={() => setShowArchived(false)} 
+                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${!showArchived ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                            >
+                                <UserGroupIcon className="h-4 w-4" />
+                                Ativos
+                            </button>
+                            <button 
+                                onClick={() => setShowArchived(true)} 
+                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${showArchived ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                            >
+                                <ArchiveBoxIcon className="h-4 w-4" />
+                                Arquivados
+                            </button>
+                         </div>
+
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                            <div className="relative w-full md:w-[400px] group">
+                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                <MagnifyingGlassIcon className="h-5 w-5 text-slate-400 group-focus-within:text-primary-500 transition-colors" />
+                                </div>
+                                <input
+                                type="text"
+                                placeholder={showArchived ? "Buscar em arquivados..." : "Buscar cliente por nome ou CPF..."}
+                                className="pl-11 pr-4 py-3 w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl focus:ring-2 focus:ring-primary-500 outline-none shadow-sm transition-all"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                />
                             </div>
-                            <input
-                            type="text"
-                            placeholder="Buscar cliente por nome ou CPF..."
-                            className="pl-11 pr-4 py-3 w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl focus:ring-2 focus:ring-primary-500 outline-none shadow-sm transition-all"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            />
+                            {!showArchived && (
+                                <button
+                                    onClick={() => { setCurrentRecord(null); setIsModalOpen(true); }}
+                                    className="bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-primary-500/25 flex items-center gap-2"
+                                >
+                                    <PlusIcon className="h-5 w-5" />
+                                    Novo Processo
+                                </button>
+                            )}
                         </div>
-                        <button
-                            onClick={() => { setCurrentRecord(null); setIsModalOpen(true); }}
-                            className="bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-primary-500/25 flex items-center gap-2"
-                        >
-                            <PlusIcon className="h-5 w-5" />
-                            Novo Processo
-                        </button>
                     </div>
 
                     {/* Clients Table */}
@@ -1546,7 +1589,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                    {paginatedList.map((record: any) => {
+                                    {paginatedList.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={13} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
+                                                Nenhum cliente encontrado {showArchived ? 'nos arquivos' : ''}.
+                                            </td>
+                                        </tr>
+                                    ) : paginatedList.map((record: any) => {
                                         const isPriority = record.isDailyAttention;
                                         const rowClass = isPriority 
                                             ? 'bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20' 
@@ -1583,6 +1632,23 @@ const Dashboard: React.FC<DashboardProps> = ({
                                                 {renderDateCell(record.securityMandateDate)}
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex justify-end gap-1">
+                                                        {!showArchived ? (
+                                                            <button 
+                                                                onClick={() => handleToggleArchive(record.id)} 
+                                                                className="p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded"
+                                                                title="Arquivar"
+                                                            >
+                                                                <ArchiveBoxIcon className="h-4 w-4" />
+                                                            </button>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={() => handleToggleArchive(record.id)} 
+                                                                className="p-1.5 text-slate-400 hover:text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 rounded"
+                                                                title="Restaurar"
+                                                            >
+                                                                <ArrowUturnLeftIcon className="h-4 w-4" />
+                                                            </button>
+                                                        )}
                                                         <button onClick={() => { setCurrentRecord(record); setIsModalOpen(true); }} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><PencilSquareIcon className="h-4 w-4" /></button>
                                                         <button onClick={() => handleClientDelete(record.id)} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded"><TrashIcon className="h-4 w-4" /></button>
                                                     </div>
