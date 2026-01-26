@@ -38,7 +38,8 @@ import {
   ChartBarIcon,
   ClipboardDocumentCheckIcon,
   CurrencyDollarIcon,
-  WalletIcon
+  WalletIcon,
+  CalculatorIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -415,7 +416,8 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
         } else {
             setFormData({ 
                 status: 'Pendente', 
-                paymentMethod: 'Parcelado', 
+                paymentMethod: 'Parcelado',
+                installmentsCount: 1,
                 payments: [],
                 createdAt: new Date().toISOString().split('T')[0]
             });
@@ -456,6 +458,10 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
     const totalFee = Number(formData.totalFee) || 0;
     const remaining = Math.max(0, totalFee - totalPaid);
     const progress = totalFee > 0 ? (totalPaid / totalFee) * 100 : 0;
+    
+    // Cálculo de parcela
+    const installments = Number(formData.installmentsCount) || 1;
+    const installmentValue = totalFee > 0 ? totalFee / installments : 0;
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
@@ -529,6 +535,31 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
                              <option value="Parcelado">Parcelado</option>
                          </select>
                      </div>
+                     
+                     {/* Seção de Cálculo de Parcelas */}
+                     {formData.paymentMethod === 'Parcelado' && (
+                         <div className="md:col-span-2 bg-indigo-50 dark:bg-indigo-900/10 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800/30 flex items-center justify-between gap-4">
+                             <div>
+                                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Qtd. Parcelas</label>
+                                 <select 
+                                    name="installmentsCount" 
+                                    value={formData.installmentsCount || 1} 
+                                    onChange={(e) => setFormData({...formData, installmentsCount: Number(e.target.value)})} 
+                                    className="w-32 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg outline-none text-sm dark:text-white"
+                                 >
+                                     {[2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                                         <option key={num} value={num}>{num}x</option>
+                                     ))}
+                                 </select>
+                             </div>
+                             <div className="text-right">
+                                 <p className="text-xs text-indigo-600 dark:text-indigo-400 font-bold uppercase mb-1">Valor por Parcela</p>
+                                 <p className="text-xl font-bold text-slate-800 dark:text-white font-mono">
+                                     {formatCurrency(installmentValue)}
+                                 </p>
+                             </div>
+                         </div>
+                     )}
 
                      {/* Payment Section */}
                      <div className="md:col-span-2 bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mt-2">
@@ -894,13 +925,27 @@ const StatsCards = ({ records }: { records: ClientRecord[] }) => {
 
 // 4. Financial Stats Component (NOVO)
 const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
+    const currentYear = new Date().getFullYear();
+    const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+
+    // Extrair anos disponíveis nos pagamentos
+    const availableYears = useMemo(() => {
+        const years = new Set<number>();
+        years.add(currentYear);
+        contracts.forEach(c => {
+            if(c.payments) {
+                c.payments.forEach(p => {
+                    years.add(new Date(p.date).getFullYear());
+                });
+            }
+        });
+        return Array.from(years).sort((a, b) => b - a); // Decrescente
+    }, [contracts, currentYear]);
+
     const stats = useMemo(() => {
         const totalPortfolio = contracts.reduce((acc, c) => acc + (Number(c.totalFee) || 0), 0);
         
-        const currentMonth = new Date().getMonth();
-        const currentYear = new Date().getFullYear();
-        
-        let monthlyIncome = 0;
+        let yearlyIncome = 0;
         let michelIncome = 0;
         let luanaIncome = 0;
         let michelPortfolio = 0;
@@ -910,7 +955,7 @@ const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
             const contractTotal = Number(c.totalFee) || 0;
             const responsible = c.lawyer;
 
-            // Portfolio Split (Potencial)
+            // Portfolio Split (Potencial Total)
             if (responsible === 'Michel') {
                 michelPortfolio += contractTotal * 0.6;
                 luanaPortfolio += contractTotal * 0.4;
@@ -919,12 +964,12 @@ const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
                 michelPortfolio += contractTotal * 0.4;
             }
 
-            // Monthly Cash Flow
+            // Yearly Cash Flow (Baseado nos pagamentos realizados)
             (c.payments || []).forEach(p => {
                 const pDate = new Date(p.date);
-                if (pDate.getMonth() === currentMonth && pDate.getFullYear() === currentYear) {
+                if (pDate.getFullYear() === selectedYear) {
                     const amount = Number(p.amount);
-                    monthlyIncome += amount;
+                    yearlyIncome += amount;
                     
                     if (responsible === 'Michel') {
                         michelIncome += amount * 0.6;
@@ -937,43 +982,61 @@ const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
             });
         });
 
-        return { totalPortfolio, monthlyIncome, michelIncome, luanaIncome, michelPortfolio, luanaPortfolio };
-    }, [contracts]);
+        return { totalPortfolio, yearlyIncome, michelIncome, luanaIncome, michelPortfolio, luanaPortfolio };
+    }, [contracts, selectedYear]);
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden group">
-                 <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                     <WalletIcon className="h-24 w-24 text-indigo-600" />
-                 </div>
-                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Valor em Carteira (Total)</p>
-                 <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">{formatCurrency(stats.totalPortfolio)}</p>
-                 <div className="mt-3 text-[10px] text-slate-400 flex justify-between">
-                     <span>Dr. Michel: {formatCurrency(stats.michelPortfolio)}</span>
-                     <span>Dra. Luana: {formatCurrency(stats.luanaPortfolio)}</span>
-                 </div>
-             </div>
+        <div className="space-y-4 mb-6">
+            <div className="flex justify-end">
+                <div className="relative inline-block">
+                    <select 
+                        value={selectedYear} 
+                        onChange={(e) => setSelectedYear(Number(e.target.value))}
+                        className="appearance-none bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 py-1.5 pl-4 pr-8 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                    >
+                        {availableYears.map(year => (
+                            <option key={year} value={year}>{year}</option>
+                        ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                        <ChevronDownIcon className="h-3 w-3" />
+                    </div>
+                </div>
+            </div>
 
-             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden group">
-                 <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                     <BanknotesIcon className="h-24 w-24 text-green-600" />
-                 </div>
-                 <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Receita do Mês</p>
-                 <p className="text-2xl font-extrabold text-green-600 dark:text-green-400 mt-1">{formatCurrency(stats.monthlyIncome)}</p>
-                 <p className="text-[10px] text-slate-400 mt-1">Entradas em caixa neste mês</p>
-             </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <WalletIcon className="h-24 w-24 text-indigo-600" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Valor em Carteira (Total)</p>
+                    <p className="text-2xl font-extrabold text-slate-900 dark:text-white mt-1">{formatCurrency(stats.totalPortfolio)}</p>
+                    <div className="mt-3 text-[10px] text-slate-400 flex justify-between">
+                        <span>Potencial a receber (Tudo)</span>
+                    </div>
+                </div>
 
-             <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-4 rounded-xl shadow-lg shadow-blue-500/20 text-white relative overflow-hidden">
-                 <p className="text-xs font-bold text-blue-200 uppercase tracking-wide">Repasse Dr. Michel</p>
-                 <p className="text-2xl font-extrabold mt-1">{formatCurrency(stats.michelIncome)}</p>
-                 <p className="text-[10px] text-blue-200 mt-1">Mês Atual (60% Próprios / 40% Luana)</p>
-             </div>
+                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden group">
+                    <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                        <BanknotesIcon className="h-24 w-24 text-green-600" />
+                    </div>
+                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Receita ({selectedYear})</p>
+                    <p className="text-2xl font-extrabold text-green-600 dark:text-green-400 mt-1">{formatCurrency(stats.yearlyIncome)}</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Total recebido no ano selecionado</p>
+                </div>
 
-             <div className="bg-gradient-to-br from-purple-600 to-purple-800 p-4 rounded-xl shadow-lg shadow-purple-500/20 text-white relative overflow-hidden">
-                 <p className="text-xs font-bold text-purple-200 uppercase tracking-wide">Repasse Dra. Luana</p>
-                 <p className="text-2xl font-extrabold mt-1">{formatCurrency(stats.luanaIncome)}</p>
-                 <p className="text-[10px] text-purple-200 mt-1">Mês Atual (60% Próprios / 40% Michel)</p>
-             </div>
+                <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-4 rounded-xl shadow-lg shadow-blue-500/20 text-white relative overflow-hidden">
+                    <p className="text-xs font-bold text-blue-200 uppercase tracking-wide">Lucro Dr. Michel ({selectedYear})</p>
+                    <p className="text-2xl font-extrabold mt-1">{formatCurrency(stats.michelIncome)}</p>
+                    <p className="text-[10px] text-blue-200 mt-1">Divisão de lucros no ano</p>
+                </div>
+
+                <div className="bg-gradient-to-br from-purple-600 to-purple-800 p-4 rounded-xl shadow-lg shadow-purple-500/20 text-white relative overflow-hidden">
+                    <p className="text-xs font-bold text-purple-200 uppercase tracking-wide">Lucro Dra. Luana ({selectedYear})</p>
+                    <p className="text-2xl font-extrabold mt-1">{formatCurrency(stats.luanaIncome)}</p>
+                    <p className="text-[10px] text-purple-200 mt-1">Divisão de lucros no ano</p>
+                </div>
+            </div>
         </div>
     );
 };
@@ -1073,9 +1136,48 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
+  // Setup Realtime Subscription
   useEffect(() => {
     fetchData();
-    // Realtime setup could go here for both tables
+
+    const supabase = initSupabase();
+    if (supabase) {
+        const channel = supabase.channel('db-changes')
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'clients'
+                },
+                (payload: any) => {
+                     // Check if it matches our data ID (1)
+                     if (payload.new && payload.new.id === 1 && payload.new.data) {
+                         setRecords(payload.new.data);
+                         localStorage.setItem('inss_records', JSON.stringify(payload.new.data));
+                     }
+                }
+            )
+            .on(
+                'postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'contracts'
+                },
+                (payload: any) => {
+                     if (payload.new && payload.new.id === 1 && payload.new.data) {
+                         setContracts(payload.new.data);
+                         localStorage.setItem('inss_contracts', JSON.stringify(payload.new.data));
+                     }
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }
   }, [isCloudConfigured]);
 
   useEffect(() => {
