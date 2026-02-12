@@ -516,20 +516,20 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
                      </div>
 
                      <div>
-                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Nome</label>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Nome <span className="text-red-500">*</span></label>
                         <input type="text" name="firstName" required value={formData.firstName || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
                      </div>
                      <div>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Sobrenome</label>
-                        <input type="text" name="lastName" required value={formData.lastName || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
+                        <input type="text" name="lastName" value={formData.lastName || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
                      </div>
                      <div>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">CPF</label>
-                        <input type="text" name="cpf" required value={formData.cpf || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
+                        <input type="text" name="cpf" value={formData.cpf || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
                      </div>
                      <div>
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Tipo de Serviço</label>
-                        <input type="text" name="serviceType" required value={formData.serviceType || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
+                        <input type="text" name="serviceType" value={formData.serviceType || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white" />
                      </div>
 
                      <div className="md:col-span-2 mt-2">
@@ -537,7 +537,7 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
                      </div>
 
                      <div>
-                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Advogado Responsável</label>
+                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Advogado Responsável <span className="text-red-500">*</span></label>
                          <select name="lawyer" required value={formData.lawyer || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white">
                              <option value="">Selecione...</option>
                              <option value="Michel">Dr. Michel</option>
@@ -547,11 +547,11 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
                      </div>
                      <div>
                          <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Valor Total Honorários (R$)</label>
-                         <input type="number" name="totalFee" required value={formData.totalFee || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white font-mono" placeholder="0.00" />
+                         <input type="number" name="totalFee" value={formData.totalFee || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white font-mono" placeholder="0.00" />
                      </div>
 
                      <div>
-                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Status do Processo</label>
+                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Status do Processo <span className="text-red-500">*</span></label>
                          <select name="status" value={formData.status || 'Pendente'} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white">
                              <option value="Pendente">Pendente</option>
                              <option value="Em Andamento">Em Andamento</option>
@@ -953,10 +953,132 @@ const StatsCards = ({ records }: { records: ClientRecord[] }) => {
     )
 }
 
-// 4. Financial Stats Component (NOVO)
+// 0.4 Monthly Details Modal (NOVO)
+interface MonthlyDetailsModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    year: number;
+    contracts: ContractRecord[];
+    type: 'revenue' | 'michel' | 'luana' | null;
+}
+
+const MonthlyDetailsModal: React.FC<MonthlyDetailsModalProps> = ({ isOpen, onClose, year, contracts, type }) => {
+    const monthlyData = useMemo(() => {
+        if (!type) return [];
+        
+        // 12 months array (0-11)
+        const data = Array(12).fill(null).map(() => ({ total: 0, payments: [] as { client: string, day: string, amount: number, fullAmount: number }[] }));
+
+        contracts.forEach(contract => {
+            (contract.payments || []).forEach(payment => {
+                const parts = payment.date.split('-'); // YYYY-MM-DD
+                const pYear = parseInt(parts[0]);
+                const pMonth = parseInt(parts[1]) - 1; 
+
+                if (pYear === year && pMonth >= 0 && pMonth < 12) {
+                    let amount = payment.amount;
+                    let displayAmount = amount;
+
+                    // Apply Split Logic
+                    if (type === 'michel') {
+                        if (contract.lawyer === 'Michel') displayAmount = amount * 0.6;
+                        else displayAmount = amount * 0.4;
+                    } else if (type === 'luana') {
+                         if (contract.lawyer === 'Luana') displayAmount = amount * 0.6;
+                        else displayAmount = amount * 0.4;
+                    }
+                    
+                    if (displayAmount > 0) {
+                        data[pMonth].total += displayAmount;
+                        data[pMonth].payments.push({
+                            client: `${contract.firstName} ${contract.lastName}`,
+                            day: parts[2],
+                            amount: displayAmount,
+                            fullAmount: amount
+                        });
+                    }
+                }
+            });
+        });
+        return data;
+    }, [contracts, year, type]);
+
+    if (!isOpen || !type) return null;
+
+    const monthNames = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+
+    const getTitle = () => {
+        if (type === 'revenue') return `Receita Total - ${year}`;
+        if (type === 'michel') return `Lucro Dr. Michel - ${year}`;
+        if (type === 'luana') return `Lucro Dra. Luana - ${year}`;
+        return '';
+    };
+
+    const getThemeColor = () => {
+        if (type === 'revenue') return 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800';
+        if (type === 'michel') return 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800';
+        if (type === 'luana') return 'text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800';
+        return '';
+    }
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[110] p-4 animate-in fade-in duration-200">
+             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden border border-slate-200 dark:border-slate-800 flex flex-col">
+                <div className="flex justify-between items-center p-5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+                    <div>
+                         <h3 className="text-xl font-bold text-slate-900 dark:text-white">{getTitle()}</h3>
+                         <p className="text-xs text-slate-500 dark:text-slate-400">Detalhamento mensal dos pagamentos recebidos</p>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-lg transition">
+                        <XMarkIcon className="h-6 w-6" />
+                    </button>
+                </div>
+                
+                <div className="overflow-y-auto p-6 space-y-4">
+                    {monthlyData.map((month, idx) => {
+                        if (month.total === 0) return null;
+                        return (
+                            <div key={idx} className={`rounded-xl border p-4 ${getThemeColor()}`}>
+                                <div className="flex justify-between items-center mb-3 border-b border-black/5 dark:border-white/10 pb-2">
+                                    <h4 className="font-bold uppercase tracking-wide text-sm flex items-center gap-2">
+                                        <CalendarDaysIcon className="h-4 w-4" />
+                                        {monthNames[idx]}
+                                    </h4>
+                                    <span className="font-mono font-bold text-lg">{formatCurrency(month.total)}</span>
+                                </div>
+                                <div className="space-y-1.5 pl-2">
+                                    {month.payments.map((p, pIdx) => (
+                                        <div key={pIdx} className="flex justify-between text-xs items-center">
+                                            <span className="text-slate-700 dark:text-slate-300 font-medium">
+                                                {p.day}/{String(idx + 1).padStart(2, '0')} - {p.client}
+                                            </span>
+                                            <span className="font-mono opacity-80">{formatCurrency(p.amount)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )
+                    })}
+                    {monthlyData.every(m => m.total === 0) && (
+                        <div className="text-center py-10 text-slate-400">
+                            <BanknotesIcon className="h-12 w-12 mx-auto mb-3 opacity-20" />
+                            <p>Nenhum pagamento registrado neste ano para esta categoria.</p>
+                        </div>
+                    )}
+                </div>
+             </div>
+        </div>
+    );
+}
+
+// 4. Financial Stats Component
 const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
     const currentYear = new Date().getFullYear();
     const [selectedYear, setSelectedYear] = useState<number>(currentYear);
+    const [activeModalType, setActiveModalType] = useState<'revenue' | 'michel' | 'luana' | null>(null);
 
     // Extrair anos disponíveis nos pagamentos
     const availableYears = useMemo(() => {
@@ -996,8 +1118,12 @@ const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
 
             // Yearly Cash Flow (Baseado nos pagamentos realizados)
             (c.payments || []).forEach(p => {
-                const pDate = new Date(p.date);
-                if (pDate.getFullYear() === selectedYear) {
+                // Fix timezone issue by parsing date manually or setting time to noon
+                // Here assuming date string YYYY-MM-DD
+                const parts = p.date.split('-');
+                const pYear = parseInt(parts[0]);
+                
+                if (pYear === selectedYear) {
                     const amount = Number(p.amount);
                     yearlyIncome += amount;
                     
@@ -1017,6 +1143,14 @@ const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
 
     return (
         <div className="space-y-4 mb-6">
+            <MonthlyDetailsModal 
+                isOpen={!!activeModalType} 
+                onClose={() => setActiveModalType(null)} 
+                year={selectedYear} 
+                contracts={contracts} 
+                type={activeModalType} 
+            />
+
             <div className="flex justify-end">
                 <div className="relative inline-block">
                     <select 
@@ -1046,23 +1180,41 @@ const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
                     </div>
                 </div>
 
-                <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden group">
+                <div 
+                    onClick={() => setActiveModalType('revenue')}
+                    className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 relative overflow-hidden group cursor-pointer hover:border-green-500 dark:hover:border-green-500 transition-all hover:shadow-md"
+                >
                     <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
                         <BanknotesIcon className="h-24 w-24 text-green-600" />
                     </div>
-                    <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Receita ({selectedYear})</p>
+                    <div className="flex justify-between items-start">
+                         <p className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide">Receita ({selectedYear})</p>
+                         <MagnifyingGlassIcon className="h-4 w-4 text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
                     <p className="text-2xl font-extrabold text-green-600 dark:text-green-400 mt-1">{formatCurrency(stats.yearlyIncome)}</p>
                     <p className="text-[10px] text-slate-400 mt-1">Total recebido no ano selecionado</p>
                 </div>
 
-                <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-4 rounded-xl shadow-lg shadow-blue-500/20 text-white relative overflow-hidden">
-                    <p className="text-xs font-bold text-blue-200 uppercase tracking-wide">Lucro Dr. Michel ({selectedYear})</p>
+                <div 
+                    onClick={() => setActiveModalType('michel')}
+                    className="bg-gradient-to-br from-blue-600 to-blue-800 p-4 rounded-xl shadow-lg shadow-blue-500/20 text-white relative overflow-hidden cursor-pointer hover:scale-[1.02] transition-transform"
+                >
+                    <div className="flex justify-between items-start">
+                        <p className="text-xs font-bold text-blue-200 uppercase tracking-wide">Lucro Dr. Michel ({selectedYear})</p>
+                        <MagnifyingGlassIcon className="h-4 w-4 text-white opacity-60" />
+                    </div>
                     <p className="text-2xl font-extrabold mt-1">{formatCurrency(stats.michelIncome)}</p>
                     <p className="text-[10px] text-blue-200 mt-1">Divisão de lucros no ano</p>
                 </div>
 
-                <div className="bg-gradient-to-br from-purple-600 to-purple-800 p-4 rounded-xl shadow-lg shadow-purple-500/20 text-white relative overflow-hidden">
-                    <p className="text-xs font-bold text-purple-200 uppercase tracking-wide">Lucro Dra. Luana ({selectedYear})</p>
+                <div 
+                    onClick={() => setActiveModalType('luana')}
+                    className="bg-gradient-to-br from-purple-600 to-purple-800 p-4 rounded-xl shadow-lg shadow-purple-500/20 text-white relative overflow-hidden cursor-pointer hover:scale-[1.02] transition-transform"
+                >
+                     <div className="flex justify-between items-start">
+                        <p className="text-xs font-bold text-purple-200 uppercase tracking-wide">Lucro Dra. Luana ({selectedYear})</p>
+                        <MagnifyingGlassIcon className="h-4 w-4 text-white opacity-60" />
+                    </div>
                     <p className="text-2xl font-extrabold mt-1">{formatCurrency(stats.luanaIncome)}</p>
                     <p className="text-[10px] text-purple-200 mt-1">Divisão de lucros no ano</p>
                 </div>
