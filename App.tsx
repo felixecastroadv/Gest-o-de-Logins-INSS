@@ -80,6 +80,7 @@ interface RecordModalProps {
   onClose: () => void;
   onSave: (record: ClientRecord) => void;
   initialData?: ClientRecord | null;
+  onOpenScanner?: () => void;
 }
 
 interface MonthlyDetailsModalProps {
@@ -1312,10 +1313,67 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
       setFormData({ ...formData, documents: updatedDocs });
   }
 
+  const generatePDF = (type: 'procuracao' | 'hipossuficiencia') => {
+      // @ts-ignore
+      const doc = new jsPDF();
+      
+      const currentDate = new Date().toLocaleDateString('pt-BR');
+      
+      if (type === 'procuracao') {
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          doc.text("PROCURAÇÃO AD JUDICIA", 105, 20, { align: "center" });
+          
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "normal");
+          
+          const text = `OUTORGANTE: ${formData.name || '______________________'}, inscrito(a) no CPF sob o nº ${formData.cpf || '___________'}, residente e domiciliado(a) em ${formData.address || '______________________'}.\n\n` +
+                       `OUTORGADO: Dr. Michel Felix e Dra. Luana Castro, advogados...\n\n` +
+                       `PODERES: Pelo presente instrumento particular de procuração, o(a) outorgante nomeia e constitui seus bastantes procuradores os outorgados acima qualificados, concedendo-lhes os poderes da cláusula ad judicia et extra, para o foro em geral, podendo propor contra quem de direito as ações competentes e defendê-lo(a) nas contrárias, seguindo-as até final decisão, usando os recursos legais e acompanhando-as, conferindo-lhes ainda, poderes especiais para confessar, desistir, transigir, firmar compromissos ou acordos, receber e dar quitação, agindo em conjunto ou separadamente, podendo ainda substabelecer esta em outrem, com ou sem reservas de iguais poderes, para o fim especial de requerer benefícios previdenciários e assistenciais.`;
+          
+          const splitText = doc.splitTextToSize(text, 170);
+          doc.text(splitText, 20, 40);
+          
+          doc.text(`Local e Data: __________________, ${currentDate}`, 20, 200);
+          doc.text("________________________________________________", 105, 230, { align: "center" });
+          doc.text("Assinatura do Outorgante", 105, 235, { align: "center" });
+      } else {
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          doc.text("DECLARAÇÃO DE HIPOSSUFICIÊNCIA", 105, 20, { align: "center" });
+          
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "normal");
+          
+          const text = `Eu, ${formData.name || '______________________'}, inscrito(a) no CPF sob o nº ${formData.cpf || '___________'}, residente e domiciliado(a) em ${formData.address || '______________________'}, DECLARO, para os devidos fins e sob as penas da lei, ser pobre na acepção jurídica do termo, não dispondo de condições econômicas para custear as despesas processuais sem prejuízo do meu próprio sustento e de minha família, pelo que requeiro os benefícios da Gratuidade de Justiça.`;
+          
+          const splitText = doc.splitTextToSize(text, 170);
+          doc.text(splitText, 20, 40);
+          
+          doc.text(`Local e Data: __________________, ${currentDate}`, 20, 150);
+          doc.text("________________________________________________", 105, 180, { align: "center" });
+          doc.text("Assinatura do Declarante", 105, 185, { align: "center" });
+      }
+
+      const pdfBase64 = doc.output('datauristring');
+      const newDoc: ScannedDocument = {
+          id: Math.random().toString(36).substr(2, 9),
+          name: type === 'procuracao' ? 'Procuração (Gerada)' : 'Hipossuficiência (Gerada)',
+          type: 'application/pdf',
+          url: pdfBase64,
+          date: currentDate
+      };
+      
+      const updatedDocs = [...(formData.documents || []), newDoc];
+      setFormData({ ...formData, documents: updatedDocs });
+  };
+
   const fields = [
     { label: "Nome Completo", name: "name", type: "text", width: "full" },
     { label: "CPF", name: "cpf", type: "text", width: "half" },
     { label: "Senha INSS", name: "password", type: "text", width: "half" },
+    { label: "Endereço Completo", name: "address", type: "text", width: "full" },
+    { label: "Representante Legal", name: "legalRepresentative", type: "text", width: "full" },
     { label: "Tipo Benefício", name: "type", type: "text", width: "half" },
     { label: "DER", name: "der", type: "text", placeholder: "DD/MM/AAAA", width: "half" },
     { label: "Perícia Médica", name: "medExpertiseDate", type: "text", placeholder: "DD/MM/AAAA", width: "half" },
@@ -1429,6 +1487,17 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
                         >
                             <CameraIcon className="h-4 w-4" />
                             Nova Digitalização
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mb-2">
+                        <button onClick={() => generatePDF('procuracao')} className="flex items-center justify-center gap-2 p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition text-sm font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            <DocumentTextIcon className="h-5 w-5 text-blue-500" />
+                            Gerar Procuração
+                        </button>
+                        <button onClick={() => generatePDF('hipossuficiencia')} className="flex items-center justify-center gap-2 p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition text-sm font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            <ScaleIcon className="h-5 w-5 text-purple-500" />
+                            Gerar Declaração
                         </button>
                     </div>
 
