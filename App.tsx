@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, AUTHORIZED_USERS, ClientRecord, UserRole, ContractRecord, PaymentEntry, ScannedDocument } from './types';
 import { INITIAL_DATA } from './data';
+import { jsPDF } from "jspdf";
 import { 
   LockClosedIcon, 
   ArrowRightOnRectangleIcon, 
@@ -46,7 +47,8 @@ import {
   CameraIcon,
   PhotoIcon,
   DocumentPlusIcon,
-  EyeIcon
+  EyeIcon,
+  ArrowsPointingOutIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -158,7 +160,7 @@ const initSupabase = () => {
 
 // --- Components ---
 
-// 0.5 Scanner Modal Component (NOVO)
+// 0.5 Scanner Modal Component (REVISADO E OTIMIZADO)
 interface ScannerModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -175,104 +177,233 @@ const DOCUMENT_TYPES = [
 ];
 
 const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) => {
-    const [step, setStep] = useState<'select' | 'capture' | 'crop'>('select');
+    // Steps: select (type & source) -> crop (single image) -> preview (list of pages)
+    const [step, setStep] = useState<'select' | 'crop' | 'preview'>('select');
     const [docType, setDocType] = useState('');
-    const [imageSrc, setImageSrc] = useState<string | null>(null);
-    const [croppedImage, setCroppedImage] = useState<string | null>(null);
-    const [cropArea, setCropArea] = useState({ x: 10, y: 10, width: 80, height: 80 }); // Percentages
+    
+    // Image processing states
+    const [currentImageSrc, setCurrentImageSrc] = useState<string | null>(null);
+    const [pages, setPages] = useState<string[]>([]); // Array of cropped base64 images
+    const [isProcessing, setIsProcessing] = useState(false);
+
+    // Crop Logic States
+    const [crop, setCrop] = useState({ x: 10, y: 10, w: 80, h: 80 }); // Percentages
+    const [dragHandle, setDragHandle] = useState<string | null>(null);
+    
+    // Refs
+    const containerRef = useRef<HTMLDivElement>(null);
     const imgRef = useRef<HTMLImageElement>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
+    const galleryInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         if (isOpen) {
             setStep('select');
             setDocType('');
-            setImageSrc(null);
-            setCroppedImage(null);
+            setCurrentImageSrc(null);
+            setPages([]);
+            setCrop({ x: 10, y: 10, w: 80, h: 80 });
         }
     }, [isOpen]);
 
+    // --- File Handling ---
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
             const file = e.target.files[0];
             const reader = new FileReader();
-            reader.addEventListener('load', () => {
-                setImageSrc(reader.result?.toString() || null);
-                setStep('crop');
-            });
+            reader.onload = (ev) => {
+                if (ev.target?.result) {
+                    setCurrentImageSrc(ev.target.result.toString());
+                    setStep('crop');
+                    setCrop({ x: 10, y: 10, w: 80, h: 80 }); // Reset crop
+                }
+            };
             reader.readAsDataURL(file);
+        }
+        // Reset inputs so same file can be selected again
+        e.target.value = '';
+    };
+
+    // --- Crop Interaction Logic ---
+    const handleTouchStart = (e: React.TouchEvent | React.MouseEvent, handle: string) => {
+        e.stopPropagation(); // Prevent defaulting
+        setDragHandle(handle);
+    };
+
+    const handleMove = (clientX: number, clientY: number) => {
+        if (!dragHandle || !containerRef.current) return;
+
+        const rect = containerRef.current.getBoundingClientRect();
+        const xPct = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
+        const yPct = Math.max(0, Math.min(100, ((clientY - rect.top) / rect.height) * 100));
+
+        setCrop(prev => {
+            let newCrop = { ...prev };
+            
+            if (dragHandle === 'tl') { // Top Left
+                const right = prev.x + prev.w;
+                const bottom = prev.y + prev.h;
+                newCrop.x = Math.min(xPct, right - 10);
+                newCrop.y = Math.min(yPct, bottom - 10);
+                newCrop.w = right - newCrop.x;
+                newCrop.h = bottom - newCrop.y;
+            } else if (dragHandle === 'br') { // Bottom Right
+                newCrop.w = Math.max(10, xPct - prev.x);
+                newCrop.h = Math.max(10, yPct - prev.y);
+            } else if (dragHandle === 'tr') { // Top Right
+                const bottom = prev.y + prev.h;
+                newCrop.y = Math.min(yPct, bottom - 10);
+                newCrop.h = bottom - newCrop.y;
+                newCrop.w = Math.max(10, xPct - prev.x);
+            } else if (dragHandle === 'bl') { // Bottom Left
+                const right = prev.x + prev.w;
+                newCrop.x = Math.min(xPct, right - 10);
+                newCrop.w = right - newCrop.x;
+                newCrop.h = Math.max(10, yPct - prev.y);
+            } else if (dragHandle === 'center') {
+                // Move entire box if we implemented it, but keeping it simple with corners for now
+            }
+
+            return newCrop;
+        });
+    };
+
+    const handleTouchMove = (e: React.TouchEvent) => {
+        if (dragHandle) {
+            // e.preventDefault(); // Might cause issues with scroll, handled by CSS touch-action
+            handleMove(e.touches[0].clientX, e.touches[0].clientY);
         }
     };
 
-    const performCrop = () => {
-        if (!imageSrc || !imgRef.current) return;
+    const handleMouseMove = (e: React.MouseEvent) => {
+        if (dragHandle) {
+            e.preventDefault(); 
+            handleMove(e.clientX, e.clientY);
+        }
+    };
+
+    const handleEnd = () => {
+        setDragHandle(null);
+    };
+
+    // --- Crop Execution ---
+    const confirmCrop = () => {
+        if (!currentImageSrc || !imgRef.current) return;
 
         const canvas = document.createElement('canvas');
         const image = imgRef.current;
         
-        // Calculate actual pixel values from percentages
+        // Fator de escala entre a imagem renderizada (CSS pixels) e a imagem real (natural pixels)
         const scaleX = image.naturalWidth / image.width;
         const scaleY = image.naturalHeight / image.height;
         
-        // Ensure width/height are positive
-        const cropX = (cropArea.x / 100) * image.width * scaleX;
-        const cropY = (cropArea.y / 100) * image.height * scaleY;
-        const cropW = (cropArea.width / 100) * image.width * scaleX;
-        const cropH = (cropArea.height / 100) * image.height * scaleY;
+        const cropX = (crop.x / 100) * image.width * scaleX;
+        const cropY = (crop.y / 100) * image.height * scaleY;
+        const cropW = (crop.w / 100) * image.width * scaleX;
+        const cropH = (crop.h / 100) * image.height * scaleY;
 
         canvas.width = cropW;
         canvas.height = cropH;
         
         const ctx = canvas.getContext('2d');
         if (ctx) {
-            ctx.drawImage(
-                image,
-                cropX,
-                cropY,
-                cropW,
-                cropH,
-                0,
-                0,
-                cropW,
-                cropH
-            );
-            const base64 = canvas.toDataURL('image/jpeg', 0.8);
+            ctx.drawImage(image, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
             
-            // Save logic
-            const newDoc: ScannedDocument = {
-                id: Math.random().toString(36).substr(2, 9),
-                name: docType || 'Documento',
-                type: 'image/jpeg',
-                url: base64,
-                date: new Date().toLocaleDateString('pt-BR')
-            };
-            onSave(newDoc);
-            onClose(); // Or go to a review step if needed
+            // Comprimir para JPEG 0.7 para otimizar PDF final
+            const base64 = canvas.toDataURL('image/jpeg', 0.7);
+            
+            setPages(prev => [...prev, base64]);
+            setCurrentImageSrc(null);
+            setStep('preview');
         }
     };
 
-    // Simple drag logic for crop box
-    const handleDragStart = (e: React.MouseEvent | React.TouchEvent, type: 'move' | 'resize') => {
-        // This is a simplified "click to set new center" or simple resize logic for the demo
-        // Implementing full touch drag/resize in a single file without libs is complex.
-        // We will implement a "Slider" based adjustment or simple centering for stability.
+    // --- PDF Generation ---
+    const handleFinalizePDF = async () => {
+        if (pages.length === 0) return;
+        setIsProcessing(true);
+
+        try {
+            // A4 size in mm: 210 x 297
+            // @ts-ignore
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const pdfWidth = 210;
+            const pdfHeight = 297;
+
+            for (let i = 0; i < pages.length; i++) {
+                if (i > 0) pdf.addPage();
+                
+                const imgData = pages[i];
+                
+                // Get Image Dimensions to fit in A4 maintaining aspect ratio
+                const imgProps = pdf.getImageProperties(imgData);
+                const imgRatio = imgProps.width / imgProps.height;
+                
+                let w = pdfWidth - 20; // 10mm margin
+                let h = w / imgRatio;
+                
+                if (h > (pdfHeight - 20)) {
+                    h = pdfHeight - 20;
+                    w = h * imgRatio;
+                }
+                
+                const x = (pdfWidth - w) / 2;
+                const y = 10; // Top margin
+
+                pdf.addImage(imgData, 'JPEG', x, y, w, h);
+            }
+
+            const pdfBase64 = pdf.output('datauristring');
+            
+            const newDoc: ScannedDocument = {
+                id: Math.random().toString(36).substr(2, 9),
+                name: docType || 'Documento Digitalizado',
+                type: 'application/pdf',
+                url: pdfBase64,
+                date: new Date().toLocaleDateString('pt-BR')
+            };
+            
+            onSave(newDoc);
+            onClose();
+
+        } catch (error) {
+            console.error("Erro ao gerar PDF", error);
+            alert("Erro ao gerar PDF. Tente novamente.");
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center z-[150] p-4 animate-in fade-in duration-200">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+        <div 
+            className="fixed inset-0 bg-slate-900/95 backdrop-blur-sm flex items-center justify-center z-[150] p-4 animate-in fade-in duration-200"
+            onMouseUp={handleEnd}
+            onTouchEnd={handleEnd}
+            onMouseMove={handleMouseMove}
+            onTouchMove={handleTouchMove}
+        >
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md flex flex-col h-[90vh] overflow-hidden border border-slate-200 dark:border-slate-800">
                 
                 {/* Header */}
-                <div className="p-4 bg-primary-900 text-white flex justify-between items-center">
-                    <h3 className="font-bold text-lg">Nova Digitalização</h3>
+                <div className="p-4 bg-primary-900 text-white flex justify-between items-center shrink-0">
+                    <div>
+                        <h3 className="font-bold text-lg">Scanner de Documentos</h3>
+                        <p className="text-xs text-primary-200">
+                            {step === 'select' ? '1. Selecione a fonte' : 
+                             step === 'crop' ? '2. Recorte a imagem' : 
+                             '3. Revisão e PDF'}
+                        </p>
+                    </div>
                     <button onClick={onClose}><XMarkIcon className="h-6 w-6 text-white/80 hover:text-white" /></button>
                 </div>
 
-                <div className="p-6 overflow-y-auto flex-1">
+                <div className="flex-1 overflow-y-auto p-4 flex flex-col">
+                    
+                    {/* STEP 1: SELECT */}
                     {step === 'select' && (
-                        <div className="space-y-6">
+                        <div className="flex-1 flex flex-col justify-center space-y-6">
                             <div>
                                 <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Nome do Documento</label>
                                 <select 
@@ -280,7 +411,7 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
                                     value={docType}
                                     onChange={(e) => setDocType(e.target.value)}
                                 >
-                                    <option value="">Selecione...</option>
+                                    <option value="">Selecione o tipo...</option>
                                     {DOCUMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                                 </select>
                             </div>
@@ -289,60 +420,200 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
                                 <button 
                                     onClick={() => {
                                         if(!docType) { alert("Selecione o tipo de documento primeiro."); return; }
-                                        fileInputRef.current?.click();
+                                        cameraInputRef.current?.click();
                                     }}
-                                    className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                                    className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 transition group"
                                 >
-                                    <CameraIcon className="h-10 w-10 text-primary-600" />
-                                    <span className="text-sm font-bold text-slate-600 dark:text-slate-400">Câmera</span>
+                                    <div className="bg-blue-100 dark:bg-blue-900/30 p-4 rounded-full group-hover:scale-110 transition">
+                                        <CameraIcon className="h-8 w-8 text-primary-600" />
+                                    </div>
+                                    <span className="font-bold text-slate-700 dark:text-slate-200">Câmera</span>
                                 </button>
                                 
                                 <button 
                                     onClick={() => {
                                         if(!docType) { alert("Selecione o tipo de documento primeiro."); return; }
-                                        fileInputRef.current?.click();
+                                        galleryInputRef.current?.click();
                                     }}
-                                    className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                                    className="flex flex-col items-center justify-center gap-3 p-8 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl hover:bg-slate-50 dark:hover:bg-slate-800 transition group"
                                 >
-                                    <PhotoIcon className="h-10 w-10 text-indigo-600" />
-                                    <span className="text-sm font-bold text-slate-600 dark:text-slate-400">Galeria</span>
+                                    <div className="bg-purple-100 dark:bg-purple-900/30 p-4 rounded-full group-hover:scale-110 transition">
+                                        <PhotoIcon className="h-8 w-8 text-purple-600" />
+                                    </div>
+                                    <span className="font-bold text-slate-700 dark:text-slate-200">Galeria</span>
                                 </button>
                             </div>
                             
+                            {/* Inputs Invisíveis Distintos */}
                             <input 
                                 type="file" 
                                 accept="image/*" 
-                                ref={fileInputRef} 
+                                ref={cameraInputRef} 
                                 className="hidden" 
-                                capture="environment"
+                                capture="environment" 
                                 onChange={handleFileChange} 
                             />
+                            <input 
+                                type="file" 
+                                accept="image/*, application/pdf" // Para galeria não usamos capture
+                                ref={galleryInputRef} 
+                                className="hidden" 
+                                onChange={handleFileChange} 
+                            />
+
+                            {pages.length > 0 && (
+                                <button 
+                                    onClick={() => setStep('preview')}
+                                    className="w-full py-3 text-slate-600 dark:text-slate-400 font-medium hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition"
+                                >
+                                    Voltar para Revisão ({pages.length} págs)
+                                </button>
+                            )}
                         </div>
                     )}
 
-                    {step === 'crop' && imageSrc && (
+                    {/* STEP 2: CROP */}
+                    {step === 'crop' && currentImageSrc && (
                         <div className="flex flex-col h-full">
-                            <p className="text-xs text-center text-slate-500 mb-2">Ajuste a área do documento (Simulado)</p>
-                            <div className="relative bg-black rounded-lg overflow-hidden flex-1 flex items-center justify-center">
-                                <img ref={imgRef} src={imageSrc} alt="Crop" className="max-w-full max-h-[60vh] object-contain" />
-                                {/* Overlay Simples de Crop (Fixo no centro para simplificar sem lib externa) */}
-                                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                                    <div className="border-2 border-primary-500 w-3/4 h-3/4 shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] relative">
-                                        {/* Corner Handles */}
-                                        <div className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-primary-500"></div>
-                                        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-primary-500"></div>
-                                        <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 bg-primary-500"></div>
-                                        <div className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-primary-500"></div>
+                            <p className="text-xs text-center text-slate-500 mb-2 flex items-center justify-center gap-2">
+                                <ArrowsPointingOutIcon className="h-3 w-3" /> Arraste os cantos azuis para ajustar
+                            </p>
+                            
+                            <div 
+                                className="relative bg-black/90 rounded-xl overflow-hidden flex-1 touch-none select-none flex items-center justify-center"
+                                ref={containerRef}
+                                style={{ touchAction: 'none' }}
+                            >
+                                <img 
+                                    ref={imgRef} 
+                                    src={currentImageSrc} 
+                                    alt="Crop Target" 
+                                    className="max-w-full max-h-full object-contain pointer-events-none select-none" 
+                                    draggable={false}
+                                />
+                                
+                                {/* Overlay Crop Box */}
+                                <div 
+                                    className="absolute border-2 border-primary-500 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"
+                                    style={{
+                                        left: `${crop.x}%`,
+                                        top: `${crop.y}%`,
+                                        width: `${crop.w}%`,
+                                        height: `${crop.h}%`
+                                    }}
+                                >
+                                    {/* Handles - Aumentados para toque fácil */}
+                                    <div 
+                                        className="absolute -top-4 -left-4 w-10 h-10 bg-transparent flex items-center justify-center z-20"
+                                        onMouseDown={(e) => handleTouchStart(e, 'tl')}
+                                        onTouchStart={(e) => handleTouchStart(e, 'tl')}
+                                    >
+                                        <div className="w-5 h-5 bg-primary-500 rounded-full border-2 border-white shadow-sm"></div>
+                                    </div>
+
+                                    <div 
+                                        className="absolute -top-4 -right-4 w-10 h-10 bg-transparent flex items-center justify-center z-20"
+                                        onMouseDown={(e) => handleTouchStart(e, 'tr')}
+                                        onTouchStart={(e) => handleTouchStart(e, 'tr')}
+                                    >
+                                        <div className="w-5 h-5 bg-primary-500 rounded-full border-2 border-white shadow-sm"></div>
+                                    </div>
+
+                                    <div 
+                                        className="absolute -bottom-4 -left-4 w-10 h-10 bg-transparent flex items-center justify-center z-20"
+                                        onMouseDown={(e) => handleTouchStart(e, 'bl')}
+                                        onTouchStart={(e) => handleTouchStart(e, 'bl')}
+                                    >
+                                        <div className="w-5 h-5 bg-primary-500 rounded-full border-2 border-white shadow-sm"></div>
+                                    </div>
+
+                                    <div 
+                                        className="absolute -bottom-4 -right-4 w-10 h-10 bg-transparent flex items-center justify-center z-20"
+                                        onMouseDown={(e) => handleTouchStart(e, 'br')}
+                                        onTouchStart={(e) => handleTouchStart(e, 'br')}
+                                    >
+                                        <div className="w-5 h-5 bg-primary-500 rounded-full border-2 border-white shadow-sm"></div>
+                                    </div>
+                                    
+                                    {/* Grid Lines Visuals */}
+                                    <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 pointer-events-none opacity-30">
+                                        <div className="border-r border-b border-white"></div>
+                                        <div className="border-r border-b border-white"></div>
+                                        <div className="border-b border-white"></div>
+                                        <div className="border-r border-b border-white"></div>
+                                        <div className="border-r border-b border-white"></div>
+                                        <div className="border-b border-white"></div>
+                                        <div className="border-r border-white"></div>
+                                        <div className="border-r border-white"></div>
+                                        <div></div>
                                     </div>
                                 </div>
                             </div>
                             
-                            {/* Controle Deslizante de Zoom/Ajuste (Falso para UI) */}
-                            <div className="mt-4 flex gap-3">
-                                <button onClick={() => setStep('select')} className="flex-1 py-3 text-slate-500 font-bold bg-slate-100 dark:bg-slate-800 rounded-xl">Cancelar</button>
-                                <button onClick={performCrop} className="flex-1 py-3 text-white font-bold bg-green-600 hover:bg-green-700 rounded-xl shadow-lg flex items-center justify-center gap-2">
+                            <div className="mt-4 flex gap-3 shrink-0">
+                                <button onClick={() => setStep('select')} className="flex-1 py-3 text-slate-500 font-bold bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200">
+                                    Cancelar
+                                </button>
+                                <button onClick={confirmCrop} className="flex-1 py-3 text-white font-bold bg-green-600 hover:bg-green-700 rounded-xl shadow-lg flex items-center justify-center gap-2">
                                     <CheckIcon className="h-5 w-5" />
                                     Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* STEP 3: PREVIEW & PDF */}
+                    {step === 'preview' && (
+                        <div className="flex flex-col h-full">
+                            <div className="flex-1 overflow-y-auto mb-4">
+                                <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-4 flex items-center gap-2">
+                                    <DocumentDuplicateIcon className="h-5 w-5" />
+                                    Páginas ({pages.length})
+                                </h4>
+                                
+                                <div className="grid grid-cols-2 gap-4">
+                                    {pages.map((p, idx) => (
+                                        <div key={idx} className="relative group aspect-[3/4] bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
+                                            <img src={p} alt={`Página ${idx+1}`} className="w-full h-full object-contain" />
+                                            <div className="absolute top-2 left-2 bg-black/60 text-white text-xs font-bold px-2 py-1 rounded">
+                                                {idx + 1}
+                                            </div>
+                                            <button 
+                                                onClick={() => setPages(pages.filter((_, i) => i !== idx))}
+                                                className="absolute top-2 right-2 p-1.5 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition shadow-sm"
+                                            >
+                                                <TrashIcon className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    
+                                    <button 
+                                        onClick={() => setStep('select')}
+                                        className="aspect-[3/4] flex flex-col items-center justify-center gap-2 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition text-slate-400 hover:text-primary-600"
+                                    >
+                                        <PlusIcon className="h-8 w-8" />
+                                        <span className="text-xs font-bold">Adicionar Pág.</span>
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div className="shrink-0 pt-4 border-t border-slate-100 dark:border-slate-800">
+                                <button 
+                                    onClick={handleFinalizePDF}
+                                    disabled={isProcessing || pages.length === 0}
+                                    className="w-full py-4 bg-primary-600 hover:bg-primary-700 text-white font-bold rounded-xl shadow-lg shadow-primary-500/30 flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-wait"
+                                >
+                                    {isProcessing ? (
+                                        <>
+                                            <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                                            Gerando PDF...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <DocumentTextIcon className="h-5 w-5" />
+                                            Salvar Arquivo PDF
+                                        </>
+                                    )}
                                 </button>
                             </div>
                         </div>
@@ -963,13 +1234,13 @@ const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigure
   );
 };
 
-// 2. Record Modal Component (Mantido o original para Clientes)
+// 2. Record Modal Component
 interface RecordModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (record: ClientRecord) => void;
   initialData?: ClientRecord | null;
-  onOpenScanner: () => void;
+  onOpenScanner?: () => void; // Optional if not always passed
 }
 
 const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, initialData, onOpenScanner }) => {
@@ -1144,11 +1415,11 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
                                         </div>
                                         <div>
                                             <p className="font-bold text-sm text-slate-800 dark:text-white">{doc.name}</p>
-                                            <p className="text-xs text-slate-500">{doc.date}</p>
+                                            <p className="text-xs text-slate-500">{doc.date} • {doc.type === 'application/pdf' ? 'PDF' : 'IMG'}</p>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <a href={doc.url} download={`${doc.name}.jpg`} className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg" title="Baixar">
+                                        <a href={doc.url} download={`${doc.name}.${doc.type === 'application/pdf' ? 'pdf' : 'jpg'}`} className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg" title="Baixar">
                                             <ArrowDownTrayIcon className="h-5 w-5" />
                                         </a>
                                         <button onClick={() => handleRemoveDocument(doc.id)} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Excluir">
@@ -2207,130 +2478,53 @@ const Dashboard: React.FC<DashboardProps> = ({
              )}
         </main>
 
-        <RecordModal
-            isOpen={isModalOpen}
-            onClose={() => setIsModalOpen(false)}
-            onSave={currentRecord ? handleClientUpdate : handleClientCreate}
-            initialData={currentRecord}
-            onOpenScanner={() => setIsScannerOpen(true)}
-        />
-
-        <ContractModal 
-            isOpen={isContractModalOpen}
-            onClose={() => setIsContractModalOpen(false)}
-            onSave={currentContract ? handleContractUpdate : handleContractCreate}
-            initialData={currentContract}
+        <RecordModal 
+            isOpen={isRecordModalOpen} 
+            onClose={() => setIsRecordModalOpen(false)} 
+            onSave={handleSaveClient}
+            initialData={editingRecord}
         />
         
-        <NotificationsModal 
-            isOpen={isNotificationsOpen} 
-            onClose={() => setIsNotificationsOpen(false)} 
-            notifications={activeAlerts} 
+        <ContractModal 
+            isOpen={isContractModalOpen} 
+            onClose={() => setIsContractModalOpen(false)} 
+            onSave={handleSaveContract}
+            initialData={editingContract}
         />
         
         <SettingsModal 
             isOpen={isSettingsOpen} 
-            onClose={onCloseSettings} 
-            onSave={onSettingsSaved}
-            onRestoreBackup={handleRestoreBackup}
+            onClose={() => setIsSettingsOpen(false)} 
+            onSave={() => window.location.reload()}
+            onRestoreBackup={() => {
+                    const supabase = initSupabase();
+                    if(supabase) {
+                        // Restore INITIAL_DATA to Supabase
+                         const restore = async () => {
+                             for (const client of INITIAL_DATA) {
+                                 await supabase.from('clients').upsert(client);
+                             }
+                             alert("Dados restaurados com sucesso!");
+                             window.location.reload();
+                         };
+                         restore();
+                    }
+                }}
         />
 
-        <ScannerModal
-            isOpen={isScannerOpen}
-            onClose={() => setIsScannerOpen(false)}
-            onSave={handleScannerSave}
+        <NotificationsModal 
+            isOpen={isNotificationsOpen}
+            onClose={() => setIsNotificationsOpen(false)}
+            notifications={notifications}
         />
-      </div>
+        
+        <ScannerModal 
+            isOpen={isScannerOpen} 
+            onClose={() => setIsScannerOpen(false)} 
+            onSave={handleScannerSave} 
+        />
     </div>
   );
 };
 
-export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [darkMode, setDarkMode] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isCloudConfigured, setIsCloudConfigured] = useState(false);
-
-  useEffect(() => {
-    // Check local storage for dark mode preference
-    const isDark = localStorage.getItem('inss_theme') === 'dark';
-    setDarkMode(isDark);
-    if (isDark) {
-      document.documentElement.classList.add('dark');
-    }
-  }, []);
-  
-  const checkCloudStatus = () => {
-      const config = getDbConfig();
-      setIsCloudConfigured(!!(config && config.url && config.key));
-  };
-
-  useEffect(() => {
-      checkCloudStatus();
-  }, []);
-
-  const toggleDarkMode = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    localStorage.setItem('inss_theme', newMode ? 'dark' : 'light');
-    
-    if (newMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
-  };
-
-  const handleLogin = (authenticatedUser: User) => {
-    setUser(authenticatedUser);
-  };
-
-  const handleLogout = () => {
-    setUser(null);
-  };
-
-  const handleSettingsSave = () => {
-      checkCloudStatus();
-  };
-  
-  const handleAppRestoreBackup = async () => {
-      localStorage.setItem('inss_records', JSON.stringify(INITIAL_DATA));
-      const supabase = initSupabase();
-      if (supabase) {
-          await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
-      }
-      alert("Dados restaurados com sucesso a partir do backup do sistema!");
-  };
-
-  return (
-    <>
-      {user ? (
-        <Dashboard 
-            user={user} 
-            onLogout={handleLogout} 
-            darkMode={darkMode} 
-            toggleDarkMode={toggleDarkMode}
-            onOpenSettings={() => setIsSettingsOpen(true)}
-            isCloudConfigured={isCloudConfigured}
-            isSettingsOpen={isSettingsOpen}
-            onCloseSettings={() => setIsSettingsOpen(false)}
-            onSettingsSaved={handleSettingsSave}
-        />
-      ) : (
-        <>
-            <Login 
-                onLogin={handleLogin} 
-                onOpenSettings={() => setIsSettingsOpen(true)}
-                isCloudConfigured={isCloudConfigured}
-            />
-            <SettingsModal 
-                isOpen={isSettingsOpen} 
-                onClose={() => setIsSettingsOpen(false)} 
-                onSave={handleSettingsSave}
-                onRestoreBackup={handleAppRestoreBackup}
-            />
-        </>
-      )}
-    </>
-  );
-}
+export default App;
