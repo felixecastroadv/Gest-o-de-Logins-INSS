@@ -1338,30 +1338,73 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
       const clientMarital = formData.maritalStatus || "estado civil";
       const clientProfession = formData.profession || "profissão";
 
-      // Cores para as linhas decorativas (Tom Vinho/Avermelhado baseado no print)
-      const decorColor = [153, 51, 51]; // RGB aprox #993333
+      // Cores para as linhas decorativas (Tom Vinho/Avermelhado Premium)
+      const decorColor = [140, 20, 20]; 
 
       // --- Desenhar Linha Decorativa Superior ---
-      // Linha grossa com degradê simulado ou cor sólida
       doc.setDrawColor(decorColor[0], decorColor[1], decorColor[2]);
       doc.setLineWidth(1.5);
       doc.line(margin, 15, pageWidth - margin, 15);
       
-      // Pequena linha mais clara abaixo para efeito
       doc.setDrawColor(200, 100, 100);
       doc.setLineWidth(0.5);
-      doc.line(margin, 16, pageWidth/3, 16); // Linha curta estilizada
+      doc.line(margin, 16, pageWidth/3, 16); 
 
       // --- Desenhar Linha Decorativa Inferior ---
       doc.setDrawColor(decorColor[0], decorColor[1], decorColor[2]);
       doc.setLineWidth(1.5);
       doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
       
-      // Pequeno detalhe inferior
       doc.setDrawColor(200, 100, 100);
       doc.setLineWidth(2);
       doc.line(pageWidth - margin - 30, pageHeight - 15, pageWidth - margin, pageHeight - 15);
 
+      // --- Helper para Justificar Texto com Recuo na Primeira Linha ---
+      const drawJustifiedBlock = (label: string, text: string, startY: number) => {
+          doc.setFont("times", "bold");
+          doc.text(label, margin, startY);
+          const labelWidth = doc.getTextWidth(label + " ");
+          
+          doc.setFont("times", "normal");
+          const words = text.split(' ');
+          let currentLine = "";
+          let lines: string[] = [];
+          let isFirstLine = true;
+
+          // Quebra de linha manual para controlar justificação
+          for (let i = 0; i < words.length; i++) {
+              const word = words[i];
+              const testLine = currentLine.length === 0 ? word : currentLine + " " + word;
+              const testWidth = doc.getTextWidth(testLine);
+              const limit = isFirstLine ? (maxLineWidth - labelWidth) : maxLineWidth;
+
+              if (testWidth <= limit) {
+                  currentLine = testLine;
+              } else {
+                  lines.push(currentLine);
+                  currentLine = word;
+                  isFirstLine = false;
+              }
+          }
+          lines.push(currentLine);
+
+          // Renderização
+          let currentY = startY;
+          lines.forEach((line, index) => {
+              const xPos = index === 0 ? margin + labelWidth : margin;
+              const options: any = { maxWidth: index === 0 ? maxLineWidth - labelWidth : maxLineWidth, align: "justify" };
+              
+              // Ajuste fino: última linha à esquerda para evitar espaçamento forçado
+              if (index === lines.length - 1 && lines.length > 1) {
+                  options.align = "left"; 
+              }
+              
+              doc.text(line, xPos, currentY, options);
+              currentY += 6; // Line height
+          });
+
+          return currentY + 4; // Retorna novo Y com padding
+      };
 
       // --- Configuração de Fonte Padrão (Times) ---
       doc.setFont("times", "normal");
@@ -1369,107 +1412,94 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
       if (type === 'procuracao') {
           // TÍTULO
           doc.setFont("times", "bold");
-          doc.setFontSize(14);
-          doc.text("PROCURAÇÃO AD JUDICIA ET EXTRA", pageWidth / 2, 40, { align: "center" });
+          doc.setFontSize(16);
+          doc.text("PROCURAÇÃO AD JUDICIA ET EXTRA", pageWidth / 2, 45, { align: "center" });
           
           doc.setFontSize(12);
           
-          let cursorY = 70;
+          let cursorY = 80;
           
-          // OUTORGANTE
-          doc.setFont("times", "bold");
-          doc.text("OUTORGANTE:", margin, cursorY);
-          
-          doc.setFont("times", "normal");
-          const outorganteText = ` ${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}.`;
-          
-          // Justificativa manual simples para jsPDF (split text)
-          const splitOutorgante = doc.splitTextToSize(outorganteText, maxLineWidth - 35);
-          doc.text(splitOutorgante, margin + 35, cursorY, { align: "justify", maxWidth: maxLineWidth - 35 });
-          cursorY += (splitOutorgante.length * 6) + 10;
+          const outorganteText = `${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}.`;
+          cursorY = drawJustifiedBlock("OUTORGANTE:", outorganteText, cursorY);
 
-          // OUTORGADO
-          doc.setFont("times", "bold");
-          doc.text("OUTORGADO:", margin, cursorY);
-          
-          doc.setFont("times", "normal");
-          const outorgadoText = ` MICHEL SANTOS FELIX, inscrito na OAB/RJ sob o nº 231.640 e no CPF/MF nº 142.805.877-01, e LUANA DE OLIVEIRA CASTRO PACHECO, inscrita na OAB/RJ sob o nº 226.749 e inscrita no CPF sob o nº 113.599.127-89, com endereço eletrônico felixecastroadv@gmail.com, e endereço profissional sito na Av. Prefeito José de Amorim, 500, apto. 204 , Jardim Meriti – São João de Meriti/RJ, CEP 25.555-201.`;
-          
-          const splitOutorgado = doc.splitTextToSize(outorgadoText, maxLineWidth - 33);
-          doc.text(splitOutorgado, margin + 33, cursorY, { align: "justify", maxWidth: maxLineWidth - 33 });
-          cursorY += (splitOutorgado.length * 6) + 10;
+          const outorgadoText = `MICHEL SANTOS FELIX, inscrito na OAB/RJ sob o nº 231.640 e no CPF/MF nº 142.805.877-01, e LUANA DE OLIVEIRA CASTRO PACHECO, inscrita na OAB/RJ sob o nº 226.749 e inscrita no CPF sob o nº 113.599.127-89, com endereço eletrônico felixecastroadv@gmail.com, e endereço profissional sito na Av. Prefeito José de Amorim, 500, apto. 204 , Jardim Meriti – São João de Meriti/RJ, CEP 25.555-201.`;
+          cursorY = drawJustifiedBlock("OUTORGADO:", outorgadoText, cursorY);
 
-          // PODERES
-          doc.setFont("times", "bold");
-          doc.text("PODERES:", margin, cursorY);
+          const poderesText = `Pelo presente instrumento o outorgante confere ao outorgado amplos poderes para o foro em geral, com cláusula ad judicia et extra, para representá-lo nos órgãos públicos e privados, agências do INSS, Juízos, Instâncias ou Tribunais, possibilitando propor ações de direito competentes e defendê-lo até o final da decisão, usando os recursos legais e acompanhando-os, conferindo-lhe ainda poderes especiais para requerer concessão/revisão de benefícios previdenciários, obter cópias de expedientes e processos administrativos, acessar laudos sociais e periciais, acessar e manejar extratos, sistemas e telas do INSS, agendar serviços e atendimentos no INSS, receber valores e dar quitação, levantar valores, incluindo RPVs e precatórios (podendo para tanto assinar declaração de isenção de imposto de renda), obter extratos de contas judiciais, requerer expedição/retificação de certidões, incluindo Certidões de Tempo de Contribuição, obter cópia de documentos, Perfis Profissiográficos Previdenciários e laudos técnicos, obter cópia de documentos médicos e prontuários, firmar compromissos ou acordos, receber citação, confessar, reconhecer a procedência do pedido, transigir, desistir, renunciar ao direito sobre o qual se funda a ação, assinar declaração de hipossuficiência econômica e substabelecer a outrem, com ou sem reservas de iguais poderes, para agir em conjunto ou separadamente com o substabelecido.`;
+          cursorY = drawJustifiedBlock("PODERES:", poderesText, cursorY);
           
+          // Data e Assinatura com posição dinâmica
+          cursorY += 10;
+          if (cursorY > pageHeight - 50) { doc.addPage(); cursorY = 40; } // Nova página se necessário
+
           doc.setFont("times", "normal");
-          const poderesText = ` Pelo presente instrumento o outorgante confere ao outorgado amplos poderes para o foro em geral, com cláusula ad judicia et extra, para representá-lo nos órgãos públicos e privados, agências do INSS, Juízos, Instâncias ou Tribunais, possibilitando propor ações de direito competentes e defendê-lo até o final da decisão, usando os recursos legais e acompanhando-os, conferindo-lhe ainda poderes especiais para requerer concessão/revisão de benefícios previdenciários, obter cópias de expedientes e processos administrativos, acessar laudos sociais e periciais, acessar e manejar extratos, sistemas e telas do INSS, agendar serviços e atendimentos no INSS, receber valores e dar quitação, levantar valores, incluindo RPVs e precatórios (podendo para tanto assinar declaração de isenção de imposto de renda), obter extratos de contas judiciais, requerer expedição/retificação de certidões, incluindo Certidões de Tempo de Contribuição, obter cópia de documentos, Perfis Profissiográficos Previdenciários e laudos técnicos, obter cópia de documentos médicos e prontuários, firmar compromissos ou acordos, receber citação, confessar, reconhecer a procedência do pedido, transigir, desistir, renunciar ao direito sobre o qual se funda a ação, assinar declaração de hipossuficiência econômica e substabelecer a outrem, com ou sem reservas de iguais poderes, para agir em conjunto ou separadamente com o substabelecido.`;
+          doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, cursorY);
           
-          const splitPoderes = doc.splitTextToSize(poderesText, maxLineWidth - 25);
-          doc.text(splitPoderes, margin + 25, cursorY, { align: "justify", maxWidth: maxLineWidth - 25 });
-          
-          // ASSINATURA
-          let signY = 240;
-          doc.setFont("times", "normal");
-          doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, signY);
-          
+          cursorY += 25;
           doc.setLineWidth(0.5);
           doc.setDrawColor(0); // Preto
-          doc.line(pageWidth / 2 - 60, signY + 20, pageWidth / 2 + 60, signY + 20);
+          doc.line(pageWidth / 2 - 60, cursorY, pageWidth / 2 + 60, cursorY);
           
+          cursorY += 5;
           doc.setFont("times", "bold");
-          doc.text(clientName, pageWidth / 2, signY + 25, { align: "center" });
+          doc.text(clientName, pageWidth / 2, cursorY, { align: "center" });
 
       } else if (type === 'hipossuficiencia') {
           // TÍTULO
           doc.setFont("times", "bold");
-          doc.setFontSize(14);
+          doc.setFontSize(16);
           doc.text("DECLARAÇÃO DE HIPOSSUFICIÊNCIA ECONÔMICA", pageWidth / 2, 50, { align: "center" });
           
           doc.setFontSize(12);
           doc.setFont("times", "normal");
           
+          let cursorY = 90;
           const text = `Eu, ${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}, DECLARO para os devidos fins de direito que não possuo condições de arcar com as custas processuais e despesas judiciais sem causar prejuízos ao meu próprio sustento e ao da minha família, nos termos dos arts. 98 a 102 da Lei 13.105/2015.`;
           
           const splitText = doc.splitTextToSize(text, maxLineWidth);
-          doc.text(splitText, margin, 90, { align: "justify", maxWidth: maxLineWidth, lineHeightFactor: 1.5 });
+          doc.text(splitText, margin, cursorY, { align: "justify", maxWidth: maxLineWidth, lineHeightFactor: 1.5 });
+          
+          cursorY += (splitText.length * 7) + 30;
           
           // ASSINATURA
-          let signY = 180;
-          doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, signY);
+          doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, cursorY);
           
+          cursorY += 25;
           doc.setLineWidth(0.5);
           doc.setDrawColor(0);
-          doc.line(pageWidth / 2 - 60, signY + 30, pageWidth / 2 + 60, signY + 30);
+          doc.line(pageWidth / 2 - 60, cursorY, pageWidth / 2 + 60, cursorY);
           
           doc.setFont("times", "bold");
-          doc.text(clientName, pageWidth / 2, signY + 35, { align: "center" });
+          doc.text(clientName, pageWidth / 2, cursorY + 5, { align: "center" });
 
       } else if (type === 'renuncia') {
           // TÍTULO
           doc.setFont("times", "bold");
-          doc.setFontSize(14);
-          doc.text("DA RENÚNCIA AOS VALORES EXCEDENTES AO TETO DO JEF", pageWidth / 2, 50, { align: "center", maxWidth: maxLineWidth });
+          doc.setFontSize(16);
+          doc.text("DA RENÚNCIA AOS VALORES EXCEDENTES", pageWidth / 2, 50, { align: "center" });
+          doc.text("AO TETO DO JEF", pageWidth / 2, 58, { align: "center" });
           
           doc.setFontSize(12);
           doc.setFont("times", "normal");
           
+          let cursorY = 90;
           const text = `${clientName}, CPF nº ${clientCPF}, renuncia à soma das parcelas vencidas e 12 vincendas que excedem ao teto do Juizado Especial Federal, a fim de permitir o trâmite da presente ação no Juizado Especial Federal, conforme Tema 1.030 do STJ.`;
           
           const splitText = doc.splitTextToSize(text, maxLineWidth);
-          doc.text(splitText, margin, 90, { align: "justify", maxWidth: maxLineWidth, lineHeightFactor: 1.5 });
+          doc.text(splitText, margin, cursorY, { align: "justify", maxWidth: maxLineWidth, lineHeightFactor: 1.5 });
+          
+          cursorY += (splitText.length * 7) + 30;
           
           // ASSINATURA
-          let signY = 180;
-          doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, signY);
+          doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, cursorY);
           
+          cursorY += 25;
           doc.setLineWidth(0.5);
           doc.setDrawColor(0);
-          doc.line(pageWidth / 2 - 60, signY + 30, pageWidth / 2 + 60, signY + 30);
+          doc.line(pageWidth / 2 - 60, cursorY, pageWidth / 2 + 60, cursorY);
           
           doc.setFont("times", "bold");
-          doc.text(clientName, pageWidth / 2, signY + 35, { align: "center" });
+          doc.text(clientName, pageWidth / 2, cursorY + 5, { align: "center" });
       }
 
       const pdfBase64 = doc.output('datauristring');
