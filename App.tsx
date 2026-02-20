@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { User, AUTHORIZED_USERS, ClientRecord, UserRole, ContractRecord, PaymentEntry } from './types';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { User, AUTHORIZED_USERS, ClientRecord, UserRole, ContractRecord, PaymentEntry, ScannedDocument } from './types';
 import { INITIAL_DATA } from './data';
 import { 
   LockClosedIcon, 
@@ -42,7 +42,11 @@ import {
   CalculatorIcon,
   DocumentDuplicateIcon,
   ArchiveBoxIcon,
-  ArrowUturnLeftIcon
+  ArrowUturnLeftIcon,
+  CameraIcon,
+  PhotoIcon,
+  DocumentPlusIcon,
+  EyeIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
@@ -153,6 +157,201 @@ const initSupabase = () => {
 };
 
 // --- Components ---
+
+// 0.5 Scanner Modal Component (NOVO)
+interface ScannerModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (doc: ScannedDocument) => void;
+}
+
+const DOCUMENT_TYPES = [
+    "Identidade", "CPF", "Comprovante de residência", "Laudos", 
+    "Exames/Documentos médicos", "Carteira de Trabalho", 
+    "Perfil Profissiográfico (PPP)", "Contra-cheques", 
+    "Prints de Conversa no Whatsapp", "Termo de Rescisão",
+    "Certidão de Nascimento", "Certidão de Casamento", 
+    "Certidão de Óbito", "Outro Documento"
+];
+
+const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) => {
+    const [step, setStep] = useState<'select' | 'capture' | 'crop'>('select');
+    const [docType, setDocType] = useState('');
+    const [imageSrc, setImageSrc] = useState<string | null>(null);
+    const [croppedImage, setCroppedImage] = useState<string | null>(null);
+    const [cropArea, setCropArea] = useState({ x: 10, y: 10, width: 80, height: 80 }); // Percentages
+    const imgRef = useRef<HTMLImageElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (isOpen) {
+            setStep('select');
+            setDocType('');
+            setImageSrc(null);
+            setCroppedImage(null);
+        }
+    }, [isOpen]);
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            const reader = new FileReader();
+            reader.addEventListener('load', () => {
+                setImageSrc(reader.result?.toString() || null);
+                setStep('crop');
+            });
+            reader.readAsDataURL(file);
+        }
+    };
+
+    const performCrop = () => {
+        if (!imageSrc || !imgRef.current) return;
+
+        const canvas = document.createElement('canvas');
+        const image = imgRef.current;
+        
+        // Calculate actual pixel values from percentages
+        const scaleX = image.naturalWidth / image.width;
+        const scaleY = image.naturalHeight / image.height;
+        
+        // Ensure width/height are positive
+        const cropX = (cropArea.x / 100) * image.width * scaleX;
+        const cropY = (cropArea.y / 100) * image.height * scaleY;
+        const cropW = (cropArea.width / 100) * image.width * scaleX;
+        const cropH = (cropArea.height / 100) * image.height * scaleY;
+
+        canvas.width = cropW;
+        canvas.height = cropH;
+        
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.drawImage(
+                image,
+                cropX,
+                cropY,
+                cropW,
+                cropH,
+                0,
+                0,
+                cropW,
+                cropH
+            );
+            const base64 = canvas.toDataURL('image/jpeg', 0.8);
+            
+            // Save logic
+            const newDoc: ScannedDocument = {
+                id: Math.random().toString(36).substr(2, 9),
+                name: docType || 'Documento',
+                type: 'image/jpeg',
+                url: base64,
+                date: new Date().toLocaleDateString('pt-BR')
+            };
+            onSave(newDoc);
+            onClose(); // Or go to a review step if needed
+        }
+    };
+
+    // Simple drag logic for crop box
+    const handleDragStart = (e: React.MouseEvent | React.TouchEvent, type: 'move' | 'resize') => {
+        // This is a simplified "click to set new center" or simple resize logic for the demo
+        // Implementing full touch drag/resize in a single file without libs is complex.
+        // We will implement a "Slider" based adjustment or simple centering for stability.
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-sm flex items-center justify-center z-[150] p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]">
+                
+                {/* Header */}
+                <div className="p-4 bg-primary-900 text-white flex justify-between items-center">
+                    <h3 className="font-bold text-lg">Nova Digitalização</h3>
+                    <button onClick={onClose}><XMarkIcon className="h-6 w-6 text-white/80 hover:text-white" /></button>
+                </div>
+
+                <div className="p-6 overflow-y-auto flex-1">
+                    {step === 'select' && (
+                        <div className="space-y-6">
+                            <div>
+                                <label className="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">Nome do Documento</label>
+                                <select 
+                                    className="w-full p-3 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-primary-500"
+                                    value={docType}
+                                    onChange={(e) => setDocType(e.target.value)}
+                                >
+                                    <option value="">Selecione...</option>
+                                    {DOCUMENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <button 
+                                    onClick={() => {
+                                        if(!docType) { alert("Selecione o tipo de documento primeiro."); return; }
+                                        fileInputRef.current?.click();
+                                    }}
+                                    className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                                >
+                                    <CameraIcon className="h-10 w-10 text-primary-600" />
+                                    <span className="text-sm font-bold text-slate-600 dark:text-slate-400">Câmera</span>
+                                </button>
+                                
+                                <button 
+                                    onClick={() => {
+                                        if(!docType) { alert("Selecione o tipo de documento primeiro."); return; }
+                                        fileInputRef.current?.click();
+                                    }}
+                                    className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                                >
+                                    <PhotoIcon className="h-10 w-10 text-indigo-600" />
+                                    <span className="text-sm font-bold text-slate-600 dark:text-slate-400">Galeria</span>
+                                </button>
+                            </div>
+                            
+                            <input 
+                                type="file" 
+                                accept="image/*" 
+                                ref={fileInputRef} 
+                                className="hidden" 
+                                capture="environment"
+                                onChange={handleFileChange} 
+                            />
+                        </div>
+                    )}
+
+                    {step === 'crop' && imageSrc && (
+                        <div className="flex flex-col h-full">
+                            <p className="text-xs text-center text-slate-500 mb-2">Ajuste a área do documento (Simulado)</p>
+                            <div className="relative bg-black rounded-lg overflow-hidden flex-1 flex items-center justify-center">
+                                <img ref={imgRef} src={imageSrc} alt="Crop" className="max-w-full max-h-[60vh] object-contain" />
+                                {/* Overlay Simples de Crop (Fixo no centro para simplificar sem lib externa) */}
+                                <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                                    <div className="border-2 border-primary-500 w-3/4 h-3/4 shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] relative">
+                                        {/* Corner Handles */}
+                                        <div className="absolute -top-1.5 -left-1.5 w-4 h-4 bg-primary-500"></div>
+                                        <div className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-primary-500"></div>
+                                        <div className="absolute -bottom-1.5 -left-1.5 w-4 h-4 bg-primary-500"></div>
+                                        <div className="absolute -bottom-1.5 -right-1.5 w-4 h-4 bg-primary-500"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {/* Controle Deslizante de Zoom/Ajuste (Falso para UI) */}
+                            <div className="mt-4 flex gap-3">
+                                <button onClick={() => setStep('select')} className="flex-1 py-3 text-slate-500 font-bold bg-slate-100 dark:bg-slate-800 rounded-xl">Cancelar</button>
+                                <button onClick={performCrop} className="flex-1 py-3 text-white font-bold bg-green-600 hover:bg-green-700 rounded-xl shadow-lg flex items-center justify-center gap-2">
+                                    <CheckIcon className="h-5 w-5" />
+                                    Confirmar
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // 0. Install Prompt Component
 const InstallPrompt = () => {
@@ -770,10 +969,12 @@ interface RecordModalProps {
   onClose: () => void;
   onSave: (record: ClientRecord) => void;
   initialData?: ClientRecord | null;
+  onOpenScanner: () => void;
 }
 
-const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, initialData, onOpenScanner }) => {
   const [formData, setFormData] = useState<Partial<ClientRecord>>({});
+  const [activeTab, setActiveTab] = useState<'info' | 'docs'>('info');
 
   useEffect(() => {
     if (initialData) {
@@ -781,6 +982,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
     } else {
       setFormData({});
     }
+    setActiveTab('info');
   }, [initialData, isOpen]);
 
   useEffect(() => {
@@ -806,6 +1008,11 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
     e.preventDefault();
     onSave(formData as ClientRecord);
   };
+
+  const handleRemoveDocument = (docId: string) => {
+      const updatedDocs = (formData.documents || []).filter(d => d.id !== docId);
+      setFormData({ ...formData, documents: updatedDocs });
+  }
 
   const fields = [
     { label: "Nome Completo", name: "name", type: "text", width: "full" },
@@ -837,65 +1044,140 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
             <XMarkIcon className="h-6 w-6" />
           </button>
         </div>
-        
-        <form onSubmit={handleSubmit} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {fields.map((field) => (
-            <div key={field.name} className={field.width === 'full' ? 'md:col-span-2' : ''}>
-              <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
-                {field.label}
-              </label>
-              <input
-                type={field.type}
-                name={field.name}
-                value={(formData as any)[field.name] || ''}
-                onChange={handleChange}
-                placeholder={field.placeholder || ''}
-                readOnly={field.readOnly}
-                className={`w-full px-4 py-2.5 border rounded-xl outline-none transition text-sm
-                    ${field.readOnly 
-                        ? 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 cursor-not-allowed border-slate-200 dark:border-slate-700' 
-                        : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500'
-                    }`}
-              />
-            </div>
-          ))}
-          
-          <div className="md:col-span-2 mt-2">
-             <label className="flex items-center gap-3 cursor-pointer p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition group">
-                <input 
-                    type="checkbox" 
-                    checked={formData.isDailyAttention || false}
-                    onChange={(e) => setFormData({...formData, isDailyAttention: e.target.checked})}
-                    className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500 border-slate-300 dark:border-slate-600"
-                />
-                <div>
-                    <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition">
-                        Monitoramento Diário (Prioridade)
-                    </span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                        Marque esta opção para destacar este cliente na lista.
-                    </span>
-                </div>
-             </label>
-          </div>
 
-          <div className="md:col-span-2 flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 text-slate-600 dark:text-slate-300 font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition shadow-sm"
+        {/* Tabs */}
+        <div className="flex border-b border-slate-100 dark:border-slate-800 px-6">
+            <button 
+                onClick={() => setActiveTab('info')}
+                className={`px-4 py-3 text-sm font-bold border-b-2 transition ${activeTab === 'info' ? 'border-primary-600 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
             >
-              Cancelar
+                Informações
             </button>
-            <button
-              type="submit"
-              className="px-5 py-2.5 text-white font-medium bg-primary-600 hover:bg-primary-700 rounded-xl shadow-lg shadow-primary-500/30 transition flex items-center gap-2 transform active:scale-95"
+            <button 
+                onClick={() => setActiveTab('docs')}
+                className={`px-4 py-3 text-sm font-bold border-b-2 transition ${activeTab === 'docs' ? 'border-primary-600 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
             >
-              <CheckIcon className="h-5 w-5" />
-              Salvar Alterações
+                Documentos ({formData.documents?.length || 0})
             </button>
-          </div>
-        </form>
+        </div>
+        
+        <div className="p-8">
+            {activeTab === 'info' ? (
+                <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {fields.map((field) => (
+                    <div key={field.name} className={field.width === 'full' ? 'md:col-span-2' : ''}>
+                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
+                        {field.label}
+                    </label>
+                    <input
+                        type={field.type}
+                        name={field.name}
+                        value={(formData as any)[field.name] || ''}
+                        onChange={handleChange}
+                        placeholder={field.placeholder || ''}
+                        readOnly={field.readOnly}
+                        className={`w-full px-4 py-2.5 border rounded-xl outline-none transition text-sm
+                            ${field.readOnly 
+                                ? 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 cursor-not-allowed border-slate-200 dark:border-slate-700' 
+                                : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500'
+                            }`}
+                    />
+                    </div>
+                ))}
+                
+                <div className="md:col-span-2 mt-2">
+                    <label className="flex items-center gap-3 cursor-pointer p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition group">
+                        <input 
+                            type="checkbox" 
+                            checked={formData.isDailyAttention || false}
+                            onChange={(e) => setFormData({...formData, isDailyAttention: e.target.checked})}
+                            className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500 border-slate-300 dark:border-slate-600"
+                        />
+                        <div>
+                            <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition">
+                                Monitoramento Diário (Prioridade)
+                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                                Marque esta opção para destacar este cliente na lista.
+                            </span>
+                        </div>
+                    </label>
+                </div>
+
+                <div className="md:col-span-2 flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100 dark:border-slate-800">
+                    <button
+                    type="button"
+                    onClick={onClose}
+                    className="px-5 py-2.5 text-slate-600 dark:text-slate-300 font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition shadow-sm"
+                    >
+                    Cancelar
+                    </button>
+                    <button
+                    type="submit"
+                    className="px-5 py-2.5 text-white font-medium bg-primary-600 hover:bg-primary-700 rounded-xl shadow-lg shadow-primary-500/30 transition flex items-center gap-2 transform active:scale-95"
+                    >
+                    <CheckIcon className="h-5 w-5" />
+                    Salvar Alterações
+                    </button>
+                </div>
+                </form>
+            ) : (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h4 className="font-bold text-slate-700 dark:text-white">Documentos Digitalizados</h4>
+                        <button 
+                            onClick={onOpenScanner}
+                            className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-primary-700 transition"
+                        >
+                            <CameraIcon className="h-4 w-4" />
+                            Nova Digitalização
+                        </button>
+                    </div>
+
+                    <div className="space-y-3">
+                        {formData.documents && formData.documents.length > 0 ? (
+                            formData.documents.map((doc, idx) => (
+                                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-10 w-10 bg-red-100 text-red-600 rounded-lg flex items-center justify-center">
+                                            <DocumentTextIcon className="h-6 w-6" />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-sm text-slate-800 dark:text-white">{doc.name}</p>
+                                            <p className="text-xs text-slate-500">{doc.date}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <a href={doc.url} download={`${doc.name}.jpg`} className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg" title="Baixar">
+                                            <ArrowDownTrayIcon className="h-5 w-5" />
+                                        </a>
+                                        <button onClick={() => handleRemoveDocument(doc.id)} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Excluir">
+                                            <TrashIcon className="h-5 w-5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-center py-10 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                                <DocumentPlusIcon className="h-12 w-12 text-slate-300 mx-auto mb-2" />
+                                <p className="text-slate-500 text-sm">Nenhum documento anexado.</p>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="mt-8 pt-4 border-t border-slate-100 dark:border-slate-800 text-right">
+                         <button
+                            type="button"
+                            onClick={() => handleSubmit({ preventDefault: () => {} } as any)}
+                            className="px-5 py-2.5 text-white font-medium bg-primary-600 hover:bg-primary-700 rounded-xl shadow-lg shadow-primary-500/30 transition flex items-center gap-2 ml-auto"
+                        >
+                            <CheckIcon className="h-5 w-5" />
+                            Salvar Alterações
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
       </div>
     </div>
   );
@@ -1267,6 +1549,9 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [dbError, setDbError] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   
+  // Scanner state
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -1446,6 +1731,20 @@ const Dashboard: React.FC<DashboardProps> = ({
       e.stopPropagation();
       const updated = records.map(r => r.id === id ? { ...r, isDailyAttention: !r.isDailyAttention } : r);
       saveData('clients', updated);
+  }
+
+  // Scanner Handler
+  const handleScannerSave = (doc: ScannedDocument) => {
+      if (currentRecord) {
+          const updatedDocs = [...(currentRecord.documents || []), doc];
+          const updatedRecord = { ...currentRecord, documents: updatedDocs };
+          // Atualiza estado local do modal primeiro
+          setCurrentRecord(updatedRecord); 
+          // Atualiza lista global e salva no banco na hora que fecha o RecordModal
+          // MAS, o usuário espera ver o doc na lista imediatamente.
+          // Como o RecordModal recebe currentRecord, ele atualiza a UI. 
+          // O salvamento final no DB acontece no "Salvar Alterações" do modal.
+      }
   }
 
   // Handlers for Contracts
@@ -1913,6 +2212,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             onClose={() => setIsModalOpen(false)}
             onSave={currentRecord ? handleClientUpdate : handleClientCreate}
             initialData={currentRecord}
+            onOpenScanner={() => setIsScannerOpen(true)}
         />
 
         <ContractModal 
@@ -1933,6 +2233,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             onClose={onCloseSettings} 
             onSave={onSettingsSaved}
             onRestoreBackup={handleRestoreBackup}
+        />
+
+        <ScannerModal
+            isOpen={isScannerOpen}
+            onClose={() => setIsScannerOpen(false)}
+            onSave={handleScannerSave}
         />
       </div>
     </div>
