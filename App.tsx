@@ -1513,19 +1513,28 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
       doc.setFont("times", "normal");
       
       if (type === 'procuracao') {
-          // TÍTULO
+          // TÍTULO - Ajustado Y para caber na página
           doc.setFont("times", "bold");
           doc.setFontSize(16);
-          doc.text("PROCURAÇÃO AD JUDICIA ET EXTRA", pageWidth / 2, 45, { align: "center" });
+          doc.text("PROCURAÇÃO AD JUDICIA ET EXTRA", pageWidth / 2, 30, { align: "center" });
           
           doc.setFontSize(12);
           
-          let cursorY = 80;
+          // Ajustado cursorY inicial para 55 (antes 80) para economizar espaço
+          let cursorY = 55;
           
           // Lógica de texto para Representante Legal
           let outorganteText = "";
           if (isMinor) {
-              outorganteText = `${clientName}, menor impúbere, ${clientNationality}, pensionista, inscrito no CPF sob o nº ${clientCPF}, representado por seu(sua) representante legal e outorgante, ${formData.legalRepresentative?.toUpperCase()}, brasileiro(a), residente e domiciliado(a) à ${clientAddress}.`;
+              // Texto para menor impúbere conforme solicitado
+              const repName = formData.legalRepresentative?.toUpperCase() || "________________";
+              const repNacionality = formData.nationality || "brasileira"; // Assume nationality of parent usually matches or generic
+              const repCivil = formData.legalRepresentativeMaritalStatus || "solteira";
+              const repProf = formData.legalRepresentativeProfession || "do lar";
+              const repCPF = formData.legalRepresentativeCpf || "___.___.___-__";
+              const repAddress = formData.legalRepresentativeAddress || clientAddress; // Usa endereço do rep ou do cliente
+
+              outorganteText = `${clientName}, menor impúbere, ${clientNationality}, pensionista, inscrito no CPF sob o nº ${clientCPF}, representado por sua genitora e outorgante, ${repName}, ${repNacionality}, ${repCivil}, ${repProf} inscrita no CPF sob o nº ${repCPF} residente e domiciliado à ${repAddress}.`;
           } else {
               outorganteText = `${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}.`;
           }
@@ -1556,7 +1565,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           if (isMinor) {
               // Assinatura com Representante
               doc.text(`${clientName}`, pageWidth / 2, cursorY, { align: "center" });
-              doc.text(`(representado por: ${formData.legalRepresentative?.toUpperCase()} - RESPONSÁVEL)`, pageWidth / 2, cursorY + 5, { align: "center" });
+              doc.text(`(representado por: ${formData.legalRepresentative?.toUpperCase()})`, pageWidth / 2, cursorY + 5, { align: "center" });
           } else {
               doc.text(clientName, pageWidth / 2, cursorY, { align: "center" });
           }
@@ -1751,7 +1760,14 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
     { label: "CPF", name: "cpf", type: "text", width: "half" },
     { label: "Senha INSS", name: "password", type: "text", width: "half" },
     { label: "Endereço Completo", name: "address", type: "text", width: "full" },
-    { label: "Representante Legal", name: "legalRepresentative", type: "text", width: "full" },
+    
+    // CAMPOS DO REPRESENTANTE LEGAL (Expandidos)
+    { label: "Rep. Legal - Nome", name: "legalRepresentative", type: "text", width: "full" },
+    { label: "Rep. Legal - CPF", name: "legalRepresentativeCpf", type: "text", width: "half" },
+    { label: "Rep. Legal - Est. Civil", name: "legalRepresentativeMaritalStatus", type: "select", width: "half", options: ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "União Estável"] },
+    { label: "Rep. Legal - Profissão", name: "legalRepresentativeProfession", type: "text", width: "half" },
+    { label: "Rep. Legal - Endereço Completo (c/ CEP)", name: "legalRepresentativeAddress", type: "text", width: "full" },
+
     { label: "Tipo Benefício", name: "type", type: "text", width: "half" },
     { label: "DER", name: "der", type: "text", placeholder: "DD/MM/AAAA", width: "half" },
     { label: "Perícia Médica", name: "medExpertiseDate", type: "text", placeholder: "DD/MM/AAAA", width: "half" },
