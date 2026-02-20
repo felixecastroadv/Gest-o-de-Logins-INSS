@@ -1266,7 +1266,11 @@ const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigure
 
 // 2. Record Modal Component
 const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
-  const [formData, setFormData] = useState<Partial<ClientRecord>>({});
+  const [formData, setFormData] = useState<Partial<ClientRecord>>({
+      nationality: 'Brasileira',
+      maritalStatus: 'Solteiro(a)',
+      profession: ''
+  });
   const [activeTab, setActiveTab] = useState<'info' | 'docs'>('info');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
@@ -1274,7 +1278,11 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
     if (initialData) {
       setFormData(initialData);
     } else {
-      setFormData({});
+      setFormData({
+          nationality: 'Brasileira',
+          maritalStatus: 'Solteiro(a)',
+          profession: ''
+      });
     }
     setActiveTab('info');
   }, [initialData, isOpen]);
@@ -1294,7 +1302,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
 
   if (!isOpen) return null;
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
@@ -1313,55 +1321,117 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
       setFormData({ ...formData, documents: updatedDocs });
   }
 
-  const generatePDF = (type: 'procuracao' | 'hipossuficiencia') => {
+  const generatePDF = (type: 'procuracao' | 'hipossuficiencia' | 'renuncia') => {
       // @ts-ignore
       const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const margin = 20;
+      const maxLineWidth = pageWidth - margin * 2;
       
-      const currentDate = new Date().toLocaleDateString('pt-BR');
+      const currentDate = new Date().toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' });
+      const currentYear = new Date().getFullYear();
       
+      const clientName = formData.name?.toUpperCase() || "__________________________";
+      const clientCPF = formData.cpf || "___.___.___-__";
+      const clientAddress = formData.address || "__________________________";
+      const clientNationality = formData.nationality || "brasileiro(a)";
+      const clientMarital = formData.maritalStatus || "estado civil";
+      const clientProfession = formData.profession || "profissão";
+
+      const lawyerText = "MICHEL SANTOS FELIX, inscrito na OAB/RJ sob o nº 231.640 e no CPF/MF nº 142.805.877-01, e LUANA DE OLIVEIRA CASTRO PACHECO, inscrita na OAB/RJ sob o nº 226.749 e inscrita no CPF sob o nº 113.599.127-89, com endereço eletrônico felixecastroadv@gmail.com, e endereço profissional sito na Av. Prefeito José de Amorim, 500, apto. 204 , Jardim Meriti – São João de Meriti/RJ, CEP 25.555-201.";
+
+      const poderesText = "Pelo presente instrumento o outorgante confere ao outorgado amplos poderes para o foro em geral, com cláusula ad judicia et extra, para representá-lo nos órgãos públicos e privados, agências do INSS, Juízos, Instâncias ou Tribunais, possibilitando propor ações de direito competentes e defendê-lo até o final da decisão, usando os recursos legais e acompanhando-os, conferindo-lhe ainda poderes especiais para requerer concessão/revisão de benefícios previdenciários, obter cópias de expedientes e processos administrativos, acessar laudos sociais e periciais, acessar e manejar extratos, sistemas e telas do INSS, agendar serviços e atendimentos no INSS, receber valores e dar quitação, levantar valores, incluindo RPVs e precatórios (podendo para tanto assinar declaração de isenção de imposto de renda), obter extratos de contas judiciais, requerer expedição/retificação de certidões, incluindo Certidões de Tempo de Contribuição, obter cópia de documentos, Perfis Profissiográficos Previdenciários e laudos técnicos, obter cópia de documentos médicos e prontuários, firmar compromissos ou acordos, receber citação, confessar, reconhecer a procedência do pedido, transigir, desistir, renunciar ao direito sobre o qual se funda a ação, assinar declaração de hipossuficiência econômica e substabelecer a outrem, com ou sem reservas de iguais poderes, para agir em conjunto ou separadamente com o substabelecido.";
+
       if (type === 'procuracao') {
           doc.setFontSize(14);
           doc.setFont("helvetica", "bold");
-          doc.text("PROCURAÇÃO AD JUDICIA", 105, 20, { align: "center" });
+          doc.text("PROCURAÇÃO AD JUDICIA ET EXTRA", pageWidth / 2, 20, { align: "center" });
           
-          doc.setFontSize(12);
+          doc.setFontSize(11);
           doc.setFont("helvetica", "normal");
           
-          const text = `OUTORGANTE: ${formData.name || '______________________'}, inscrito(a) no CPF sob o nº ${formData.cpf || '___________'}, residente e domiciliado(a) em ${formData.address || '______________________'}.\n\n` +
-                       `OUTORGADO: Dr. Michel Felix e Dra. Luana Castro, advogados...\n\n` +
-                       `PODERES: Pelo presente instrumento particular de procuração, o(a) outorgante nomeia e constitui seus bastantes procuradores os outorgados acima qualificados, concedendo-lhes os poderes da cláusula ad judicia et extra, para o foro em geral, podendo propor contra quem de direito as ações competentes e defendê-lo(a) nas contrárias, seguindo-as até final decisão, usando os recursos legais e acompanhando-as, conferindo-lhes ainda, poderes especiais para confessar, desistir, transigir, firmar compromissos ou acordos, receber e dar quitação, agindo em conjunto ou separadamente, podendo ainda substabelecer esta em outrem, com ou sem reservas de iguais poderes, para o fim especial de requerer benefícios previdenciários e assistenciais.`;
+          let cursorY = 40;
           
-          const splitText = doc.splitTextToSize(text, 170);
-          doc.text(splitText, 20, 40);
+          doc.setFont("helvetica", "bold");
+          doc.text("OUTORGANTE:", margin, cursorY);
+          doc.setFont("helvetica", "normal");
+          const outorganteText = ` ${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}.`;
+          doc.text(outorganteText, margin + 30, cursorY, { maxWidth: maxLineWidth - 30, align: "justify" });
+          cursorY += doc.getTextDimensions(outorganteText, { maxWidth: maxLineWidth - 30 }).h + 10;
+
+          doc.setFont("helvetica", "bold");
+          doc.text("OUTORGADO:", margin, cursorY);
+          doc.setFont("helvetica", "normal");
+          const outorgadoText = ` ${lawyerText}`;
+          doc.text(outorgadoText, margin + 28, cursorY, { maxWidth: maxLineWidth - 28, align: "justify" });
+          cursorY += doc.getTextDimensions(outorgadoText, { maxWidth: maxLineWidth - 28 }).h + 10;
+
+          doc.setFont("helvetica", "bold");
+          doc.text("PODERES:", margin, cursorY);
+          doc.setFont("helvetica", "normal");
+          const poderesFullText = ` ${poderesText}`;
+          doc.text(poderesFullText, margin + 22, cursorY, { maxWidth: maxLineWidth - 22, align: "justify" });
+          cursorY += doc.getTextDimensions(poderesFullText, { maxWidth: maxLineWidth - 22 }).h + 20;
           
-          doc.text(`Local e Data: __________________, ${currentDate}`, 20, 200);
-          doc.text("________________________________________________", 105, 230, { align: "center" });
-          doc.text("Assinatura do Outorgante", 105, 235, { align: "center" });
-      } else {
+          doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, cursorY);
+          cursorY += 25;
+          doc.line(pageWidth / 2 - 40, cursorY, pageWidth / 2 + 40, cursorY);
+          cursorY += 5;
+          doc.text(clientName, pageWidth / 2, cursorY, { align: "center" });
+
+      } else if (type === 'hipossuficiencia') {
           doc.setFontSize(14);
           doc.setFont("helvetica", "bold");
-          doc.text("DECLARAÇÃO DE HIPOSSUFICIÊNCIA", 105, 20, { align: "center" });
+          doc.text("DECLARAÇÃO DE HIPOSSUFICIÊNCIA ECONÔMICA", pageWidth / 2, 20, { align: "center" });
           
           doc.setFontSize(12);
           doc.setFont("helvetica", "normal");
           
-          const text = `Eu, ${formData.name || '______________________'}, inscrito(a) no CPF sob o nº ${formData.cpf || '___________'}, residente e domiciliado(a) em ${formData.address || '______________________'}, DECLARO, para os devidos fins e sob as penas da lei, ser pobre na acepção jurídica do termo, não dispondo de condições econômicas para custear as despesas processuais sem prejuízo do meu próprio sustento e de minha família, pelo que requeiro os benefícios da Gratuidade de Justiça.`;
+          const text = `Eu, ${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}, DECLARO para os devidos fins de direito que não possuo condições de arcar com as custas processuais e despesas judiciais sem causar prejuízos ao meu próprio sustento e ao da minha família, nos termos dos arts. 98 a 102 da Lei 13.105/2015.`;
           
-          const splitText = doc.splitTextToSize(text, 170);
-          doc.text(splitText, 20, 40);
+          const splitText = doc.splitTextToSize(text, maxLineWidth);
+          doc.text(splitText, margin, 50, { align: "justify" });
           
-          doc.text(`Local e Data: __________________, ${currentDate}`, 20, 150);
-          doc.text("________________________________________________", 105, 180, { align: "center" });
-          doc.text("Assinatura do Declarante", 105, 185, { align: "center" });
+          let cursorY = 150;
+          doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, cursorY);
+          cursorY += 30;
+          doc.line(pageWidth / 2 - 40, cursorY, pageWidth / 2 + 40, cursorY);
+          cursorY += 5;
+          doc.text(clientName, pageWidth / 2, cursorY, { align: "center" });
+
+      } else if (type === 'renuncia') {
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          doc.text("DA RENÚNCIA AOS VALORES EXCEDENTES AO TETO DO JEF", pageWidth / 2, 20, { align: "center" });
+          
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "normal");
+          
+          const text = `${clientName}, CPF nº ${clientCPF}, renuncia à soma das parcelas vencidas e 12 vincendas que excedem ao teto do Juizado Especial Federal, a fim de permitir o trâmite da presente ação no Juizado Especial Federal, conforme Tema 1.030 do STJ.`;
+          
+          const splitText = doc.splitTextToSize(text, maxLineWidth);
+          doc.text(splitText, margin, 50, { align: "justify" });
+          
+          let cursorY = 150;
+          doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, cursorY);
+          cursorY += 30;
+          doc.line(pageWidth / 2 - 40, cursorY, pageWidth / 2 + 40, cursorY);
+          cursorY += 5;
+          doc.text(clientName, pageWidth / 2, cursorY, { align: "center" });
       }
 
       const pdfBase64 = doc.output('datauristring');
+      let docName = 'Documento';
+      if (type === 'procuracao') docName = 'Procuração (Gerada)';
+      if (type === 'hipossuficiencia') docName = 'Hipossuficiência (Gerada)';
+      if (type === 'renuncia') docName = 'Termo de Renúncia (Gerado)';
+
       const newDoc: ScannedDocument = {
           id: Math.random().toString(36).substr(2, 9),
-          name: type === 'procuracao' ? 'Procuração (Gerada)' : 'Hipossuficiência (Gerada)',
+          name: docName,
           type: 'application/pdf',
           url: pdfBase64,
-          date: currentDate
+          date: new Date().toLocaleDateString('pt-BR')
       };
       
       const updatedDocs = [...(formData.documents || []), newDoc];
@@ -1370,6 +1440,9 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
 
   const fields = [
     { label: "Nome Completo", name: "name", type: "text", width: "full" },
+    { label: "Nacionalidade", name: "nationality", type: "text", width: "third" },
+    { label: "Estado Civil", name: "maritalStatus", type: "select", width: "third", options: ["Solteiro(a)", "Casado(a)", "Divorciado(a)", "Viúvo(a)", "União Estável"] },
+    { label: "Profissão", name: "profession", type: "text", width: "third" },
     { label: "CPF", name: "cpf", type: "text", width: "half" },
     { label: "Senha INSS", name: "password", type: "text", width: "half" },
     { label: "Endereço Completo", name: "address", type: "text", width: "full" },
@@ -1419,29 +1492,50 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
         
         <div className="p-8">
             {activeTab === 'info' ? (
-                <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {fields.map((field) => (
-                    <div key={field.name} className={field.width === 'full' ? 'md:col-span-2' : ''}>
-                    <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
-                        {field.label}
-                    </label>
-                    <input
-                        type={field.type}
-                        name={field.name}
-                        value={(formData as any)[field.name] || ''}
-                        onChange={handleChange}
-                        placeholder={field.placeholder || ''}
-                        readOnly={field.readOnly}
-                        className={`w-full px-4 py-2.5 border rounded-xl outline-none transition text-sm
-                            ${field.readOnly 
-                                ? 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 cursor-not-allowed border-slate-200 dark:border-slate-700' 
-                                : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500'
-                            }`}
-                    />
-                    </div>
-                ))}
+                <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {fields.map((field) => {
+                    let gridClass = 'md:col-span-3'; // Default to full width
+                    if (field.width === 'full') gridClass = 'md:col-span-3';
+                    
+                    let spanClass = 'md:col-span-6';
+                    if (field.width === 'half') spanClass = 'md:col-span-3';
+                    if (field.width === 'third') spanClass = 'md:col-span-2';
+
+                    return (
+                        <div key={field.name} className={spanClass}>
+                            <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
+                                {field.label}
+                            </label>
+                            {field.type === 'select' ? (
+                                <select
+                                    name={field.name}
+                                    value={(formData as any)[field.name] || ''}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 outline-none transition text-sm"
+                                >
+                                    <option value="">Selecione...</option>
+                                    {field.options?.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
+                            ) : (
+                                <input
+                                    type={field.type}
+                                    name={field.name}
+                                    value={(formData as any)[field.name] || ''}
+                                    onChange={handleChange}
+                                    placeholder={field.placeholder || ''}
+                                    readOnly={field.readOnly}
+                                    className={`w-full px-4 py-2.5 border rounded-xl outline-none transition text-sm
+                                        ${field.readOnly 
+                                            ? 'bg-slate-50 dark:bg-slate-800/50 text-slate-500 cursor-not-allowed border-slate-200 dark:border-slate-700' 
+                                            : 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white border-slate-300 dark:border-slate-600 focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500'
+                                        }`}
+                                />
+                            )}
+                        </div>
+                    );
+                })}
                 
-                <div className="md:col-span-2 mt-2">
+                <div className="md:col-span-6 mt-2">
                     <label className="flex items-center gap-3 cursor-pointer p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition group">
                         <input 
                             type="checkbox" 
@@ -1460,7 +1554,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
                     </label>
                 </div>
 
-                <div className="md:col-span-2 flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <div className="md:col-span-6 flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100 dark:border-slate-800">
                     <button
                     type="button"
                     onClick={onClose}
@@ -1490,14 +1584,18 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3 mb-2">
-                        <button onClick={() => generatePDF('procuracao')} className="flex items-center justify-center gap-2 p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition text-sm font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-2">
+                        <button onClick={() => generatePDF('procuracao')} className="flex items-center justify-center gap-2 p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                             <DocumentTextIcon className="h-5 w-5 text-blue-500" />
                             Gerar Procuração
                         </button>
-                        <button onClick={() => generatePDF('hipossuficiencia')} className="flex items-center justify-center gap-2 p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition text-sm font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                        <button onClick={() => generatePDF('hipossuficiencia')} className="flex items-center justify-center gap-2 p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                             <ScaleIcon className="h-5 w-5 text-purple-500" />
                             Gerar Declaração
+                        </button>
+                        <button onClick={() => generatePDF('renuncia')} className="flex items-center justify-center gap-2 p-3 bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition text-xs font-bold text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                            <ClipboardDocumentCheckIcon className="h-5 w-5 text-green-500" />
+                            Gerar Renúncia
                         </button>
                     </div>
 
