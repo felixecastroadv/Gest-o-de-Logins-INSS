@@ -336,31 +336,96 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
         setDragHandle(null);
     };
 
-    // --- Crop Execution ---
+    // --- Crop Execution (Calculo Geométrico Exato + Compressão) ---
     const confirmCrop = () => {
-        if (!currentImageSrc || !imgRef.current) return;
+        if (!currentImageSrc || !imgRef.current || !containerRef.current) return;
 
-        const canvas = document.createElement('canvas');
         const image = imgRef.current;
-        
-        // Fator de escala entre a imagem renderizada (CSS pixels) e a imagem real (natural pixels)
-        const scaleX = image.naturalWidth / image.width;
-        const scaleY = image.naturalHeight / image.height;
-        
-        const cropX = (crop.x / 100) * image.width * scaleX;
-        const cropY = (crop.y / 100) * image.height * scaleY;
-        const cropW = (crop.w / 100) * image.width * scaleX;
-        const cropH = (crop.h / 100) * image.height * scaleY;
+        const container = containerRef.current;
 
-        canvas.width = cropW;
-        canvas.height = cropH;
+        // 1. Geometria do Container e Imagem Original
+        const contW = container.clientWidth;
+        const contH = container.clientHeight;
+        const natW = image.naturalWidth;
+        const natH = image.naturalHeight;
+
+        // 2. Calcular dimensões da Imagem Renderizada (considerando object-fit: contain)
+        // Isso descobre o tamanho real da imagem na tela, excluindo as barras pretas
+        const imgRatio = natW / natH;
+        const contRatio = contW / contH;
+        
+        let rendW, rendH, offX, offY;
+
+        if (imgRatio > contRatio) {
+            // Imagem mais larga que o container (barra preta em cima/baixo)
+            rendW = contW;
+            rendH = contW / imgRatio;
+            offX = 0;
+            offY = (contH - rendH) / 2;
+        } else {
+            // Imagem mais alta que o container (barra preta na esquerda/direita)
+            rendH = contH;
+            rendW = contH * imgRatio;
+            offX = (contW - rendW) / 2;
+            offY = 0;
+        }
+
+        // 3. Converter Coordenadas do Crop (que são % do Container) para Pixels do Container
+        const cropBoxX = (crop.x / 100) * contW;
+        const cropBoxY = (crop.y / 100) * contH;
+        const cropBoxW = (crop.w / 100) * contW;
+        const cropBoxH = (crop.h / 100) * contH;
+
+        // 4. Mapear para Coordenadas da Imagem (removendo offset das barras pretas)
+        let startX = cropBoxX - offX;
+        let startY = cropBoxY - offY;
+        let finalW = cropBoxW;
+        let finalH = cropBoxH;
+
+        // 5. Escalar para a Resolução Original (Natural) da Imagem
+        const scale = natW / rendW; // Fator de escala da tela para o real
+
+        const sourceX = startX * scale;
+        const sourceY = startY * scale;
+        const sourceW = finalW * scale;
+        const sourceH = finalH * scale;
+
+        // 6. Desenhar no Canvas com Redimensionamento Inteligente (Compressão)
+        const canvas = document.createElement('canvas');
+        
+        // Limite máximo de pixels para evitar arquivos gigantes (Compressão de Tamanho)
+        const MAX_DIMENSION = 1600; 
+        let targetW = sourceW;
+        let targetH = sourceH;
+
+        if (targetW > MAX_DIMENSION || targetH > MAX_DIMENSION) {
+            const ratio = targetW / targetH;
+            if (targetW > targetH) {
+                targetW = MAX_DIMENSION;
+                targetH = MAX_DIMENSION / ratio;
+            } else {
+                targetH = MAX_DIMENSION;
+                targetW = MAX_DIMENSION * ratio;
+            }
+        }
+
+        canvas.width = targetW;
+        canvas.height = targetH;
         
         const ctx = canvas.getContext('2d');
         if (ctx) {
-            ctx.drawImage(image, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+            // Qualidade alta de redimensionamento
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = 'high';
+
+            ctx.drawImage(
+                image, 
+                sourceX, sourceY, sourceW, sourceH, // Origem (Coords da Imagem Natural)
+                0, 0, targetW, targetH              // Destino (Canvas Redimensionado)
+            );
             
-            // Comprimir para JPEG 0.7 para otimizar PDF final
-            const base64 = canvas.toDataURL('image/jpeg', 0.7);
+            // Compressão JPEG Média (0.65) - Balanço ideal peso/qualidade
+            const base64 = canvas.toDataURL('image/jpeg', 0.65);
             
             setPages(prev => [...prev, base64]);
             setCurrentImageSrc(null);
@@ -1337,7 +1402,10 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
       const clientNationality = formData.nationality || "brasileiro(a)";
       const clientMarital = formData.maritalStatus || "estado civil";
       const clientProfession = formData.profession || "profissão";
-
+      
+      // Lógica para menor impúbere / representante legal
+      const isMinor = !!formData.legalRepresentative;
+      
       // Cores para as linhas decorativas (Tom Vinho/Avermelhado Premium)
       const decorColor = [140, 20, 20]; 
 
@@ -1454,7 +1522,14 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           
           let cursorY = 80;
           
-          const outorganteText = `${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}.`;
+          // Lógica de texto para Representante Legal
+          let outorganteText = "";
+          if (isMinor) {
+              outorganteText = `${clientName}, menor impúbere, ${clientNationality}, pensionista, inscrito no CPF sob o nº ${clientCPF}, representado por seu(sua) representante legal e outorgante, ${formData.legalRepresentative?.toUpperCase()}, brasileiro(a), residente e domiciliado(a) à ${clientAddress}.`;
+          } else {
+              outorganteText = `${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}.`;
+          }
+          
           cursorY = drawFullyJustifiedBlock("OUTORGANTE:", outorganteText, cursorY);
 
           const outorgadoText = `MICHEL SANTOS FELIX, inscrito na OAB/RJ sob o nº 231.640 e no CPF/MF nº 142.805.877-01, e LUANA DE OLIVEIRA CASTRO PACHECO, inscrita na OAB/RJ sob o nº 226.749 e inscrita no CPF sob o nº 113.599.127-89, com endereço eletrônico felixecastroadv@gmail.com, e endereço profissional sito na Av. Prefeito José de Amorim, 500, apto. 204 , Jardim Meriti – São João de Meriti/RJ, CEP 25.555-201.`;
@@ -1477,7 +1552,14 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           
           cursorY += 5;
           doc.setFont("times", "bold");
-          doc.text(clientName, pageWidth / 2, cursorY, { align: "center" });
+          
+          if (isMinor) {
+              // Assinatura com Representante
+              doc.text(`${clientName}`, pageWidth / 2, cursorY, { align: "center" });
+              doc.text(`(representado por: ${formData.legalRepresentative?.toUpperCase()} - RESPONSÁVEL)`, pageWidth / 2, cursorY + 5, { align: "center" });
+          } else {
+              doc.text(clientName, pageWidth / 2, cursorY, { align: "center" });
+          }
 
       } else if (type === 'hipossuficiencia') {
           // TÍTULO
@@ -1489,7 +1571,13 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           doc.setFont("times", "normal");
           
           let cursorY = 90;
-          const text = `Eu, ${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}, DECLARO para os devidos fins de direito que não possuo condições de arcar com as custas processuais e despesas judiciais sem causar prejuízos ao meu próprio sustento e ao da minha família, nos termos dos arts. 98 a 102 da Lei 13.105/2015.`;
+          let text = "";
+          
+          if (isMinor) {
+               text = `Eu, ${formData.legalRepresentative?.toUpperCase()}, brasileiro(a), representante legal de ${clientName}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}, DECLARO para os devidos fins de direito que não possuo condições de arcar com as custas processuais e despesas judiciais sem causar prejuízos ao meu próprio sustento e ao da minha família, nos termos dos arts. 98 a 102 da Lei 13.105/2015.`;
+          } else {
+               text = `Eu, ${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}, DECLARO para os devidos fins de direito que não possuo condições de arcar com as custas processuais e despesas judiciais sem causar prejuízos ao meu próprio sustento e ao da minha família, nos termos dos arts. 98 a 102 da Lei 13.105/2015.`;
+          }
           
           // Usando o novo justificador sem label
           const words = text.split(/\s+/);
@@ -1546,7 +1634,13 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           doc.line(pageWidth / 2 - 60, cursorY, pageWidth / 2 + 60, cursorY);
           
           doc.setFont("times", "bold");
-          doc.text(clientName, pageWidth / 2, cursorY + 5, { align: "center" });
+          
+          if (isMinor) {
+              doc.text(`${clientName}`, pageWidth / 2, cursorY + 5, { align: "center" });
+              doc.text(`(representado por: ${formData.legalRepresentative?.toUpperCase()})`, pageWidth / 2, cursorY + 10, { align: "center" });
+          } else {
+              doc.text(clientName, pageWidth / 2, cursorY + 5, { align: "center" });
+          }
 
       } else if (type === 'renuncia') {
           // TÍTULO
@@ -1559,7 +1653,13 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           doc.setFont("times", "normal");
           
           let cursorY = 90;
-          const text = `${clientName}, CPF nº ${clientCPF}, renuncia à soma das parcelas vencidas e 12 vincendas que excedem ao teto do Juizado Especial Federal, a fim de permitir o trâmite da presente ação no Juizado Especial Federal, conforme Tema 1.030 do STJ.`;
+          let text = "";
+          
+          if (isMinor) {
+              text = `${clientName}, CPF nº ${clientCPF}, neste ato representado por ${formData.legalRepresentative?.toUpperCase()}, renuncia à soma das parcelas vencidas e 12 vincendas que excedem ao teto do Juizado Especial Federal, a fim de permitir o trâmite da presente ação no Juizado Especial Federal, conforme Tema 1.030 do STJ.`;
+          } else {
+              text = `${clientName}, CPF nº ${clientCPF}, renuncia à soma das parcelas vencidas e 12 vincendas que excedem ao teto do Juizado Especial Federal, a fim de permitir o trâmite da presente ação no Juizado Especial Federal, conforme Tema 1.030 do STJ.`;
+          }
           
           // Mesmo justificador manual da hipossuficiência
           const words = text.split(/\s+/);
@@ -1616,7 +1716,13 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           doc.line(pageWidth / 2 - 60, cursorY, pageWidth / 2 + 60, cursorY);
           
           doc.setFont("times", "bold");
-          doc.text(clientName, pageWidth / 2, cursorY + 5, { align: "center" });
+          
+          if (isMinor) {
+              doc.text(`${clientName}`, pageWidth / 2, cursorY + 5, { align: "center" });
+              doc.text(`(representado por: ${formData.legalRepresentative?.toUpperCase()})`, pageWidth / 2, cursorY + 10, { align: "center" });
+          } else {
+              doc.text(clientName, pageWidth / 2, cursorY + 5, { align: "center" });
+          }
       }
 
       const pdfBase64 = doc.output('datauristring');
