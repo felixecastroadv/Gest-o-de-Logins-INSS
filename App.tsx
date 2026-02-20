@@ -1359,48 +1359,83 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
       doc.setLineWidth(2);
       doc.line(pageWidth - margin - 30, pageHeight - 15, pageWidth - margin, pageHeight - 15);
 
-      // --- Helper para Justificar Texto com Recuo na Primeira Linha ---
-      const drawJustifiedBlock = (label: string, text: string, startY: number) => {
+      // --- Helper para Justificar Texto TOTAL (Full Justify) ---
+      const drawFullyJustifiedBlock = (label: string, text: string, startY: number) => {
           doc.setFont("times", "bold");
           doc.text(label, margin, startY);
           const labelWidth = doc.getTextWidth(label + " ");
           
           doc.setFont("times", "normal");
-          const words = text.split(' ');
-          let currentLine = "";
-          let lines: string[] = [];
-          let isFirstLine = true;
+          const words = text.split(/\s+/); // Separa por qualquer espaço em branco
+          const spaceWidth = doc.getTextWidth(" "); // Largura padrão do espaço
 
-          // Quebra de linha manual para controlar justificação
+          let lines: string[][] = [];
+          let currentLineWords: string[] = [];
+          let currentLineWidth = 0;
+
+          // Define limites
+          const firstLineMaxWidth = maxLineWidth - labelWidth;
+
+          // Algoritmo de Quebra de Linha
           for (let i = 0; i < words.length; i++) {
               const word = words[i];
-              const testLine = currentLine.length === 0 ? word : currentLine + " " + word;
-              const testWidth = doc.getTextWidth(testLine);
-              const limit = isFirstLine ? (maxLineWidth - labelWidth) : maxLineWidth;
+              const wordWidth = doc.getTextWidth(word);
+              
+              // Limite da linha atual (primeira linha tem recuo)
+              const limit = lines.length === 0 ? firstLineMaxWidth : maxLineWidth;
 
-              if (testWidth <= limit) {
-                  currentLine = testLine;
+              // Verifica se a palavra cabe (largura atual + espaço + palavra)
+              if (currentLineWords.length > 0 && currentLineWidth + spaceWidth + wordWidth > limit) {
+                  // Linha cheia, salva e inicia nova
+                  lines.push(currentLineWords);
+                  currentLineWords = [word];
+                  currentLineWidth = wordWidth;
               } else {
-                  lines.push(currentLine);
-                  currentLine = word;
-                  isFirstLine = false;
+                  // Adiciona palavra à linha atual
+                  if (currentLineWords.length > 0) currentLineWidth += spaceWidth;
+                  currentLineWords.push(word);
+                  currentLineWidth += wordWidth;
               }
           }
-          lines.push(currentLine);
+          // Adiciona a última linha pendente
+          if (currentLineWords.length > 0) lines.push(currentLineWords);
 
-          // Renderização
+          // Renderização com Cálculo de Espaçamento Extra
           let currentY = startY;
-          lines.forEach((line, index) => {
-              const xPos = index === 0 ? margin + labelWidth : margin;
-              const options: any = { maxWidth: index === 0 ? maxLineWidth - labelWidth : maxLineWidth, align: "justify" };
+          
+          lines.forEach((lineWords, lineIndex) => {
+              const isLastLine = lineIndex === lines.length - 1;
+              const isFirstLine = lineIndex === 0;
               
-              // Ajuste fino: última linha à esquerda para evitar espaçamento forçado
-              if (index === lines.length - 1 && lines.length > 1) {
-                  options.align = "left"; 
+              const xStart = isFirstLine ? margin + labelWidth : margin;
+              const lineWidthAvailable = isFirstLine ? firstLineMaxWidth : maxLineWidth;
+
+              if (isLastLine) {
+                  // Última linha: Alinhamento à Esquerda (padrão normal)
+                  let x = xStart;
+                  lineWords.forEach((word) => {
+                      doc.text(word, x, currentY);
+                      x += doc.getTextWidth(word) + spaceWidth;
+                  });
+              } else {
+                  // Linhas do meio: Justificação Total (Espalha espaços)
+                  const totalWordsWidth = lineWords.reduce((sum, w) => sum + doc.getTextWidth(w), 0);
+                  const gaps = lineWords.length - 1;
+                  const extraSpace = lineWidthAvailable - totalWordsWidth;
+                  
+                  // Se houver apenas 1 palavra na linha (ex: palavra gigante), não justifica
+                  const spaceSize = gaps > 0 ? extraSpace / gaps : 0;
+
+                  let x = xStart;
+                  lineWords.forEach((word, wIdx) => {
+                      doc.text(word, x, currentY);
+                      // Adiciona espaço calculado, exceto após a última palavra
+                      if (wIdx < gaps) {
+                          x += doc.getTextWidth(word) + spaceSize;
+                      }
+                  });
               }
-              
-              doc.text(line, xPos, currentY, options);
-              currentY += 6; // Line height
+              currentY += 6; // Altura da linha
           });
 
           return currentY + 4; // Retorna novo Y com padding
@@ -1420,13 +1455,13 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           let cursorY = 80;
           
           const outorganteText = `${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}.`;
-          cursorY = drawJustifiedBlock("OUTORGANTE:", outorganteText, cursorY);
+          cursorY = drawFullyJustifiedBlock("OUTORGANTE:", outorganteText, cursorY);
 
           const outorgadoText = `MICHEL SANTOS FELIX, inscrito na OAB/RJ sob o nº 231.640 e no CPF/MF nº 142.805.877-01, e LUANA DE OLIVEIRA CASTRO PACHECO, inscrita na OAB/RJ sob o nº 226.749 e inscrita no CPF sob o nº 113.599.127-89, com endereço eletrônico felixecastroadv@gmail.com, e endereço profissional sito na Av. Prefeito José de Amorim, 500, apto. 204 , Jardim Meriti – São João de Meriti/RJ, CEP 25.555-201.`;
-          cursorY = drawJustifiedBlock("OUTORGADO:", outorgadoText, cursorY);
+          cursorY = drawFullyJustifiedBlock("OUTORGADO:", outorgadoText, cursorY);
 
           const poderesText = `Pelo presente instrumento o outorgante confere ao outorgado amplos poderes para o foro em geral, com cláusula ad judicia et extra, para representá-lo nos órgãos públicos e privados, agências do INSS, Juízos, Instâncias ou Tribunais, possibilitando propor ações de direito competentes e defendê-lo até o final da decisão, usando os recursos legais e acompanhando-os, conferindo-lhe ainda poderes especiais para requerer concessão/revisão de benefícios previdenciários, obter cópias de expedientes e processos administrativos, acessar laudos sociais e periciais, acessar e manejar extratos, sistemas e telas do INSS, agendar serviços e atendimentos no INSS, receber valores e dar quitação, levantar valores, incluindo RPVs e precatórios (podendo para tanto assinar declaração de isenção de imposto de renda), obter extratos de contas judiciais, requerer expedição/retificação de certidões, incluindo Certidões de Tempo de Contribuição, obter cópia de documentos, Perfis Profissiográficos Previdenciários e laudos técnicos, obter cópia de documentos médicos e prontuários, firmar compromissos ou acordos, receber citação, confessar, reconhecer a procedência do pedido, transigir, desistir, renunciar ao direito sobre o qual se funda a ação, assinar declaração de hipossuficiência econômica e substabelecer a outrem, com ou sem reservas de iguais poderes, para agir em conjunto ou separadamente com o substabelecido.`;
-          cursorY = drawJustifiedBlock("PODERES:", poderesText, cursorY);
+          cursorY = drawFullyJustifiedBlock("PODERES:", poderesText, cursorY);
           
           // Data e Assinatura com posição dinâmica
           cursorY += 10;
@@ -1456,10 +1491,51 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           let cursorY = 90;
           const text = `Eu, ${clientName}, ${clientNationality}, ${clientMarital}, ${clientProfession}, inscrito(a) no CPF sob o nº ${clientCPF}, residente e domiciliado(a) à ${clientAddress}, DECLARO para os devidos fins de direito que não possuo condições de arcar com as custas processuais e despesas judiciais sem causar prejuízos ao meu próprio sustento e ao da minha família, nos termos dos arts. 98 a 102 da Lei 13.105/2015.`;
           
-          const splitText = doc.splitTextToSize(text, maxLineWidth);
-          doc.text(splitText, margin, cursorY, { align: "justify", maxWidth: maxLineWidth, lineHeightFactor: 1.5 });
+          // Usando o novo justificador sem label
+          const words = text.split(/\s+/);
+          const spaceWidth = doc.getTextWidth(" ");
+          let lines = [];
+          let currentLineWords = [];
+          let currentLineWidth = 0;
+
+          for (let i = 0; i < words.length; i++) {
+              const word = words[i];
+              const wordWidth = doc.getTextWidth(word);
+              if (currentLineWords.length > 0 && currentLineWidth + spaceWidth + wordWidth > maxLineWidth) {
+                  lines.push(currentLineWords);
+                  currentLineWords = [word];
+                  currentLineWidth = wordWidth;
+              } else {
+                  if (currentLineWords.length > 0) currentLineWidth += spaceWidth;
+                  currentLineWords.push(word);
+                  currentLineWidth += wordWidth;
+              }
+          }
+          if (currentLineWords.length > 0) lines.push(currentLineWords);
+
+          lines.forEach((lineWords, lineIndex) => {
+              const isLastLine = lineIndex === lines.length - 1;
+              if (isLastLine) {
+                  let x = margin;
+                  lineWords.forEach(word => {
+                      doc.text(word, x, cursorY);
+                      x += doc.getTextWidth(word) + spaceWidth;
+                  });
+              } else {
+                  const totalWordsWidth = lineWords.reduce((sum, w) => sum + doc.getTextWidth(w), 0);
+                  const gaps = lineWords.length - 1;
+                  const extraSpace = maxLineWidth - totalWordsWidth;
+                  const spaceSize = gaps > 0 ? extraSpace / gaps : 0;
+                  let x = margin;
+                  lineWords.forEach((word, wIdx) => {
+                      doc.text(word, x, cursorY);
+                      if (wIdx < gaps) x += doc.getTextWidth(word) + spaceSize;
+                  });
+              }
+              cursorY += 7; // Line height maior para declaração
+          });
           
-          cursorY += (splitText.length * 7) + 30;
+          cursorY += 30;
           
           // ASSINATURA
           doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, cursorY);
@@ -1485,10 +1561,51 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           let cursorY = 90;
           const text = `${clientName}, CPF nº ${clientCPF}, renuncia à soma das parcelas vencidas e 12 vincendas que excedem ao teto do Juizado Especial Federal, a fim de permitir o trâmite da presente ação no Juizado Especial Federal, conforme Tema 1.030 do STJ.`;
           
-          const splitText = doc.splitTextToSize(text, maxLineWidth);
-          doc.text(splitText, margin, cursorY, { align: "justify", maxWidth: maxLineWidth, lineHeightFactor: 1.5 });
+          // Mesmo justificador manual da hipossuficiência
+          const words = text.split(/\s+/);
+          const spaceWidth = doc.getTextWidth(" ");
+          let lines = [];
+          let currentLineWords = [];
+          let currentLineWidth = 0;
+
+          for (let i = 0; i < words.length; i++) {
+              const word = words[i];
+              const wordWidth = doc.getTextWidth(word);
+              if (currentLineWords.length > 0 && currentLineWidth + spaceWidth + wordWidth > maxLineWidth) {
+                  lines.push(currentLineWords);
+                  currentLineWords = [word];
+                  currentLineWidth = wordWidth;
+              } else {
+                  if (currentLineWords.length > 0) currentLineWidth += spaceWidth;
+                  currentLineWords.push(word);
+                  currentLineWidth += wordWidth;
+              }
+          }
+          if (currentLineWords.length > 0) lines.push(currentLineWords);
+
+          lines.forEach((lineWords, lineIndex) => {
+              const isLastLine = lineIndex === lines.length - 1;
+              if (isLastLine) {
+                  let x = margin;
+                  lineWords.forEach(word => {
+                      doc.text(word, x, cursorY);
+                      x += doc.getTextWidth(word) + spaceWidth;
+                  });
+              } else {
+                  const totalWordsWidth = lineWords.reduce((sum, w) => sum + doc.getTextWidth(w), 0);
+                  const gaps = lineWords.length - 1;
+                  const extraSpace = maxLineWidth - totalWordsWidth;
+                  const spaceSize = gaps > 0 ? extraSpace / gaps : 0;
+                  let x = margin;
+                  lineWords.forEach((word, wIdx) => {
+                      doc.text(word, x, cursorY);
+                      if (wIdx < gaps) x += doc.getTextWidth(word) + spaceSize;
+                  });
+              }
+              cursorY += 7;
+          });
           
-          cursorY += (splitText.length * 7) + 30;
+          cursorY += 30;
           
           // ASSINATURA
           doc.text(`São João de Meriti/RJ, ${currentDate}.`, margin, cursorY);
