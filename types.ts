@@ -20,6 +20,8 @@ export interface ClientRecord {
   dcbDate: string;
   ninetyDaysDate: string;
   securityMandateDate: string;
+  address?: string;
+  legalRepresentative?: string;
   isDailyAttention?: boolean;
   isArchived?: boolean;
   documents?: ScannedDocument[];
