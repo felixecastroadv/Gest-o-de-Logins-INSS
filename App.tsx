@@ -80,7 +80,6 @@ interface RecordModalProps {
   onClose: () => void;
   onSave: (record: ClientRecord) => void;
   initialData?: ClientRecord | null;
-  onOpenScanner?: () => void;
 }
 
 interface MonthlyDetailsModalProps {
@@ -1265,9 +1264,10 @@ const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigure
 };
 
 // 2. Record Modal Component
-const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, initialData, onOpenScanner }) => {
+const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
   const [formData, setFormData] = useState<Partial<ClientRecord>>({});
   const [activeTab, setActiveTab] = useState<'info' | 'docs'>('info');
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -1304,6 +1304,11 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
 
   const handleRemoveDocument = (docId: string) => {
       const updatedDocs = (formData.documents || []).filter(d => d.id !== docId);
+      setFormData({ ...formData, documents: updatedDocs });
+  }
+
+  const handleScannerSave = (doc: ScannedDocument) => {
+      const updatedDocs = [...(formData.documents || []), doc];
       setFormData({ ...formData, documents: updatedDocs });
   }
 
@@ -1419,7 +1424,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
                     <div className="flex justify-between items-center">
                         <h4 className="font-bold text-slate-700 dark:text-white">Documentos Digitalizados</h4>
                         <button 
-                            onClick={onOpenScanner}
+                            onClick={() => setIsScannerOpen(true)}
                             className="flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:bg-primary-700 transition"
                         >
                             <CameraIcon className="h-4 w-4" />
@@ -1470,8 +1475,9 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
                     </div>
                 </div>
             )}
-        </div>
       </div>
+      <ScannerModal isOpen={isScannerOpen} onClose={() => setIsScannerOpen(false)} onSave={handleScannerSave} />
+    </div>
     </div>
   );
 };
@@ -1823,9 +1829,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [dbError, setDbError] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   
-  // Scanner state
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
-
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -2008,17 +2011,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       e.stopPropagation();
       const updated = records.map(r => r.id === id ? { ...r, isDailyAttention: !r.isDailyAttention } : r);
       saveData('clients', updated);
-  }
-
-  // Scanner Handler
-  const handleScannerSave = (doc: ScannedDocument) => {
-      if (currentRecord) {
-          const updatedDocs = [...(currentRecord.documents || []), doc];
-          const updatedRecord = { ...currentRecord, documents: updatedDocs };
-          // Atualiza estado local do modal primeiro
-          setCurrentRecord(updatedRecord); 
-          // O salvamento final no DB acontece no "Salvar Alterações" do modal RecordModal.
-      }
   }
 
   // Handlers for Contracts
@@ -2495,7 +2487,6 @@ const Dashboard: React.FC<DashboardProps> = ({
             onClose={() => setIsModalOpen(false)} 
             onSave={handleSaveClient}
             initialData={currentRecord}
-            onOpenScanner={() => setIsScannerOpen(true)}
         />
         
         <ContractModal 
@@ -2516,12 +2507,6 @@ const Dashboard: React.FC<DashboardProps> = ({
             isOpen={isNotificationsOpen}
             onClose={() => setIsNotificationsOpen(false)}
             notifications={activeAlerts}
-        />
-        
-        <ScannerModal 
-            isOpen={isScannerOpen} 
-            onClose={() => setIsScannerOpen(false)} 
-            onSave={handleScannerSave} 
         />
       </div>
     </div>
