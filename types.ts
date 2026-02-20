@@ -1,3 +1,12 @@
+
+export interface ScannedDocument {
+  id: string;
+  name: string; // Ex: Identidade, CPF
+  type: string; // Ex: image/jpeg
+  url: string; // Base64
+  date: string;
+}
+
 export interface ClientRecord {
   id: string;
   name: string;
@@ -12,6 +21,8 @@ export interface ClientRecord {
   ninetyDaysDate: string;
   securityMandateDate: string;
   isDailyAttention?: boolean;
+  isArchived?: boolean;
+  documents?: ScannedDocument[];
 }
 
 export enum UserRole {
