@@ -12,6 +12,9 @@ export interface ClientRecord {
   name: string;
   cpf: string;
   password: string;
+  nationality?: string;
+  maritalStatus?: string;
+  profession?: string;
   type: string;
   der: string;
   medExpertiseDate: string;
