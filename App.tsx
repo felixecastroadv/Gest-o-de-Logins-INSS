@@ -1981,6 +1981,15 @@ const Dashboard: React.FC<DashboardProps> = ({
     saveData('clients', updated);
     setIsModalOpen(false);
   };
+
+  const handleSaveClient = (data: ClientRecord) => {
+    if (currentRecord) {
+        handleClientUpdate(data);
+    } else {
+        handleClientCreate(data);
+    }
+  };
+
   const handleClientDelete = (id: string) => {
     if (confirm('Excluir cliente permanentemente?')) {
         saveData('clients', records.filter(r => r.id !== id));
@@ -2029,6 +2038,15 @@ const Dashboard: React.FC<DashboardProps> = ({
       saveData('contracts', updated);
       setIsContractModalOpen(false);
   }
+
+  const handleSaveContract = (data: ContractRecord) => {
+    if (currentContract) {
+        handleContractUpdate(data);
+    } else {
+        handleContractCreate(data);
+    }
+  };
+
   const handleContractDelete = (id: string) => {
       if (confirm('Excluir contrato e histórico financeiro?')) {
           saveData('contracts', contracts.filter(c => c.id !== id));
@@ -2479,31 +2497,29 @@ const Dashboard: React.FC<DashboardProps> = ({
         </main>
 
         <RecordModal 
-            isOpen={isRecordModalOpen} 
-            onClose={() => setIsRecordModalOpen(false)} 
+            isOpen={isModalOpen} 
+            onClose={() => setIsModalOpen(false)} 
             onSave={handleSaveClient}
-            initialData={editingRecord}
+            initialData={currentRecord}
         />
         
         <ContractModal 
             isOpen={isContractModalOpen} 
             onClose={() => setIsContractModalOpen(false)} 
             onSave={handleSaveContract}
-            initialData={editingContract}
+            initialData={currentContract}
         />
         
         <SettingsModal 
             isOpen={isSettingsOpen} 
-            onClose={() => setIsSettingsOpen(false)} 
-            onSave={() => window.location.reload()}
+            onClose={onCloseSettings} 
+            onSave={onSettingsSaved}
             onRestoreBackup={() => {
                     const supabase = initSupabase();
                     if(supabase) {
-                        // Restore INITIAL_DATA to Supabase
                          const restore = async () => {
-                             for (const client of INITIAL_DATA) {
-                                 await supabase.from('clients').upsert(client);
-                             }
+                             await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
+                             await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS });
                              alert("Dados restaurados com sucesso!");
                              window.location.reload();
                          };
@@ -2515,7 +2531,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <NotificationsModal 
             isOpen={isNotificationsOpen}
             onClose={() => setIsNotificationsOpen(false)}
-            notifications={notifications}
+            notifications={activeAlerts}
         />
         
         <ScannerModal 
@@ -2524,6 +2540,81 @@ const Dashboard: React.FC<DashboardProps> = ({
             onSave={handleScannerSave} 
         />
     </div>
+  );
+};
+
+const App = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [darkMode, setDarkMode] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  
+  useEffect(() => {
+    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      setDarkMode(true);
+      document.documentElement.classList.add('dark');
+    } else {
+      setDarkMode(false);
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    setDarkMode(!darkMode);
+    if (!darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.theme = 'dark';
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.theme = 'light';
+    }
+  };
+  
+  const handleRestoreBackup = () => {
+        const supabase = initSupabase();
+        if(supabase) {
+             const restore = async () => {
+                 await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
+                 await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS });
+                 alert("Dados restaurados com sucesso!");
+                 window.location.reload();
+             };
+             restore();
+        }
+    };
+
+  const dbConfig = getDbConfig();
+  const isCloudConfigured = !!(dbConfig && (dbConfig.url || dbConfig.key));
+
+  if (!user) {
+    return (
+      <>
+        <Login 
+          onLogin={setUser} 
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          isCloudConfigured={isCloudConfigured}
+        />
+        <SettingsModal 
+            isOpen={isSettingsOpen} 
+            onClose={() => setIsSettingsOpen(false)} 
+            onSave={() => window.location.reload()}
+            onRestoreBackup={handleRestoreBackup}
+        />
+      </>
+    );
+  }
+
+  return (
+    <Dashboard 
+      user={user} 
+      onLogout={() => setUser(null)}
+      darkMode={darkMode}
+      toggleDarkMode={toggleDarkMode}
+      onOpenSettings={() => setIsSettingsOpen(true)}
+      isCloudConfigured={isCloudConfigured}
+      isSettingsOpen={isSettingsOpen}
+      onCloseSettings={() => setIsSettingsOpen(false)}
+      onSettingsSaved={() => window.location.reload()}
+    />
   );
 };
 
