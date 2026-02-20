@@ -24,7 +24,14 @@ export interface ClientRecord {
   ninetyDaysDate: string;
   securityMandateDate: string;
   address?: string;
-  legalRepresentative?: string;
+  
+  // Campos do Representante Legal
+  legalRepresentative?: string; // Nome
+  legalRepresentativeCpf?: string;
+  legalRepresentativeMaritalStatus?: string;
+  legalRepresentativeProfession?: string;
+  legalRepresentativeAddress?: string;
+
   isDailyAttention?: boolean;
   isArchived?: boolean;
   documents?: ScannedDocument[];
