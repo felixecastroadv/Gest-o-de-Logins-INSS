@@ -54,6 +54,56 @@ import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 
 const INITIAL_CONTRACTS: ContractRecord[] = [];
 
+// --- Interfaces ---
+interface NotificationItem {
+  id: string;
+  clientName: string;
+  type: string;
+  date: string;
+}
+
+interface ContractModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (record: ContractRecord) => void;
+  initialData?: ContractRecord | null;
+}
+
+interface LoginProps {
+  onLogin: (user: User) => void;
+  onOpenSettings: () => void;
+  isCloudConfigured: boolean;
+}
+
+interface RecordModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (record: ClientRecord) => void;
+  initialData?: ClientRecord | null;
+  onOpenScanner?: () => void;
+}
+
+interface MonthlyDetailsModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    year: number;
+    contracts: ContractRecord[];
+    type: 'revenue' | 'michel' | 'luana' | null;
+}
+
+interface DashboardProps {
+  user: User;
+  onLogout: () => void;
+  darkMode: boolean;
+  toggleDarkMode: () => void;
+  onOpenSettings: () => void;
+  isCloudConfigured: boolean;
+  isSettingsOpen: boolean;
+  onCloseSettings: () => void;
+  onSettingsSaved: () => void;
+  onRestoreBackup: () => void;
+}
+
 // --- Helpers ---
 
 const parseDate = (dateStr: string): Date | null => {
@@ -837,13 +887,6 @@ const SettingsModal = ({ isOpen, onClose, onSave, onRestoreBackup }: { isOpen: b
 };
 
 // 0.2 Notifications Modal
-interface NotificationItem {
-    id: string;
-    clientName: string;
-    type: 'Prorrogação' | 'Perícia Médica' | 'Perícia Social' | 'Mandado de Segurança';
-    date: string;
-}
-
 const NotificationsModal = ({ isOpen, onClose, notifications }: { isOpen: boolean, onClose: () => void, notifications: NotificationItem[] }) => {
     if (!isOpen) return null;
 
@@ -896,13 +939,6 @@ const NotificationsModal = ({ isOpen, onClose, notifications }: { isOpen: boolea
 }
 
 // 0.3 Contract Modal (NOVO)
-interface ContractModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (record: ContractRecord) => void;
-  initialData?: ContractRecord | null;
-}
-
 const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
     const [formData, setFormData] = useState<Partial<ContractRecord>>({
         payments: []
@@ -1128,12 +1164,6 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
 };
 
 // 1. Login Component
-interface LoginProps {
-  onLogin: (user: User) => void;
-  onOpenSettings: () => void;
-  isCloudConfigured: boolean;
-}
-
 const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigured }) => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -1235,14 +1265,6 @@ const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigure
 };
 
 // 2. Record Modal Component
-interface RecordModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSave: (record: ClientRecord) => void;
-  initialData?: ClientRecord | null;
-  onOpenScanner?: () => void; // Optional if not always passed
-}
-
 const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, initialData, onOpenScanner }) => {
   const [formData, setFormData] = useState<Partial<ClientRecord>>({});
   const [activeTab, setActiveTab] = useState<'info' | 'docs'>('info');
@@ -1506,15 +1528,7 @@ const StatsCards = ({ records }: { records: ClientRecord[] }) => {
     )
 }
 
-// 0.4 Monthly Details Modal (NOVO)
-interface MonthlyDetailsModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    year: number;
-    contracts: ContractRecord[];
-    type: 'revenue' | 'michel' | 'luana' | null;
-}
-
+// 0.4 Monthly Details Modal
 const MonthlyDetailsModal: React.FC<MonthlyDetailsModalProps> = ({ isOpen, onClose, year, contracts, type }) => {
     const monthlyData = useMemo(() => {
         if (!type) return [];
@@ -1776,19 +1790,7 @@ const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
     );
 };
 
-// 4. Dashboard Component
-interface DashboardProps {
-  user: User;
-  onLogout: () => void;
-  darkMode: boolean;
-  toggleDarkMode: () => void;
-  onOpenSettings: () => void;
-  isCloudConfigured: boolean;
-  isSettingsOpen: boolean;
-  onCloseSettings: () => void;
-  onSettingsSaved: () => void;
-}
-
+// 5. Dashboard Component
 const Dashboard: React.FC<DashboardProps> = ({ 
   user, 
   onLogout, 
@@ -1798,7 +1800,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   isCloudConfigured,
   isSettingsOpen,
   onCloseSettings,
-  onSettingsSaved
+  onSettingsSaved,
+  onRestoreBackup
 }) => {
   const [currentView, setCurrentView] = useState<'clients' | 'contracts'>('clients');
   const [showArchived, setShowArchived] = useState(false);
@@ -1964,12 +1967,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       setTimeout(() => setIsSyncing(false), 800);
   }
   
-  const handleRestoreBackup = () => {
-      saveData('clients', INITIAL_DATA);
-      saveData('contracts', INITIAL_CONTRACTS);
-      alert("Dados restaurados com sucesso!");
-  };
-
   // Handlers for Clients
   const handleClientCreate = (data: ClientRecord) => {
     const newRecord = { ...data, id: Math.random().toString(36).substr(2, 9) };
@@ -2020,10 +2017,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           const updatedRecord = { ...currentRecord, documents: updatedDocs };
           // Atualiza estado local do modal primeiro
           setCurrentRecord(updatedRecord); 
-          // Atualiza lista global e salva no banco na hora que fecha o RecordModal
-          // MAS, o usuário espera ver o doc na lista imediatamente.
-          // Como o RecordModal recebe currentRecord, ele atualiza a UI. 
-          // O salvamento final no DB acontece no "Salvar Alterações" do modal.
+          // O salvamento final no DB acontece no "Salvar Alterações" do modal RecordModal.
       }
   }
 
@@ -2501,6 +2495,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             onClose={() => setIsModalOpen(false)} 
             onSave={handleSaveClient}
             initialData={currentRecord}
+            onOpenScanner={() => setIsScannerOpen(true)}
         />
         
         <ContractModal 
@@ -2514,18 +2509,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             isOpen={isSettingsOpen} 
             onClose={onCloseSettings} 
             onSave={onSettingsSaved}
-            onRestoreBackup={() => {
-                    const supabase = initSupabase();
-                    if(supabase) {
-                         const restore = async () => {
-                             await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
-                             await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS });
-                             alert("Dados restaurados com sucesso!");
-                             window.location.reload();
-                         };
-                         restore();
-                    }
-                }}
+            onRestoreBackup={onRestoreBackup}
         />
 
         <NotificationsModal 
@@ -2539,35 +2523,40 @@ const Dashboard: React.FC<DashboardProps> = ({
             onClose={() => setIsScannerOpen(false)} 
             onSave={handleScannerSave} 
         />
+      </div>
     </div>
   );
 };
 
-const App = () => {
+export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [darkMode, setDarkMode] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  
+  const [isCloudConfigured, setIsCloudConfigured] = useState(false);
+
   useEffect(() => {
-    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setDarkMode(true);
-      document.documentElement.classList.add('dark');
-    } else {
-      setDarkMode(false);
-      document.documentElement.classList.remove('dark');
-    }
+    const isDark = localStorage.getItem('inss_theme') === 'dark';
+    setDarkMode(isDark);
+    if (isDark) { document.documentElement.classList.add('dark'); }
   }, []);
+  
+  const checkCloudStatus = () => {
+      const config = getDbConfig();
+      setIsCloudConfigured(!!(config && config.url && config.key));
+  };
+
+  useEffect(() => { checkCloudStatus(); }, []);
 
   const toggleDarkMode = () => {
-    setDarkMode(!darkMode);
-    if (!darkMode) {
-      document.documentElement.classList.add('dark');
-      localStorage.theme = 'dark';
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.theme = 'light';
-    }
+    const newMode = !darkMode;
+    setDarkMode(newMode);
+    localStorage.setItem('inss_theme', newMode ? 'dark' : 'light');
+    if (newMode) { document.documentElement.classList.add('dark'); } else { document.documentElement.classList.remove('dark'); }
   };
+
+  const handleLogin = (authenticatedUser: User) => { setUser(authenticatedUser); };
+  const handleLogout = () => { setUser(null); };
+  const handleSettingsSave = () => { checkCloudStatus(); };
   
   const handleRestoreBackup = () => {
         const supabase = initSupabase();
@@ -2579,43 +2568,44 @@ const App = () => {
                  window.location.reload();
              };
              restore();
+        } else {
+            localStorage.setItem('inss_records', JSON.stringify(INITIAL_DATA));
+            localStorage.setItem('inss_contracts', JSON.stringify(INITIAL_CONTRACTS));
+            alert("Dados locais restaurados!");
+            window.location.reload();
         }
     };
 
-  const dbConfig = getDbConfig();
-  const isCloudConfigured = !!(dbConfig && (dbConfig.url || dbConfig.key));
-
-  if (!user) {
-    return (
-      <>
-        <Login 
-          onLogin={setUser} 
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          isCloudConfigured={isCloudConfigured}
-        />
-        <SettingsModal 
-            isOpen={isSettingsOpen} 
-            onClose={() => setIsSettingsOpen(false)} 
-            onSave={() => window.location.reload()}
-            onRestoreBackup={handleRestoreBackup}
-        />
-      </>
-    );
-  }
-
   return (
-    <Dashboard 
-      user={user} 
-      onLogout={() => setUser(null)}
-      darkMode={darkMode}
-      toggleDarkMode={toggleDarkMode}
-      onOpenSettings={() => setIsSettingsOpen(true)}
-      isCloudConfigured={isCloudConfigured}
-      isSettingsOpen={isSettingsOpen}
-      onCloseSettings={() => setIsSettingsOpen(false)}
-      onSettingsSaved={() => window.location.reload()}
-    />
+    <>
+      {user ? (
+        <Dashboard 
+            user={user} 
+            onLogout={handleLogout} 
+            darkMode={darkMode} 
+            toggleDarkMode={toggleDarkMode} 
+            onOpenSettings={() => setIsSettingsOpen(true)} 
+            isCloudConfigured={isCloudConfigured} 
+            isSettingsOpen={isSettingsOpen} 
+            onCloseSettings={() => setIsSettingsOpen(false)} 
+            onSettingsSaved={handleSettingsSave} 
+            onRestoreBackup={handleRestoreBackup} 
+        />
+      ) : (
+        <>
+            <Login 
+                onLogin={handleLogin} 
+                onOpenSettings={() => setIsSettingsOpen(true)} 
+                isCloudConfigured={isCloudConfigured} 
+            />
+            <SettingsModal 
+                isOpen={isSettingsOpen} 
+                onClose={() => setIsSettingsOpen(false)} 
+                onSave={handleSettingsSave} 
+                onRestoreBackup={handleRestoreBackup} 
+            />
+        </>
+      )}
+    </>
   );
-};
-
-export default App;
+}
