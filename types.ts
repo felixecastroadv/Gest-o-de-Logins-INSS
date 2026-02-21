@@ -77,3 +77,60 @@ export interface ContractRecord {
   payments: PaymentEntry[];
   createdAt: string;
 }
+
+// --- Interfaces de Componentes (Movidas do App.tsx) ---
+
+export interface NotificationItem {
+  id: string;
+  clientName: string;
+  type: string;
+  date: string;
+}
+
+export interface ContractModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (record: ContractRecord) => void;
+  initialData?: ContractRecord | null;
+}
+
+export interface LoginProps {
+  onLogin: (user: User) => void;
+  onOpenSettings: () => void;
+  isCloudConfigured: boolean;
+}
+
+export interface RecordModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSave: (record: ClientRecord) => void;
+  initialData?: ClientRecord | null;
+  onOpenScanner?: () => void;
+}
+
+export interface MonthlyDetailsModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    year: number;
+    contracts: ContractRecord[];
+    type: 'revenue' | 'michel' | 'luana' | null;
+}
+
+export interface DashboardProps {
+  user: User;
+  onLogout: () => void;
+  darkMode: boolean;
+  toggleDarkMode: () => void;
+  onOpenSettings: () => void;
+  isCloudConfigured: boolean;
+  isSettingsOpen: boolean;
+  onCloseSettings: () => void;
+  onSettingsSaved: () => void;
+  onRestoreBackup: () => void;
+}
+
+export interface ScannerModalProps {
+    isOpen: boolean;
+    onClose: () => void;
+    onSave: (doc: ScannedDocument) => void;
+}
