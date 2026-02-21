@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { User, AUTHORIZED_USERS, ClientRecord, UserRole, ContractRecord, PaymentEntry, ScannedDocument } from './types';
 import { INITIAL_DATA } from './data';
+import LaborCalc from './LaborCalc'; // Importação do novo componente
 import { jsPDF } from "jspdf";
 import { 
   LockClosedIcon, 
@@ -2294,7 +2295,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSettingsSaved,
   onRestoreBackup
 }) => {
-  const [currentView, setCurrentView] = useState<'clients' | 'contracts'>('clients');
+  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc'>('clients'); // ADICIONADO labor_calc
   const [showArchived, setShowArchived] = useState(false);
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
@@ -2672,6 +2673,15 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <BriefcaseIcon className="h-6 w-6 lg:mr-3" />
                    <span className="hidden lg:block font-medium">Contratos & Fin.</span>
                </button>
+
+                {/* NOVO MENU: CÁLCULOS */}
+               <button 
+                   onClick={() => setCurrentView('labor_calc')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'labor_calc' ? 'bg-emerald-600 shadow-lg shadow-emerald-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <CalculatorIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Calculadora</span>
+               </button>
            </div>
            
            <div className="p-4 border-t border-slate-800">
@@ -2697,7 +2707,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 h-16 flex items-center justify-between px-6 z-30">
              <div className="flex items-center gap-4">
                  <h2 className="text-xl font-bold text-slate-800 dark:text-white">
-                     {currentView === 'clients' ? 'Painel de Processos' : 'Gestão de Contratos'}
+                     {currentView === 'clients' ? 'Painel de Processos' : 
+                      currentView === 'contracts' ? 'Gestão de Contratos' :
+                      'Cálculos Trabalhistas'}
                  </h2>
                  {isSyncing ? (
                       <span className="text-xs text-blue-500 flex items-center gap-1"><ArrowPathRoundedSquareIcon className="h-3 w-3 animate-spin" /> Salvando...</span>
@@ -2725,8 +2737,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
              
              {/* CONTENT SWITCHER */}
-             {currentView === 'clients' ? (
+             {currentView === 'labor_calc' ? (
+                 <LaborCalc />
+             ) : currentView === 'clients' ? (
                  <>
+                    {/* ... (Conteúdo de Clients Mantido - Oculto aqui para brevidade, mas o código completo está no topo) ... */}
                     <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
                         <div className="flex-1">
                              <StatsCards records={records.filter(r => !r.isArchived)} />
