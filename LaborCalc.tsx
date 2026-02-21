@@ -15,6 +15,20 @@ import {
 import { jsPDF } from "jspdf";
 import { ClientRecord, ContractRecord } from './types';
 
+// --- Estilos CSS (Tailwind) ---
+const STYLES = {
+  LABEL_TEXT: "block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5",
+  LABEL_TINY: "block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1",
+  INPUT_FIELD: "w-full px-4 py-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition text-sm font-medium shadow-sm",
+  INPUT_TINY: "w-full px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-semibold outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500",
+  BTN_PRIMARY: "px-5 py-2.5 text-white font-medium bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-500/30 transition flex items-center gap-2 transform active:scale-95",
+  BTN_SECONDARY: "px-5 py-2.5 text-slate-600 dark:text-slate-300 font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition shadow-sm transform active:scale-95",
+  BTN_SECONDARY_SM: "px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition",
+  CARD_SECTION: "bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800",
+  CARD_TITLE: "font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 text-lg",
+  EMPTY_MSG: "text-center text-sm text-slate-500 dark:text-slate-400 italic py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/20"
+};
+
 // --- Tipos e Interfaces ---
 
 export interface CalculationRecord {
@@ -693,16 +707,16 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
               {/* TAB 1: DADOS BASE */}
               {activeTab === 1 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      <div className="md:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                          <h3 className="font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2">
+                      <div className={`md:col-span-2 ${STYLES.CARD_SECTION}`}>
+                          <h3 className={STYLES.CARD_TITLE}>
                               <DocumentTextIcon className="h-5 w-5 text-indigo-500" /> Informações Básicas
                           </h3>
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="md:col-span-2">
-                                  <label className="label-text">Nome do Cliente / Reclamante</label>
+                                  <label className={STYLES.LABEL_TEXT}>Nome do Cliente / Reclamante</label>
                                   <div className="flex gap-2">
-                                      <input type="text" className="input-field" value={data.employeeName} onChange={e => handleInputChange('employeeName', e.target.value)} placeholder="Ex: João da Silva" />
-                                      <select className="input-field w-1/3" onChange={handleClientSelect} defaultValue="">
+                                      <input type="text" className={STYLES.INPUT_FIELD} value={data.employeeName} onChange={e => handleInputChange('employeeName', e.target.value)} placeholder="Ex: João da Silva" />
+                                      <select className={`${STYLES.INPUT_FIELD} w-1/3`} onChange={handleClientSelect} defaultValue="">
                                           <option value="" disabled>Selecionar...</option>
                                           {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                           {contracts.map(c => <option key={c.id} value={`${c.firstName} ${c.lastName}`}>{c.firstName} {c.lastName}</option>)}
@@ -710,20 +724,20 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   </div>
                               </div>
                               <div>
-                                  <label className="label-text">Data Admissão</label>
-                                  <input type="date" className="input-field" value={data.startDate} onChange={e => handleInputChange('startDate', e.target.value)} />
+                                  <label className={STYLES.LABEL_TEXT}>Data Admissão</label>
+                                  <input type="date" className={STYLES.INPUT_FIELD} value={data.startDate} onChange={e => handleInputChange('startDate', e.target.value)} />
                               </div>
                               <div>
-                                  <label className="label-text">Data Demissão / Ajuizamento</label>
-                                  <input type="date" className="input-field" value={data.endDate} onChange={e => handleInputChange('endDate', e.target.value)} />
+                                  <label className={STYLES.LABEL_TEXT}>Data Demissão / Ajuizamento</label>
+                                  <input type="date" className={STYLES.INPUT_FIELD} value={data.endDate} onChange={e => handleInputChange('endDate', e.target.value)} />
                               </div>
                               <div>
-                                  <label className="label-text">Último Salário Base (R$)</label>
-                                  <input type="number" className="input-field" value={data.baseSalary} onChange={e => handleInputChange('baseSalary', e.target.value)} placeholder="0.00" />
+                                  <label className={STYLES.LABEL_TEXT}>Último Salário Base (R$)</label>
+                                  <input type="number" className={STYLES.INPUT_FIELD} value={data.baseSalary} onChange={e => handleInputChange('baseSalary', e.target.value)} placeholder="0.00" />
                               </div>
                               <div>
-                                  <label className="label-text">Motivo da Rescisão</label>
-                                  <select className="input-field" value={data.terminationReason} onChange={e => handleInputChange('terminationReason', e.target.value)}>
+                                  <label className={STYLES.LABEL_TEXT}>Motivo da Rescisão</label>
+                                  <select className={STYLES.INPUT_FIELD} value={data.terminationReason} onChange={e => handleInputChange('terminationReason', e.target.value)}>
                                       <option value="sem_justa_causa">Dispensa Sem Justa Causa</option>
                                       <option value="rescisao_indireta">Rescisão Indireta</option>
                                       <option value="pedido_demissao">Pedido de Demissão</option>
@@ -731,22 +745,22 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   </select>
                               </div>
                               <div>
-                                  <label className="label-text">Aviso Prévio</label>
-                                  <select className="input-field" value={data.noticePeriod} onChange={e => handleInputChange('noticePeriod', e.target.value)}>
+                                  <label className={STYLES.LABEL_TEXT}>Aviso Prévio</label>
+                                  <select className={STYLES.INPUT_FIELD} value={data.noticePeriod} onChange={e => handleInputChange('noticePeriod', e.target.value)}>
                                       <option value="indenizado">Indenizado (Pago)</option>
                                       <option value="trabalhado">Trabalhado</option>
                                       <option value="dispensado">Dispensado</option>
                                   </select>
                               </div>
                               <div>
-                                  <label className="label-text">Saldo FGTS (Para Multa 40%)</label>
-                                  <input type="number" className="input-field" value={data.hasFgtsBalance} onChange={e => handleInputChange('hasFgtsBalance', e.target.value)} placeholder="Saldo em conta..." />
+                                  <label className={STYLES.LABEL_TEXT}>Saldo FGTS (Para Multa 40%)</label>
+                                  <input type="number" className={STYLES.INPUT_FIELD} value={data.hasFgtsBalance} onChange={e => handleInputChange('hasFgtsBalance', e.target.value)} placeholder="Saldo em conta..." />
                               </div>
                           </div>
                       </div>
                       
                       <div className="md:col-span-2 flex justify-end">
-                          <button onClick={() => setActiveTab(2)} className="btn-primary">
+                          <button onClick={() => setActiveTab(2)} className={STYLES.BTN_PRIMARY}>
                               Próxima Etapa <ArrowPathIcon className="h-4 w-4" />
                           </button>
                       </div>
@@ -758,15 +772,15 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                       
                       {/* Seção Adicionais Fixos */}
-                      <div className="card-section">
-                          <h3 className="card-title text-indigo-600 dark:text-indigo-400">
+                      <div className={STYLES.CARD_SECTION}>
+                          <h3 className={`${STYLES.CARD_TITLE} text-indigo-600 dark:text-indigo-400`}>
                               <PlusIcon className="h-5 w-5" /> Adicionais Recorrentes
                           </h3>
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                               <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                  <label className="label-text mb-2">Insalubridade</label>
+                                  <label className={`${STYLES.LABEL_TEXT} mb-2`}>Insalubridade</label>
                                   <select 
-                                      className="input-field" 
+                                      className={STYLES.INPUT_FIELD} 
                                       value={data.insalubridadeLevel} 
                                       onChange={e => handleInputChange('insalubridadeLevel', e.target.value)}
                                   >
@@ -807,7 +821,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                           </span>
                                       </label>
                                       {data.adicionalNoturno.active && (
-                                          <button onClick={addNightShiftPeriod} className="btn-secondary-sm text-[10px] py-1 px-2">
+                                          <button onClick={addNightShiftPeriod} className={`${STYLES.BTN_SECONDARY_SM} text-[10px] py-1 px-2`}>
                                               <PlusIcon className="h-3 w-3" /> Add Período
                                           </button>
                                       )}
@@ -823,10 +837,10 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                               <div key={period.id} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 relative">
                                                   <button onClick={() => removeNightShiftPeriod(period.id)} className="absolute top-1 right-1 text-slate-400 hover:text-red-500"><TrashIcon className="h-3 w-3" /></button>
                                                   <div>
-                                                      <label className="label-tiny">Horas/Mês (Média)</label>
+                                                      <label className={STYLES.LABEL_TINY}>Horas/Mês (Média)</label>
                                                       <input 
                                                           type="number" 
-                                                          className="input-tiny"
+                                                          className={STYLES.INPUT_TINY}
                                                           value={period.hoursPerMonth}
                                                           onChange={e => {
                                                               const newPeriods = [...data.adicionalNoturno.periods];
@@ -836,10 +850,10 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                       />
                                                   </div>
                                                   <div>
-                                                      <label className="label-tiny">Início</label>
+                                                      <label className={STYLES.LABEL_TINY}>Início</label>
                                                       <input 
                                                           type="date" 
-                                                          className="input-tiny"
+                                                          className={STYLES.INPUT_TINY}
                                                           value={period.startDate}
                                                           onChange={e => {
                                                               const newPeriods = [...data.adicionalNoturno.periods];
@@ -849,10 +863,10 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                       />
                                                   </div>
                                                   <div>
-                                                      <label className="label-tiny">Fim</label>
+                                                      <label className={STYLES.LABEL_TINY}>Fim</label>
                                                       <input 
                                                           type="date" 
-                                                          className="input-tiny"
+                                                          className={STYLES.INPUT_TINY}
                                                           value={period.endDate}
                                                           onChange={e => {
                                                               const newPeriods = [...data.adicionalNoturno.periods];
@@ -870,39 +884,39 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                       </div>
 
                       {/* Seção Diferença Salarial */}
-                      <div className="card-section">
+                      <div className={STYLES.CARD_SECTION}>
                           <div className="flex justify-between items-center mb-4">
-                              <h3 className="card-title text-green-600 dark:text-green-400">
+                              <h3 className={`${STYLES.CARD_TITLE} text-green-600 dark:text-green-400`}>
                                   <BanknotesIcon className="h-5 w-5" /> Diferença Salarial (Piso)
                               </h3>
-                              <button onClick={addWageGap} className="btn-secondary-sm"><PlusIcon className="h-3 w-3" /> Adicionar Período</button>
+                              <button onClick={addWageGap} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Período</button>
                           </div>
-                          {data.wageGap.length === 0 && <p className="empty-msg">Nenhum período de diferença salarial cadastrado.</p>}
+                          {data.wageGap.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum período de diferença salarial cadastrado.</p>}
                           {data.wageGap.map((gap, idx) => (
                               <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative group">
                                   <button onClick={() => removeWageGap(idx)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                       <div>
-                                          <label className="label-tiny">Início</label>
-                                          <input type="date" className="input-tiny" value={gap.startDate} onChange={(e) => {
+                                          <label className={STYLES.LABEL_TINY}>Início</label>
+                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.startDate} onChange={(e) => {
                                               const newGaps = [...data.wageGap]; newGaps[idx].startDate = e.target.value; setData({...data, wageGap: newGaps});
                                           }} />
                                       </div>
                                       <div>
-                                          <label className="label-tiny">Fim</label>
-                                          <input type="date" className="input-tiny" value={gap.endDate} onChange={(e) => {
+                                          <label className={STYLES.LABEL_TINY}>Fim</label>
+                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.endDate} onChange={(e) => {
                                               const newGaps = [...data.wageGap]; newGaps[idx].endDate = e.target.value; setData({...data, wageGap: newGaps});
                                           }} />
                                       </div>
                                       <div>
-                                          <label className="label-tiny">Salário Piso (Deveria ser)</label>
-                                          <input type="number" className="input-tiny font-bold text-green-600" value={gap.floorSalary} onChange={(e) => {
+                                          <label className={STYLES.LABEL_TINY}>Salário Piso (Deveria ser)</label>
+                                          <input type="number" className={`${STYLES.INPUT_TINY} font-bold text-green-600`} value={gap.floorSalary} onChange={(e) => {
                                               const newGaps = [...data.wageGap]; newGaps[idx].floorSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
                                           }} />
                                       </div>
                                       <div>
-                                          <label className="label-tiny">Salário Pago (Real)</label>
-                                          <input type="number" className="input-tiny" value={gap.paidSalary} onChange={(e) => {
+                                          <label className={STYLES.LABEL_TINY}>Salário Pago (Real)</label>
+                                          <input type="number" className={STYLES.INPUT_TINY} value={gap.paidSalary} onChange={(e) => {
                                               const newGaps = [...data.wageGap]; newGaps[idx].paidSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
                                           }} />
                                       </div>
@@ -912,24 +926,24 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                       </div>
 
                       {/* Seção Horas Extras */}
-                      <div className="card-section">
+                      <div className={STYLES.CARD_SECTION}>
                           <div className="flex justify-between items-center mb-4">
-                              <h3 className="card-title text-orange-600 dark:text-orange-400">
+                              <h3 className={`${STYLES.CARD_TITLE} text-orange-600 dark:text-orange-400`}>
                                   <ClockIcon className="h-5 w-5" /> Horas Extras em Lote
                               </h3>
-                              <button onClick={addOvertimeBatch} className="btn-secondary-sm"><PlusIcon className="h-3 w-3" /> Adicionar Lote</button>
+                              <button onClick={addOvertimeBatch} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Lote</button>
                           </div>
                           
-                          {data.overtime.length === 0 && <p className="empty-msg">Nenhum lote de horas extras cadastrado.</p>}
+                          {data.overtime.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum lote de horas extras cadastrado.</p>}
                           
                           {data.overtime.map((ot, idx) => (
                               <div key={ot.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative">
                                   <button onClick={() => removeOvertimeBatch(ot.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
                                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
                                       <div className="col-span-1">
-                                          <label className="label-tiny">Adicional (%)</label>
+                                          <label className={STYLES.LABEL_TINY}>Adicional (%)</label>
                                           <select 
-                                            className="input-tiny" 
+                                            className={STYLES.INPUT_TINY} 
                                             value={ot.percentage} 
                                             onChange={(e) => {
                                                 const newOt = [...data.overtime];
@@ -945,7 +959,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                           {ot.percentage === -1 && (
                                               <input 
                                                 type="number" 
-                                                className="input-tiny mt-1" 
+                                                className={`${STYLES.INPUT_TINY} mt-1`} 
                                                 placeholder="%" 
                                                 value={ot.customPercentage || ''}
                                                 onChange={(e) => {
@@ -957,20 +971,20 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                           )}
                                       </div>
                                       <div>
-                                          <label className="label-tiny">Horas/Mês (Média)</label>
-                                          <input type="number" className="input-tiny" value={ot.hoursPerMonth} onChange={(e) => {
+                                          <label className={STYLES.LABEL_TINY}>Horas/Mês (Média)</label>
+                                          <input type="number" className={STYLES.INPUT_TINY} value={ot.hoursPerMonth} onChange={(e) => {
                                               const newOt = [...data.overtime]; newOt[idx].hoursPerMonth = Number(e.target.value); setData({...data, overtime: newOt});
                                           }} />
                                       </div>
                                       <div>
-                                          <label className="label-tiny">De</label>
-                                          <input type="date" className="input-tiny" value={ot.startDate} onChange={(e) => {
+                                          <label className={STYLES.LABEL_TINY}>De</label>
+                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.startDate} onChange={(e) => {
                                               const newOt = [...data.overtime]; newOt[idx].startDate = e.target.value; setData({...data, overtime: newOt});
                                           }} />
                                       </div>
                                       <div>
-                                          <label className="label-tiny">Até</label>
-                                          <input type="date" className="input-tiny" value={ot.endDate} onChange={(e) => {
+                                          <label className={STYLES.LABEL_TINY}>Até</label>
+                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.endDate} onChange={(e) => {
                                               const newOt = [...data.overtime]; newOt[idx].endDate = e.target.value; setData({...data, overtime: newOt});
                                           }} />
                                       </div>
@@ -988,8 +1002,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                       </div>
 
                       <div className="md:col-span-2 flex justify-between">
-                          <button onClick={() => setActiveTab(1)} className="btn-secondary">Voltar</button>
-                          <button onClick={() => setActiveTab(3)} className="btn-primary">Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
+                          <button onClick={() => setActiveTab(1)} className={STYLES.BTN_SECONDARY}>Voltar</button>
+                          <button onClick={() => setActiveTab(3)} className={STYLES.BTN_PRIMARY}>Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
                       </div>
                   </div>
               )}
@@ -997,8 +1011,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
               {/* TAB 3: INDENIZAÇÕES E MULTAS */}
               {activeTab === 3 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                       <div className="card-section">
-                           <h3 className="card-title text-red-600 dark:text-red-400">
+                       <div className={STYLES.CARD_SECTION}>
+                           <h3 className={`${STYLES.CARD_TITLE} text-red-600 dark:text-red-400`}>
                                <ExclamationTriangleIcon className="h-5 w-5" /> Multas e Verbas Vencidas
                            </h3>
                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
@@ -1023,8 +1037,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                             <span className="text-xs font-semibold dark:text-slate-300">Férias em Dobro (Art. 137 CLT)</span>
                                        </label>
                                        <div>
-                                           <label className="label-tiny">Férias Vencidas (Qtd. Períodos Inteiros)</label>
-                                           <input type="number" className="input-tiny" value={data.vacationExpiredQty} onChange={e => handleInputChange('vacationExpiredQty', Number(e.target.value))} />
+                                           <label className={STYLES.LABEL_TINY}>Férias Vencidas (Qtd. Períodos Inteiros)</label>
+                                           <input type="number" className={STYLES.INPUT_TINY} value={data.vacationExpiredQty} onChange={e => handleInputChange('vacationExpiredQty', Number(e.target.value))} />
                                        </div>
                                    </div>
 
@@ -1035,26 +1049,26 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                             <span className="text-xs font-semibold dark:text-slate-300">Calcular Proporcional</span>
                                        </label>
                                        <div>
-                                           <label className="label-tiny">Meses Vencidos (Anos Anteriores)</label>
-                                           <input type="number" className="input-tiny" value={data.unpaid13thMonths} onChange={e => handleInputChange('unpaid13thMonths', Number(e.target.value))} />
+                                           <label className={STYLES.LABEL_TINY}>Meses Vencidos (Anos Anteriores)</label>
+                                           <input type="number" className={STYLES.INPUT_TINY} value={data.unpaid13thMonths} onChange={e => handleInputChange('unpaid13thMonths', Number(e.target.value))} />
                                        </div>
                                    </div>
                                </div>
                                <div className="space-y-4">
                                    <div>
-                                       <label className="label-text">Meses de FGTS não depositado</label>
-                                       <input type="number" className="input-field" value={data.unpaidFgtsMonths} onChange={e => handleInputChange('unpaidFgtsMonths', Number(e.target.value))} />
+                                       <label className={STYLES.LABEL_TEXT}>Meses de FGTS não depositado</label>
+                                       <input type="number" className={STYLES.INPUT_FIELD} value={data.unpaidFgtsMonths} onChange={e => handleInputChange('unpaidFgtsMonths', Number(e.target.value))} />
                                    </div>
                                    <div>
-                                       <label className="label-text">Indenização por Danos Morais (Estimativa R$)</label>
-                                       <input type="number" className="input-field" value={data.moralDamages} onChange={e => handleInputChange('moralDamages', Number(e.target.value))} placeholder="0.00" />
+                                       <label className={STYLES.LABEL_TEXT}>Indenização por Danos Morais (Estimativa R$)</label>
+                                       <input type="number" className={STYLES.INPUT_FIELD} value={data.moralDamages} onChange={e => handleInputChange('moralDamages', Number(e.target.value))} placeholder="0.00" />
                                    </div>
                                    
                                    <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
                                        <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">Honorários Advocatícios</h4>
-                                       <label className="label-tiny">Percentual de Sucumbência</label>
+                                       <label className={STYLES.LABEL_TINY}>Percentual de Sucumbência</label>
                                        <select 
-                                           className="input-tiny" 
+                                           className={STYLES.INPUT_TINY} 
                                            value={data.attorneyFees} 
                                            onChange={e => handleInputChange('attorneyFees', Number(e.target.value))}
                                        >
@@ -1072,8 +1086,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                        </div>
 
                        <div className="md:col-span-2 flex justify-between">
-                          <button onClick={() => setActiveTab(2)} className="btn-secondary">Voltar</button>
-                          <button onClick={() => setActiveTab(4)} className="btn-primary">Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
+                          <button onClick={() => setActiveTab(2)} className={STYLES.BTN_SECONDARY}>Voltar</button>
+                          <button onClick={() => setActiveTab(4)} className={STYLES.BTN_PRIMARY}>Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
                       </div>
                   </div>
               )}
@@ -1081,14 +1095,14 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
               {/* TAB 4: ESTABILIDADE GESTANTE */}
               {activeTab === 4 && (
                    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className="card-section bg-pink-50 dark:bg-pink-900/10 border-pink-100 dark:border-pink-900/30">
+                        <div className={`${STYLES.CARD_SECTION} bg-pink-50 dark:bg-pink-900/10 border-pink-100 dark:border-pink-900/30`}>
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="p-2 bg-pink-100 dark:bg-pink-900/40 rounded-full text-pink-600 dark:text-pink-400">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                                     </svg>
                                 </div>
-                                <h3 className="card-title text-pink-700 dark:text-pink-300 mb-0">Estabilidade Gestante / Rescisão Indireta</h3>
+                                <h3 className={`${STYLES.CARD_TITLE} text-pink-700 dark:text-pink-300 mb-0`}>Estabilidade Gestante / Rescisão Indireta</h3>
                             </div>
                             
                             <label className="flex items-center gap-3 cursor-pointer mb-6">
@@ -1106,20 +1120,20 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                             {data.stability.isPregnant && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-8 border-l-2 border-pink-200 dark:border-pink-800">
                                     <div>
-                                        <label className="label-text text-pink-700 dark:text-pink-300">Data do Parto (Real ou Provável)</label>
+                                        <label className={`${STYLES.LABEL_TEXT} text-pink-700 dark:text-pink-300`}>Data do Parto (Real ou Provável)</label>
                                         <input 
                                             type="date" 
-                                            className="input-field border-pink-200 focus:ring-pink-500" 
+                                            className={`${STYLES.INPUT_FIELD} border-pink-200 focus:ring-pink-500`} 
                                             value={data.stability.childBirthDate} 
                                             onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, childBirthDate: e.target.value } }))} 
                                         />
                                         <p className="text-xs text-slate-500 mt-1">O sistema calculará automaticamente 5 meses após esta data.</p>
                                     </div>
                                     <div>
-                                        <label className="label-text text-pink-700 dark:text-pink-300">Ou Data Final da Estabilidade (Manual)</label>
+                                        <label className={`${STYLES.LABEL_TEXT} text-pink-700 dark:text-pink-300`}>Ou Data Final da Estabilidade (Manual)</label>
                                         <input 
                                             type="date" 
-                                            className="input-field border-pink-200 focus:ring-pink-500" 
+                                            className={`${STYLES.INPUT_FIELD} border-pink-200 focus:ring-pink-500`} 
                                             value={data.stability.endDate} 
                                             onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, endDate: e.target.value } }))} 
                                         />
@@ -1129,7 +1143,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                         </div>
 
                         <div className="md:col-span-2 flex justify-between">
-                          <button onClick={() => setActiveTab(3)} className="btn-secondary">Voltar</button>
+                          <button onClick={() => setActiveTab(3)} className={STYLES.BTN_SECONDARY}>Voltar</button>
                           <button 
                             onClick={() => calculate()} 
                             className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-green-500/30 flex items-center gap-2 transform hover:scale-105 transition-all"
@@ -1199,27 +1213,6 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
           </div>
       </div>
       
-      {/* CSS Utility Classes for this component */}
-      <style>{`
-        .label-text { @apply block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5; }
-        .label-tiny { @apply block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1; }
-        
-        .input-field { @apply w-full px-4 py-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition text-sm font-medium shadow-sm; }
-        
-        .input-tiny { @apply w-full px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-semibold outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500; }
-        
-        .btn-primary { @apply px-5 py-2.5 text-white font-medium bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-500/30 transition flex items-center gap-2 transform active:scale-95; }
-        
-        .btn-secondary { @apply px-5 py-2.5 text-slate-600 dark:text-slate-300 font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition shadow-sm transform active:scale-95; }
-        
-        .btn-secondary-sm { @apply px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition; }
-        
-        .card-section { @apply bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800; }
-        
-        .card-title { @apply font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 text-lg; }
-        
-        .empty-msg { @apply text-center text-sm text-slate-500 dark:text-slate-400 italic py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/20; }
-      `}</style>
     </div>
   );
 }
