@@ -471,4 +471,327 @@ export default function LaborCalc() {
                                       <option value="dispensado">Dispensado</option>
                                   </select>
                               </div>
-                 
+                              <div>
+                                  <label className="label-text">Saldo FGTS (Para Multa 40%)</label>
+                                  <input type="number" className="input-field" value={data.hasFgtsBalance} onChange={e => handleInputChange('hasFgtsBalance', e.target.value)} placeholder="Saldo em conta..." />
+                              </div>
+                          </div>
+                      </div>
+                      
+                      <div className="md:col-span-2 flex justify-end">
+                          <button onClick={() => setActiveTab(2)} className="btn-primary">
+                              Próxima Etapa <ArrowPathIcon className="h-4 w-4" />
+                          </button>
+                      </div>
+                  </div>
+              )}
+
+              {/* TAB 2: VERBAS E LOTE */}
+              {activeTab === 2 && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      
+                      {/* Seção Diferença Salarial */}
+                      <div className="card-section">
+                          <div className="flex justify-between items-center mb-4">
+                              <h3 className="card-title text-green-600 dark:text-green-400">
+                                  <BanknotesIcon className="h-5 w-5" /> Diferença Salarial (Piso)
+                              </h3>
+                              <button onClick={addWageGap} className="btn-secondary-sm"><PlusIcon className="h-3 w-3" /> Adicionar Período</button>
+                          </div>
+                          {data.wageGap.length === 0 && <p className="empty-msg">Nenhum período de diferença salarial cadastrado.</p>}
+                          {data.wageGap.map((gap, idx) => (
+                              <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative group">
+                                  <button onClick={() => removeWageGap(idx)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                      <div>
+                                          <label className="label-tiny">Início</label>
+                                          <input type="date" className="input-tiny" value={gap.startDate} onChange={(e) => {
+                                              const newGaps = [...data.wageGap]; newGaps[idx].startDate = e.target.value; setData({...data, wageGap: newGaps});
+                                          }} />
+                                      </div>
+                                      <div>
+                                          <label className="label-tiny">Fim</label>
+                                          <input type="date" className="input-tiny" value={gap.endDate} onChange={(e) => {
+                                              const newGaps = [...data.wageGap]; newGaps[idx].endDate = e.target.value; setData({...data, wageGap: newGaps});
+                                          }} />
+                                      </div>
+                                      <div>
+                                          <label className="label-tiny">Salário Piso (Deveria ser)</label>
+                                          <input type="number" className="input-tiny font-bold text-green-600" value={gap.floorSalary} onChange={(e) => {
+                                              const newGaps = [...data.wageGap]; newGaps[idx].floorSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
+                                          }} />
+                                      </div>
+                                      <div>
+                                          <label className="label-tiny">Salário Pago (Real)</label>
+                                          <input type="number" className="input-tiny" value={gap.paidSalary} onChange={(e) => {
+                                              const newGaps = [...data.wageGap]; newGaps[idx].paidSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
+                                          }} />
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+
+                      {/* Seção Horas Extras */}
+                      <div className="card-section">
+                          <div className="flex justify-between items-center mb-4">
+                              <h3 className="card-title text-orange-600 dark:text-orange-400">
+                                  <ClockIcon className="h-5 w-5" /> Horas Extras em Lote
+                              </h3>
+                              <button onClick={addOvertimeBatch} className="btn-secondary-sm"><PlusIcon className="h-3 w-3" /> Adicionar Lote</button>
+                          </div>
+                          
+                          {data.overtime.length === 0 && <p className="empty-msg">Nenhum lote de horas extras cadastrado.</p>}
+                          
+                          {data.overtime.map((ot, idx) => (
+                              <div key={ot.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative">
+                                  <button onClick={() => removeOvertimeBatch(ot.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
+                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+                                      <div className="col-span-1">
+                                          <label className="label-tiny">Adicional (%)</label>
+                                          <select 
+                                            className="input-tiny" 
+                                            value={ot.percentage} 
+                                            onChange={(e) => {
+                                                const newOt = [...data.overtime];
+                                                newOt[idx].percentage = Number(e.target.value);
+                                                setData({...data, overtime: newOt});
+                                            }}
+                                          >
+                                              <option value={50}>50%</option>
+                                              <option value={60}>60%</option>
+                                              <option value={100}>100%</option>
+                                              <option value={-1}>Outro...</option>
+                                          </select>
+                                          {ot.percentage === -1 && (
+                                              <input 
+                                                type="number" 
+                                                className="input-tiny mt-1" 
+                                                placeholder="%" 
+                                                value={ot.customPercentage || ''}
+                                                onChange={(e) => {
+                                                    const newOt = [...data.overtime];
+                                                    newOt[idx].customPercentage = Number(e.target.value);
+                                                    setData({...data, overtime: newOt});
+                                                }}
+                                              />
+                                          )}
+                                      </div>
+                                      <div>
+                                          <label className="label-tiny">Horas/Mês (Média)</label>
+                                          <input type="number" className="input-tiny" value={ot.hoursPerMonth} onChange={(e) => {
+                                              const newOt = [...data.overtime]; newOt[idx].hoursPerMonth = Number(e.target.value); setData({...data, overtime: newOt});
+                                          }} />
+                                      </div>
+                                      <div>
+                                          <label className="label-tiny">De</label>
+                                          <input type="date" className="input-tiny" value={ot.startDate} onChange={(e) => {
+                                              const newOt = [...data.overtime]; newOt[idx].startDate = e.target.value; setData({...data, overtime: newOt});
+                                          }} />
+                                      </div>
+                                      <div>
+                                          <label className="label-tiny">Até</label>
+                                          <input type="date" className="input-tiny" value={ot.endDate} onChange={(e) => {
+                                              const newOt = [...data.overtime]; newOt[idx].endDate = e.target.value; setData({...data, overtime: newOt});
+                                          }} />
+                                      </div>
+                                      <div className="flex items-center h-10">
+                                           <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300 select-none">
+                                               <input type="checkbox" checked={ot.applyDsr} onChange={(e) => {
+                                                   const newOt = [...data.overtime]; newOt[idx].applyDsr = e.target.checked; setData({...data, overtime: newOt});
+                                               }} className="rounded text-indigo-600 focus:ring-indigo-500" />
+                                               Reflexo DSR
+                                           </label>
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+
+                      <div className="md:col-span-2 flex justify-between">
+                          <button onClick={() => setActiveTab(1)} className="btn-secondary">Voltar</button>
+                          <button onClick={() => setActiveTab(3)} className="btn-primary">Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
+                      </div>
+                  </div>
+              )}
+
+              {/* TAB 3: INDENIZAÇÕES E MULTAS */}
+              {activeTab === 3 && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                       <div className="card-section">
+                           <h3 className="card-title text-red-600 dark:text-red-400">
+                               <ExclamationTriangleIcon className="h-5 w-5" /> Multas e Verbas Vencidas
+                           </h3>
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                               <div className="space-y-3">
+                                   <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
+                                       <input type="checkbox" checked={data.applyFine477} onChange={e => handleInputChange('applyFine477', e.target.checked)} className="w-5 h-5 text-indigo-600 rounded" />
+                                       <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 477 (Atraso Pagamento)</span>
+                                   </label>
+                                   <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
+                                       <input type="checkbox" checked={data.applyFine467} onChange={e => handleInputChange('applyFine467', e.target.checked)} className="w-5 h-5 text-indigo-600 rounded" />
+                                       <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 467 (Verbas Incontroversas)</span>
+                                   </label>
+                               </div>
+                               <div className="space-y-4">
+                                   <div>
+                                       <label className="label-text">Férias Vencidas (Qtd. Períodos Inteiros)</label>
+                                       <input type="number" className="input-field" value={data.vacationExpiredQty} onChange={e => handleInputChange('vacationExpiredQty', Number(e.target.value))} />
+                                   </div>
+                                   <div>
+                                       <label className="label-text">Meses de FGTS não depositado</label>
+                                       <input type="number" className="input-field" value={data.unpaidFgtsMonths} onChange={e => handleInputChange('unpaidFgtsMonths', Number(e.target.value))} />
+                                   </div>
+                                   <div>
+                                       <label className="label-text">Meses de 13º Salário Vencidos</label>
+                                       <input type="number" className="input-field" value={data.unpaid13thMonths} onChange={e => handleInputChange('unpaid13thMonths', Number(e.target.value))} />
+                                   </div>
+                                   <div>
+                                       <label className="label-text">Indenização por Danos Morais (Estimativa R$)</label>
+                                       <input type="number" className="input-field" value={data.moralDamages} onChange={e => handleInputChange('moralDamages', Number(e.target.value))} placeholder="0.00" />
+                                   </div>
+                               </div>
+                           </div>
+                       </div>
+
+                       <div className="md:col-span-2 flex justify-between">
+                          <button onClick={() => setActiveTab(2)} className="btn-secondary">Voltar</button>
+                          <button onClick={() => setActiveTab(4)} className="btn-primary">Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
+                      </div>
+                  </div>
+              )}
+
+              {/* TAB 4: ESTABILIDADE GESTANTE */}
+              {activeTab === 4 && (
+                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <div className="card-section bg-pink-50 dark:bg-pink-900/10 border-pink-100 dark:border-pink-900/30">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 bg-pink-100 dark:bg-pink-900/40 rounded-full text-pink-600 dark:text-pink-400">
+                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                                    </svg>
+                                </div>
+                                <h3 className="card-title text-pink-700 dark:text-pink-300 mb-0">Estabilidade Gestante / Rescisão Indireta</h3>
+                            </div>
+                            
+                            <label className="flex items-center gap-3 cursor-pointer mb-6">
+                                <input 
+                                    type="checkbox" 
+                                    checked={data.stability.isPregnant} 
+                                    onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, isPregnant: e.target.checked } }))} 
+                                    className="w-5 h-5 text-pink-600 rounded focus:ring-pink-500" 
+                                />
+                                <span className="font-bold text-slate-700 dark:text-slate-200">
+                                    Calcular indenização do período de estabilidade gestacional
+                                </span>
+                            </label>
+
+                            {data.stability.isPregnant && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-8 border-l-2 border-pink-200 dark:border-pink-800">
+                                    <div>
+                                        <label className="label-text text-pink-700 dark:text-pink-300">Data do Parto (Real ou Provável)</label>
+                                        <input 
+                                            type="date" 
+                                            className="input-field border-pink-200 focus:ring-pink-500" 
+                                            value={data.stability.childBirthDate} 
+                                            onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, childBirthDate: e.target.value } }))} 
+                                        />
+                                        <p className="text-xs text-slate-500 mt-1">O sistema calculará automaticamente 5 meses após esta data.</p>
+                                    </div>
+                                    <div>
+                                        <label className="label-text text-pink-700 dark:text-pink-300">Ou Data Final da Estabilidade (Manual)</label>
+                                        <input 
+                                            type="date" 
+                                            className="input-field border-pink-200 focus:ring-pink-500" 
+                                            value={data.stability.endDate} 
+                                            onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, endDate: e.target.value } }))} 
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="md:col-span-2 flex justify-between">
+                          <button onClick={() => setActiveTab(3)} className="btn-secondary">Voltar</button>
+                          <button 
+                            onClick={calculate} 
+                            className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-green-500/30 flex items-center gap-2 transform hover:scale-105 transition-all"
+                          >
+                             <CalculatorIcon className="h-5 w-5" /> Calcular Tudo
+                          </button>
+                      </div>
+                   </div>
+              )}
+
+              {/* TAB 5: RESULTADOS */}
+              {activeTab === 5 && (
+                  <div className="animate-in zoom-in-95 duration-500 space-y-6">
+                      <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
+                          <div>
+                              <p className="text-slate-400 text-sm font-bold uppercase tracking-wider">Total Estimado Bruto</p>
+                              <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-500">
+                                  {formatCurrency(totalValue)}
+                              </p>
+                          </div>
+                          <div className="flex gap-3">
+                              <button onClick={() => setActiveTab(1)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-sm transition">
+                                  Revisar Dados
+                              </button>
+                              <button onClick={generatePDF} className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-bold text-sm shadow-lg shadow-indigo-500/50 flex items-center gap-2 transition">
+                                  <DocumentTextIcon className="h-5 w-5" /> PDF
+                              </button>
+                          </div>
+                      </div>
+
+                      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                          <table className="w-full text-left text-sm">
+                              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                                  <tr>
+                                      <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-400">Descrição</th>
+                                      <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-400 text-right">Valor</th>
+                                  </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                                  {calcResult.map((item, idx) => (
+                                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+                                          <td className="px-6 py-4">
+                                              <span className="block font-medium text-slate-800 dark:text-slate-200">{item.desc}</span>
+                                              <span className="text-xs text-slate-400 font-bold uppercase tracking-wide">{item.category}</span>
+                                          </td>
+                                          <td className="px-6 py-4 text-right font-mono text-slate-700 dark:text-slate-300 font-bold">
+                                              {formatCurrency(item.value)}
+                                          </td>
+                                      </tr>
+                                  ))}
+                              </tbody>
+                          </table>
+                      </div>
+                      
+                      <div className="bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-xl border border-yellow-100 dark:border-yellow-900/30 flex gap-3">
+                          <ExclamationTriangleIcon className="h-6 w-6 text-yellow-600 dark:text-yellow-500 shrink-0" />
+                          <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                              <strong>Atenção:</strong> Estes valores são estimativas baseadas nos dados inseridos e não substituem o cálculo oficial de liquidação de sentença. Verifique convenções coletivas para alíquotas específicas.
+                          </p>
+                      </div>
+                  </div>
+              )}
+
+          </div>
+      </div>
+      
+      {/* CSS Utility Classes for this component */}
+      <style>{`
+        .label-text { @apply block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5; }
+        .label-tiny { @apply block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mb-1; }
+        .input-field { @apply w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm dark:text-white; }
+        .input-tiny { @apply w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white; }
+        .btn-primary { @apply px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/20 transition flex items-center gap-2; }
+        .btn-secondary { @apply px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition; }
+        .btn-secondary-sm { @apply px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1; }
+        .card-section { @apply bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700; }
+        .card-title { @apply font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2; }
+        .empty-msg { @apply text-center text-sm text-slate-400 italic py-4 border-2 border-dashed border-slate-100 dark:border-slate-700 rounded-xl; }
+      `}</style>
+    </div>
+  );
+}
