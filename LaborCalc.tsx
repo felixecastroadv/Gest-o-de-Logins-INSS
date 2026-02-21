@@ -84,6 +84,8 @@ interface LaborData {
   vacationExpiredQty: number; // Quantas férias vencidas inteiras
   claim13thProportional: boolean;
   claimVacationProportional: boolean;
+  doubleVacation: boolean; // Férias em dobro (Art. 137 CLT)
+  attorneyFees: number; // 5, 10, 15, 20, 25, 30%
 }
 
 const INITIAL_LABOR_DATA: LaborData = {
@@ -107,7 +109,9 @@ const INITIAL_LABOR_DATA: LaborData = {
   unpaid13thMonths: 0,
   vacationExpiredQty: 0,
   claim13thProportional: true,
-  claimVacationProportional: true
+  claimVacationProportional: true,
+  doubleVacation: false,
+  attorneyFees: 0
 };
 
 // --- Helpers de Cálculo ---
@@ -305,8 +309,15 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
     if (salary) {
         // Vencidas
         if (calcData.vacationExpiredQty > 0) {
-            const vacValue = (salary + (salary / 3)) * calcData.vacationExpiredQty;
-            results.push({ desc: `Férias Vencidas + 1/3 (${calcData.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
+            let vacValue = (salary + (salary / 3)) * calcData.vacationExpiredQty;
+            
+            // Férias em Dobro (Art. 137 CLT)
+            if (calcData.doubleVacation) {
+                vacValue = vacValue * 2;
+                results.push({ desc: `Férias Vencidas em Dobro + 1/3 (${calcData.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
+            } else {
+                results.push({ desc: `Férias Vencidas + 1/3 (${calcData.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
+            }
         }
         
         // Proporcionais
@@ -468,6 +479,13 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
     // 11. Danos Morais
     if (calcData.moralDamages > 0) {
         results.push({ desc: `Indenização por Danos Morais`, value: Number(calcData.moralDamages), category: 'Indenizações' });
+    }
+
+    // 12. Honorários Advocatícios
+    const currentTotal = results.reduce((acc, curr) => acc + curr.value, 0);
+    if (calcData.attorneyFees > 0) {
+        const feesValue = currentTotal * (calcData.attorneyFees / 100);
+        results.push({ desc: `Honorários Advocatícios (${calcData.attorneyFees}%)`, value: feesValue, category: 'Honorários' });
     }
 
     // Finalizar
@@ -1000,6 +1018,10 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                             <input type="checkbox" checked={data.claimVacationProportional} onChange={e => handleInputChange('claimVacationProportional', e.target.checked)} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
                                             <span className="text-xs font-semibold dark:text-slate-300">Calcular Proporcionais + 1/3</span>
                                        </label>
+                                       <label className="flex items-center gap-3 mb-2 cursor-pointer">
+                                            <input type="checkbox" checked={data.doubleVacation} onChange={e => handleInputChange('doubleVacation', e.target.checked)} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
+                                            <span className="text-xs font-semibold dark:text-slate-300">Férias em Dobro (Art. 137 CLT)</span>
+                                       </label>
                                        <div>
                                            <label className="label-tiny">Férias Vencidas (Qtd. Períodos Inteiros)</label>
                                            <input type="number" className="input-tiny" value={data.vacationExpiredQty} onChange={e => handleInputChange('vacationExpiredQty', Number(e.target.value))} />
@@ -1026,6 +1048,24 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                    <div>
                                        <label className="label-text">Indenização por Danos Morais (Estimativa R$)</label>
                                        <input type="number" className="input-field" value={data.moralDamages} onChange={e => handleInputChange('moralDamages', Number(e.target.value))} placeholder="0.00" />
+                                   </div>
+                                   
+                                   <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">Honorários Advocatícios</h4>
+                                       <label className="label-tiny">Percentual de Sucumbência</label>
+                                       <select 
+                                           className="input-tiny" 
+                                           value={data.attorneyFees} 
+                                           onChange={e => handleInputChange('attorneyFees', Number(e.target.value))}
+                                       >
+                                           <option value={0}>Não aplicar</option>
+                                           <option value={5}>5%</option>
+                                           <option value={10}>10%</option>
+                                           <option value={15}>15%</option>
+                                           <option value={20}>20%</option>
+                                           <option value={25}>25%</option>
+                                           <option value={30}>30%</option>
+                                       </select>
                                    </div>
                                </div>
                            </div>
