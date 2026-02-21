@@ -82,6 +82,8 @@ interface LaborData {
   unpaidFgtsMonths: number; // Quantos meses não foi depositado
   unpaid13thMonths: number; // Meses de 13o não pagos
   vacationExpiredQty: number; // Quantas férias vencidas inteiras
+  claim13thProportional: boolean;
+  claimVacationProportional: boolean;
 }
 
 const INITIAL_LABOR_DATA: LaborData = {
@@ -103,7 +105,9 @@ const INITIAL_LABOR_DATA: LaborData = {
   moralDamages: 0,
   unpaidFgtsMonths: 0,
   unpaid13thMonths: 0,
-  vacationExpiredQty: 0
+  vacationExpiredQty: 0,
+  claim13thProportional: true,
+  claimVacationProportional: true
 };
 
 // --- Helpers de Cálculo ---
@@ -282,11 +286,13 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
 
     // 3. 13º Salário Proporcional
     if (end && salary) {
-        const monthsWorkedYear = end.getMonth() + 1; // Simplificado
-        // Se trabalhou mais que 15 dias no mês conta como mês cheio
-        const effectiveMonths = end.getDate() > 14 ? monthsWorkedYear : monthsWorkedYear - 1;
-        const thirteenth = (salary / 12) * effectiveMonths;
-        results.push({ desc: `13º Salário Proporcional (${effectiveMonths}/12)`, value: thirteenth, category: 'Rescisórias' });
+        if (calcData.claim13thProportional) {
+            const monthsWorkedYear = end.getMonth() + 1; // Simplificado
+            // Se trabalhou mais que 15 dias no mês conta como mês cheio
+            const effectiveMonths = end.getDate() > 14 ? monthsWorkedYear : monthsWorkedYear - 1;
+            const thirteenth = (salary / 12) * effectiveMonths;
+            results.push({ desc: `13º Salário Proporcional (${effectiveMonths}/12)`, value: thirteenth, category: 'Rescisórias' });
+        }
         
         // 13º Vencidos (Input manual de meses não pagos)
         if (calcData.unpaid13thMonths > 0) {
@@ -304,7 +310,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
         }
         
         // Proporcionais
-        if (end) {
+        if (end && calcData.claimVacationProportional) {
             const monthsWorkedYear = end.getMonth() + 1; // Simplificado considerando ano corrente
             const effectiveMonths = end.getDate() > 14 ? monthsWorkedYear : monthsWorkedYear - 1;
             const vacProp = (salary / 12) * effectiveMonths;
@@ -987,19 +993,35 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                        <input type="checkbox" checked={data.applyFine467} onChange={e => handleInputChange('applyFine467', e.target.checked)} className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
                                        <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 467 (Verbas Incontroversas)</span>
                                    </label>
+                                   
+                                   <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">Férias</h4>
+                                       <label className="flex items-center gap-3 mb-2 cursor-pointer">
+                                            <input type="checkbox" checked={data.claimVacationProportional} onChange={e => handleInputChange('claimVacationProportional', e.target.checked)} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
+                                            <span className="text-xs font-semibold dark:text-slate-300">Calcular Proporcionais + 1/3</span>
+                                       </label>
+                                       <div>
+                                           <label className="label-tiny">Férias Vencidas (Qtd. Períodos Inteiros)</label>
+                                           <input type="number" className="input-tiny" value={data.vacationExpiredQty} onChange={e => handleInputChange('vacationExpiredQty', Number(e.target.value))} />
+                                       </div>
+                                   </div>
+
+                                   <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">13º Salário</h4>
+                                       <label className="flex items-center gap-3 mb-2 cursor-pointer">
+                                            <input type="checkbox" checked={data.claim13thProportional} onChange={e => handleInputChange('claim13thProportional', e.target.checked)} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
+                                            <span className="text-xs font-semibold dark:text-slate-300">Calcular Proporcional</span>
+                                       </label>
+                                       <div>
+                                           <label className="label-tiny">Meses Vencidos (Anos Anteriores)</label>
+                                           <input type="number" className="input-tiny" value={data.unpaid13thMonths} onChange={e => handleInputChange('unpaid13thMonths', Number(e.target.value))} />
+                                       </div>
+                                   </div>
                                </div>
                                <div className="space-y-4">
                                    <div>
-                                       <label className="label-text">Férias Vencidas (Qtd. Períodos Inteiros)</label>
-                                       <input type="number" className="input-field" value={data.vacationExpiredQty} onChange={e => handleInputChange('vacationExpiredQty', Number(e.target.value))} />
-                                   </div>
-                                   <div>
                                        <label className="label-text">Meses de FGTS não depositado</label>
                                        <input type="number" className="input-field" value={data.unpaidFgtsMonths} onChange={e => handleInputChange('unpaidFgtsMonths', Number(e.target.value))} />
-                                   </div>
-                                   <div>
-                                       <label className="label-text">Meses de 13º Salário Vencidos</label>
-                                       <input type="number" className="input-field" value={data.unpaid13thMonths} onChange={e => handleInputChange('unpaid13thMonths', Number(e.target.value))} />
                                    </div>
                                    <div>
                                        <label className="label-text">Indenização por Danos Morais (Estimativa R$)</label>
