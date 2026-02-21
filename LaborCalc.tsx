@@ -145,6 +145,211 @@ const diffMonths = (d1: Date, d2: Date) => {
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+const calculateLaborResults = (calcData: LaborData) => {
+    const results = [];
+    const start = parseDate(calcData.startDate);
+    const end = parseDate(calcData.endDate);
+    const salary = Number(calcData.baseSalary);
+
+    if (!salary) return [];
+
+    // 1. Saldo de Salário
+    if (end && salary) {
+        const daysWorked = end.getDate();
+        const balance = (salary / 30) * daysWorked;
+        results.push({ desc: `Saldo de Salário (${daysWorked} dias)`, value: balance, category: 'Rescisórias' });
+    }
+
+    // 2. Aviso Prévio
+    if (start && end && salary && calcData.noticePeriod === 'indenizado' && calcData.terminationReason !== 'justa_causa' && calcData.terminationReason !== 'pedido_demissao') {
+        const years = Math.floor(diffMonths(start, end) / 12);
+        const extraDays = Math.min(years * 3, 60); // Lei 12.506
+        const totalDays = 30 + extraDays;
+        const noticeValue = (salary / 30) * totalDays;
+        results.push({ desc: `Aviso Prévio Indenizado (${totalDays} dias)`, value: noticeValue, category: 'Rescisórias' });
+    }
+
+    // 3. 13º Salário Proporcional
+    if (end && salary) {
+        if (calcData.claim13thProportional) {
+            const monthsWorkedYear = end.getMonth() + 1; // Simplificado
+            const effectiveMonths = end.getDate() > 14 ? monthsWorkedYear : monthsWorkedYear - 1;
+            const thirteenth = (salary / 12) * effectiveMonths;
+            results.push({ desc: `13º Salário Proporcional (${effectiveMonths}/12)`, value: thirteenth, category: 'Rescisórias' });
+        }
+        
+        if (calcData.unpaid13thMonths > 0) {
+            const unpaid13th = (salary / 12) * calcData.unpaid13thMonths;
+            results.push({ desc: `13º Salário Vencidos (${calcData.unpaid13thMonths} meses)`, value: unpaid13th, category: 'Rescisórias' });
+        }
+    }
+
+    // 4. Férias
+    if (salary) {
+        if (calcData.vacationExpiredQty > 0) {
+            let vacValue = (salary + (salary / 3)) * calcData.vacationExpiredQty;
+            if (calcData.doubleVacation) {
+                vacValue = vacValue * 2;
+                results.push({ desc: `Férias Vencidas em Dobro + 1/3 (${calcData.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
+            } else {
+                results.push({ desc: `Férias Vencidas + 1/3 (${calcData.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
+            }
+        }
+        
+        if (end && calcData.claimVacationProportional) {
+            const monthsWorkedYear = end.getMonth() + 1;
+            const effectiveMonths = end.getDate() > 14 ? monthsWorkedYear : monthsWorkedYear - 1;
+            const vacProp = (salary / 12) * effectiveMonths;
+            const vacPropTotal = vacProp + (vacProp / 3);
+            results.push({ desc: `Férias Proporcionais + 1/3 (${effectiveMonths}/12)`, value: vacPropTotal, category: 'Rescisórias' });
+        }
+    }
+
+    // 5. Adicionais
+    if (start && end) {
+        const monthsWorked = diffMonths(start, end);
+        const minimumWage = 1412;
+        
+        if (calcData.insalubridadeLevel !== 'nenhum') {
+            let perc = 0;
+            if (calcData.insalubridadeLevel === 'minimo') perc = 0.10;
+            if (calcData.insalubridadeLevel === 'medio') perc = 0.20;
+            if (calcData.insalubridadeLevel === 'maximo') perc = 0.40;
+            
+            const monthlyVal = minimumWage * perc;
+            const totalInsalub = monthlyVal * monthsWorked;
+            results.push({ desc: `Adicional Insalubridade (${perc * 100}% s/ Mínimo - ${monthsWorked} meses)`, value: totalInsalub, category: 'Adicionais' });
+            results.push({ desc: `Reflexos Insalubridade (Férias, 13º, FGTS)`, value: totalInsalub * 0.3, category: 'Reflexos' });
+        }
+
+        if (calcData.periculosidade && salary) {
+            const monthlyVal = salary * 0.30;
+            const totalPeric = monthlyVal * monthsWorked;
+            results.push({ desc: `Adicional Periculosidade (30% - ${monthsWorked} meses)`, value: totalPeric, category: 'Adicionais' });
+            results.push({ desc: `Reflexos Periculosidade (Férias, 13º, FGTS)`, value: totalPeric * 0.3, category: 'Reflexos' });
+        }
+
+        if (calcData.adicionalNoturno.active && salary) {
+            const hourlyRate = salary / 220;
+            const nightRate = hourlyRate * 0.20;
+            
+            calcData.adicionalNoturno.periods.forEach((period, idx) => {
+                const pStart = parseDate(period.startDate) || start;
+                const pEnd = parseDate(period.endDate) || end;
+                
+                if (pStart && pEnd && period.hoursPerMonth > 0) {
+                    const months = diffMonths(pStart, pEnd);
+                    const monthlyVal = nightRate * period.hoursPerMonth;
+                    const totalNight = monthlyVal * months;
+                    
+                    results.push({ desc: `Adicional Noturno (${period.hoursPerMonth}h/mês - ${months} meses - Período ${idx + 1})`, value: totalNight, category: 'Adicionais' });
+                    results.push({ desc: `Reflexos Ad. Noturno (Férias, 13º, FGTS, DSR) - Período ${idx + 1}`, value: totalNight * 0.35, category: 'Reflexos' });
+                }
+            });
+        }
+    }
+
+    // 6. Diferença Salarial
+    calcData.wageGap.forEach((gap, idx) => {
+        const gapStart = parseDate(gap.startDate) || start;
+        const gapEnd = parseDate(gap.endDate) || end;
+        
+        if (gapStart && gapEnd && gap.floorSalary > gap.paidSalary) {
+            const months = diffMonths(gapStart, gapEnd);
+            const diffValue = (gap.floorSalary - gap.paidSalary) * months;
+            results.push({ desc: `Diferença Salarial (Período ${idx + 1}: ${months} meses)`, value: diffValue, category: 'Salários' });
+            const reflex = diffValue * 0.3;
+            results.push({ desc: `Reflexos s/ Diferença Salarial (Est. 30%)`, value: reflex, category: 'Reflexos' });
+        }
+    });
+
+    // 7. Horas Extras
+    calcData.overtime.forEach((ot, idx) => {
+        const otStart = parseDate(ot.startDate) || start;
+        const otEnd = parseDate(ot.endDate) || end;
+        
+        if (otStart && otEnd && ot.hoursPerMonth > 0) {
+            const months = diffMonths(otStart, otEnd);
+            const perc = ot.percentage === -1 ? (ot.customPercentage || 50) : ot.percentage;
+            
+            const hourlyRate = salary / 220;
+            const otRate = hourlyRate * (1 + (perc / 100));
+            const totalOt = otRate * ot.hoursPerMonth * months;
+            
+            results.push({ desc: `Horas Extras ${perc}% (${ot.hoursPerMonth}h/mês x ${months} meses)`, value: totalOt, category: 'Horas Extras' });
+            
+            if (ot.applyDsr) {
+                const dsr = totalOt * 0.1666;
+                results.push({ desc: `DSR sobre H.E. (Lote ${idx+1})`, value: dsr, category: 'Horas Extras' });
+            }
+        }
+    });
+
+    // 8. Estabilidade Gestante
+    if (calcData.stability.isPregnant && salary) {
+        let stabEnd = parseDate(calcData.stability.endDate);
+        const stabStart = end || new Date();
+        
+        if (!stabEnd && calcData.stability.childBirthDate) {
+            const birth = parseDate(calcData.stability.childBirthDate);
+            if (birth) {
+                stabEnd = new Date(birth);
+                stabEnd.setMonth(stabEnd.getMonth() + 5);
+            }
+        }
+
+        if (stabEnd && stabEnd > stabStart) {
+            const monthsStab = diffMonths(stabStart, stabEnd);
+            const stabValue = salary * monthsStab;
+            results.push({ desc: `Indenização Estabilidade Gestante (${monthsStab} meses)`, value: stabValue, category: 'Indenizações' });
+        }
+    }
+
+    // 9. FGTS + 40%
+    if (calcData.unpaidFgtsMonths > 0 && salary) {
+        const unpaidFgts = (salary * 0.08) * calcData.unpaidFgtsMonths;
+        results.push({ desc: `FGTS Não Depositado (${calcData.unpaidFgtsMonths} meses)`, value: unpaidFgts, category: 'FGTS' });
+    }
+    
+    let totalFgtsBase = Number(calcData.hasFgtsBalance) || 0;
+    const rescisaoFgtsBase = results
+        .filter(r => ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais'].includes(r.category))
+        .reduce((sum, item) => sum + item.value, 0);
+    
+    totalFgtsBase += (rescisaoFgtsBase * 0.08);
+
+    if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta') {
+        const fine40 = totalFgtsBase * 0.4;
+        results.push({ desc: `Multa 40% do FGTS (Estimada)`, value: fine40, category: 'FGTS' });
+    }
+
+    // 10. Multas CLT
+    if (calcData.applyFine477 && salary) {
+        results.push({ desc: `Multa Art. 477 (Atraso)`, value: salary, category: 'Multas' });
+    }
+    
+    if (calcData.applyFine467) {
+        const incontroverso = results
+            .filter(r => r.category === 'Rescisórias')
+            .reduce((sum, item) => sum + item.value, 0);
+        results.push({ desc: `Multa Art. 467 (50% Incontroverso)`, value: incontroverso * 0.5, category: 'Multas' });
+    }
+
+    // 11. Danos Morais
+    if (calcData.moralDamages > 0) {
+        results.push({ desc: `Indenização por Danos Morais`, value: Number(calcData.moralDamages), category: 'Indenizações' });
+    }
+
+    // 12. Honorários Advocatícios
+    const currentTotal = results.reduce((acc, curr) => acc + curr.value, 0);
+    if (calcData.attorneyFees > 0) {
+        const feesValue = currentTotal * (calcData.attorneyFees / 100);
+        results.push({ desc: `Honorários Advocatícios (${calcData.attorneyFees}%)`, value: feesValue, category: 'Honorários' });
+    }
+
+    return results;
+};
+
 interface LaborCalcProps {
     clients?: ClientRecord[];
     contracts?: ContractRecord[];
@@ -274,246 +479,27 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
 
   // --- ENGINE DE CÁLCULO ---
   const calculate = (calcData = data) => {
-    const results = [];
-    let total = 0;
-
-    const start = parseDate(calcData.startDate);
-    const end = parseDate(calcData.endDate);
-    const salary = Number(calcData.baseSalary);
-
-    if (!salary) {
-        // alert("Por favor, insira ao menos o Salário Base para estimativa.");
-        // Não alertar se for chamado internamente
-    }
-
-    // 1. Saldo de Salário
-    if (end && salary) {
-        const daysWorked = end.getDate();
-        const balance = (salary / 30) * daysWorked;
-        results.push({ desc: `Saldo de Salário (${daysWorked} dias)`, value: balance, category: 'Rescisórias' });
-    }
-
-    // 2. Aviso Prévio
-    if (start && end && salary && calcData.noticePeriod === 'indenizado' && calcData.terminationReason !== 'justa_causa' && calcData.terminationReason !== 'pedido_demissao') {
-        const years = Math.floor(diffMonths(start, end) / 12);
-        const extraDays = Math.min(years * 3, 60); // Lei 12.506
-        const totalDays = 30 + extraDays;
-        const noticeValue = (salary / 30) * totalDays;
-        results.push({ desc: `Aviso Prévio Indenizado (${totalDays} dias)`, value: noticeValue, category: 'Rescisórias' });
-    }
-
-    // 3. 13º Salário Proporcional
-    if (end && salary) {
-        if (calcData.claim13thProportional) {
-            const monthsWorkedYear = end.getMonth() + 1; // Simplificado
-            // Se trabalhou mais que 15 dias no mês conta como mês cheio
-            const effectiveMonths = end.getDate() > 14 ? monthsWorkedYear : monthsWorkedYear - 1;
-            const thirteenth = (salary / 12) * effectiveMonths;
-            results.push({ desc: `13º Salário Proporcional (${effectiveMonths}/12)`, value: thirteenth, category: 'Rescisórias' });
-        }
-        
-        // 13º Vencidos (Input manual de meses não pagos)
-        if (calcData.unpaid13thMonths > 0) {
-            const unpaid13th = (salary / 12) * calcData.unpaid13thMonths;
-            results.push({ desc: `13º Salário Vencidos (${calcData.unpaid13thMonths} meses)`, value: unpaid13th, category: 'Rescisórias' });
-        }
-    }
-
-    // 4. Férias
-    if (salary) {
-        // Vencidas
-        if (calcData.vacationExpiredQty > 0) {
-            let vacValue = (salary + (salary / 3)) * calcData.vacationExpiredQty;
-            
-            // Férias em Dobro (Art. 137 CLT)
-            if (calcData.doubleVacation) {
-                vacValue = vacValue * 2;
-                results.push({ desc: `Férias Vencidas em Dobro + 1/3 (${calcData.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
-            } else {
-                results.push({ desc: `Férias Vencidas + 1/3 (${calcData.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
-            }
-        }
-        
-        // Proporcionais
-        if (end && calcData.claimVacationProportional) {
-            const monthsWorkedYear = end.getMonth() + 1; // Simplificado considerando ano corrente
-            const effectiveMonths = end.getDate() > 14 ? monthsWorkedYear : monthsWorkedYear - 1;
-            const vacProp = (salary / 12) * effectiveMonths;
-            const vacPropTotal = vacProp + (vacProp / 3);
-            results.push({ desc: `Férias Proporcionais + 1/3 (${effectiveMonths}/12)`, value: vacPropTotal, category: 'Rescisórias' });
-        }
-    }
-
-    // 5. Adicionais (Insalubridade, Periculosidade, Noturno)
-    if (start && end) {
-        const monthsWorked = diffMonths(start, end);
-        const minimumWage = 1412; // Salário Mínimo 2024 (Base Insalubridade)
-        
-        // Insalubridade (Base Salário Mínimo)
-        if (calcData.insalubridadeLevel !== 'nenhum') {
-            let perc = 0;
-            if (calcData.insalubridadeLevel === 'minimo') perc = 0.10;
-            if (calcData.insalubridadeLevel === 'medio') perc = 0.20;
-            if (calcData.insalubridadeLevel === 'maximo') perc = 0.40;
-            
-            const monthlyVal = minimumWage * perc;
-            const totalInsalub = monthlyVal * monthsWorked;
-            results.push({ desc: `Adicional Insalubridade (${perc * 100}% s/ Mínimo - ${monthsWorked} meses)`, value: totalInsalub, category: 'Adicionais' });
-            
-            // Reflexos
-            results.push({ desc: `Reflexos Insalubridade (Férias, 13º, FGTS)`, value: totalInsalub * 0.3, category: 'Reflexos' });
-        }
-
-        // Periculosidade (Base Salário Base)
-        if (calcData.periculosidade && salary) {
-            const monthlyVal = salary * 0.30;
-            const totalPeric = monthlyVal * monthsWorked;
-            results.push({ desc: `Adicional Periculosidade (30% - ${monthsWorked} meses)`, value: totalPeric, category: 'Adicionais' });
-            
-            // Reflexos
-            results.push({ desc: `Reflexos Periculosidade (Férias, 13º, FGTS)`, value: totalPeric * 0.3, category: 'Reflexos' });
-        }
-
-        // Adicional Noturno
-        if (calcData.adicionalNoturno.active && salary) {
-            const hourlyRate = salary / 220;
-            const nightRate = hourlyRate * 0.20; // 20% Urbano
-            
-            calcData.adicionalNoturno.periods.forEach((period, idx) => {
-                const pStart = parseDate(period.startDate) || start;
-                const pEnd = parseDate(period.endDate) || end;
-                
-                if (pStart && pEnd && period.hoursPerMonth > 0) {
-                    const months = diffMonths(pStart, pEnd);
-                    const monthlyVal = nightRate * period.hoursPerMonth;
-                    const totalNight = monthlyVal * months;
-                    
-                    results.push({ desc: `Adicional Noturno (${period.hoursPerMonth}h/mês - ${months} meses - Período ${idx + 1})`, value: totalNight, category: 'Adicionais' });
-                    results.push({ desc: `Reflexos Ad. Noturno (Férias, 13º, FGTS, DSR) - Período ${idx + 1}`, value: totalNight * 0.35, category: 'Reflexos' });
-                }
-            });
-        }
-    }
-
-    // 6. Diferença Salarial
-    calcData.wageGap.forEach((gap, idx) => {
-        const gapStart = parseDate(gap.startDate) || start;
-        const gapEnd = parseDate(gap.endDate) || end;
-        
-        if (gapStart && gapEnd && gap.floorSalary > gap.paidSalary) {
-            const months = diffMonths(gapStart, gapEnd);
-            const diffValue = (gap.floorSalary - gap.paidSalary) * months;
-            results.push({ desc: `Diferença Salarial (Período ${idx + 1}: ${months} meses)`, value: diffValue, category: 'Salários' });
-            
-            // Reflexos básicos (Férias + 13 + FGTS) estimativa rápida
-            const reflex = diffValue * 0.3; // ~30% de reflexos
-            results.push({ desc: `Reflexos s/ Diferença Salarial (Est. 30%)`, value: reflex, category: 'Reflexos' });
-        }
-    });
-
-    // 7. Horas Extras (Lote)
-    calcData.overtime.forEach((ot, idx) => {
-        const otStart = parseDate(ot.startDate) || start;
-        const otEnd = parseDate(ot.endDate) || end;
-        
-        if (otStart && otEnd && ot.hoursPerMonth > 0) {
-            const months = diffMonths(otStart, otEnd);
-            const perc = ot.percentage === -1 ? (ot.customPercentage || 50) : ot.percentage;
-            
-            // Valor da hora
-            const hourlyRate = salary / 220; // Divisor padrão, poderia ser customizável
-            const otRate = hourlyRate * (1 + (perc / 100));
-            const totalOt = otRate * ot.hoursPerMonth * months;
-            
-            results.push({ desc: `Horas Extras ${perc}% (${ot.hoursPerMonth}h/mês x ${months} meses)`, value: totalOt, category: 'Horas Extras' });
-            
-            if (ot.applyDsr) {
-                const dsr = totalOt * 0.1666; // Est. média de DSR
-                results.push({ desc: `DSR sobre H.E. (Lote ${idx+1})`, value: dsr, category: 'Horas Extras' });
-            }
-        }
-    });
-
-    // 8. Estabilidade Gestante
-    if (calcData.stability.isPregnant && salary) {
-        let stabEnd = parseDate(calcData.stability.endDate);
-        const stabStart = end || new Date();
-        
-        // Se não tem data fim, calcula parto + 5 meses
-        if (!stabEnd && calcData.stability.childBirthDate) {
-            const birth = parseDate(calcData.stability.childBirthDate);
-            if (birth) {
-                stabEnd = new Date(birth);
-                stabEnd.setMonth(stabEnd.getMonth() + 5);
-            }
-        }
-
-        if (stabEnd && stabEnd > stabStart) {
-            const monthsStab = diffMonths(stabStart, stabEnd);
-            const stabValue = salary * monthsStab;
-            results.push({ desc: `Indenização Estabilidade Gestante (${monthsStab} meses)`, value: stabValue, category: 'Indenizações' });
-        }
-    }
-
-    // 9. FGTS + 40%
-    // Sobre salários não pagos
-    if (calcData.unpaidFgtsMonths > 0 && salary) {
-        const unpaidFgts = (salary * 0.08) * calcData.unpaidFgtsMonths;
-        results.push({ desc: `FGTS Não Depositado (${calcData.unpaidFgtsMonths} meses)`, value: unpaidFgts, category: 'FGTS' });
-    }
-    
-    // Multa 40% (Sobre saldo existente + o que foi gerado na rescisão estimada)
-    let totalFgtsBase = Number(calcData.hasFgtsBalance) || 0;
-    // Adiciona o FGTS da rescisão (Aviso + 13o) aprox
-    // Simplificação: Soma dos valores salariais calculados * 8%
-    const rescisaoFgtsBase = results
-        .filter(r => ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais'].includes(r.category))
-        .reduce((sum, item) => sum + item.value, 0);
-    
-    totalFgtsBase += (rescisaoFgtsBase * 0.08);
-
-    if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta') {
-        const fine40 = totalFgtsBase * 0.4;
-        results.push({ desc: `Multa 40% do FGTS (Estimada)`, value: fine40, category: 'FGTS' });
-    }
-
-    // 10. Multas CLT
-    if (calcData.applyFine477 && salary) {
-        results.push({ desc: `Multa Art. 477 (Atraso)`, value: salary, category: 'Multas' });
-    }
-    
-    // Calcula subtotal para a multa do 467 (50% sobre verbas rescisórias incontroversas)
-    if (calcData.applyFine467) {
-        const incontroverso = results
-            .filter(r => r.category === 'Rescisórias')
-            .reduce((sum, item) => sum + item.value, 0);
-        results.push({ desc: `Multa Art. 467 (50% Incontroverso)`, value: incontroverso * 0.5, category: 'Multas' });
-    }
-
-    // 11. Danos Morais
-    if (calcData.moralDamages > 0) {
-        results.push({ desc: `Indenização por Danos Morais`, value: Number(calcData.moralDamages), category: 'Indenizações' });
-    }
-
-    // 12. Honorários Advocatícios
-    const currentTotal = results.reduce((acc, curr) => acc + curr.value, 0);
-    if (calcData.attorneyFees > 0) {
-        const feesValue = currentTotal * (calcData.attorneyFees / 100);
-        results.push({ desc: `Honorários Advocatícios (${calcData.attorneyFees}%)`, value: feesValue, category: 'Honorários' });
-    }
-
-    // Finalizar
+    const results = calculateLaborResults(calcData);
     setCalcResult(results);
     setTotalValue(results.reduce((acc, curr) => acc + curr.value, 0));
     setActiveTab(5); // Ir para resultados
   };
 
-  const generatePDF = () => {
+  const generatePDF = (calcDataInput?: LaborData) => {
       // @ts-ignore
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 20;
+      
+      const dataToUse = calcDataInput || data;
+      let resultsToUse = calcResult;
+      let totalToUse = totalValue;
+
+      if (calcDataInput) {
+          resultsToUse = calculateLaborResults(calcDataInput);
+          totalToUse = resultsToUse.reduce((acc, curr) => acc + curr.value, 0);
+      }
       
       // Header
       doc.setFillColor(30, 58, 138); // Primary Blue
@@ -538,14 +524,14 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       y += 10;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(10);
-      doc.text(`Cliente: ${data.employeeName || 'Não informado'}`, margin, y);
+      doc.text(`Cliente: ${dataToUse.employeeName || 'Não informado'}`, margin, y);
       doc.text(`Data Base: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth - margin, y, { align: "right" });
       y += 6;
-      doc.text(`Admissão: ${data.startDate ? new Date(data.startDate).toLocaleDateString('pt-BR') : '-'}`, margin, y);
-      doc.text(`Demissão: ${data.endDate ? new Date(data.endDate).toLocaleDateString('pt-BR') : '-'}`, pageWidth - margin, y, { align: "right" });
+      doc.text(`Admissão: ${dataToUse.startDate ? new Date(dataToUse.startDate).toLocaleDateString('pt-BR') : '-'}`, margin, y);
+      doc.text(`Demissão: ${dataToUse.endDate ? new Date(dataToUse.endDate).toLocaleDateString('pt-BR') : '-'}`, pageWidth - margin, y, { align: "right" });
       y += 6;
-      doc.text(`Salário Base: ${formatCurrency(data.baseSalary)}`, margin, y);
-      doc.text(`Motivo: ${data.terminationReason.replace(/_/g, ' ').toUpperCase()}`, pageWidth - margin, y, { align: "right" });
+      doc.text(`Salário Base: ${formatCurrency(dataToUse.baseSalary)}`, margin, y);
+      doc.text(`Motivo: ${dataToUse.terminationReason.replace(/_/g, ' ').toUpperCase()}`, pageWidth - margin, y, { align: "right" });
 
       // Tabela de Verbas
       y += 15;
@@ -566,7 +552,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       doc.setFont("helvetica", "normal");
       let currentCategory = '';
 
-      calcResult.forEach((item) => {
+      resultsToUse.forEach((item) => {
           if (y > pageHeight - 40) { doc.addPage(); y = 30; }
 
           if (item.category !== currentCategory) {
@@ -598,7 +584,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       doc.setFont("helvetica", "bold");
       doc.setFontSize(14);
       doc.text("TOTAL ESTIMADO:", margin + 4, y);
-      doc.text(formatCurrency(totalValue), pageWidth - margin - 4, y, { align: "right" });
+      doc.text(formatCurrency(totalToUse), pageWidth - margin - 4, y, { align: "right" });
 
       // Explicação Metodológica (Justificado)
       y += 20;
@@ -626,7 +612,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
           doc.text(`Gerado por Gestão INSS Jurídico em ${new Date().toLocaleDateString()} - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: "center" });
       }
 
-      doc.save(`Relatorio_Calculo_${data.employeeName || 'Trabalhista'}.pdf`);
+      doc.save(`Relatorio_Calculo_${dataToUse.employeeName || 'Trabalhista'}.pdf`);
   };
 
   return (
@@ -650,7 +636,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                 <TrashIcon className="h-4 w-4" /> Limpar
             </button>
             {totalValue > 0 && (
-                <button onClick={generatePDF} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg shadow-indigo-500/30 flex items-center gap-2 transition">
+                <button onClick={() => generatePDF()} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg shadow-indigo-500/30 flex items-center gap-2 transition">
                     <DocumentTextIcon className="h-4 w-4" />
                     Baixar PDF
                 </button>
@@ -673,7 +659,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   <p className="text-xs text-slate-500">{new Date(calc.date).toLocaleDateString()} - {formatCurrency(calc.totalValue)}</p>
                               </div>
                               <div className="flex gap-1">
-                                  <button onClick={() => loadCalculation(calc)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Carregar"><PencilSquareIcon className="h-4 w-4" /></button>
+                                  <button onClick={() => generatePDF(calc.data)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded" title="Baixar PDF"><DocumentTextIcon className="h-4 w-4" /></button>
+                                  <button onClick={() => loadCalculation(calc)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Editar / Visualizar"><PencilSquareIcon className="h-4 w-4" /></button>
                                   <button onClick={() => onDeleteCalculation && onDeleteCalculation(calc.id)} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Excluir"><TrashIcon className="h-4 w-4" /></button>
                               </div>
                           </div>
