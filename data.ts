@@ -1,6 +1,8 @@
-import { ClientRecord } from './types';
+import { ClientRecord, ContractRecord } from './types';
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
+
+export const INITIAL_CONTRACTS_LIST: ContractRecord[] = [];
 
 export const INITIAL_DATA: ClientRecord[] = [
   // --- PÁGINA 1 ---
