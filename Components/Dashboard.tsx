@@ -9,7 +9,7 @@ import {
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { DashboardProps, ClientRecord, ContractRecord, NotificationItem } from '../types';
 import { INITIAL_DATA, INITIAL_CONTRACTS_LIST } from '../data';
-import LaborCalc from '../LaborCalc';
+import LaborCalc, { CalculationRecord } from '../LaborCalc';
 import { initSupabase } from '../supabaseClient';
 import { isUrgentDate, formatCurrency } from '../utils';
 import StatsCards from './StatsCards';
@@ -37,6 +37,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
+  const [savedCalculations, setSavedCalculations] = useState<CalculationRecord[]>([]);
   
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -66,13 +67,14 @@ const Dashboard: React.FC<DashboardProps> = ({
         // Fetch Clients
         let fetchedClients = INITIAL_DATA;
         let fetchedContracts = INITIAL_CONTRACTS_LIST;
+        let fetchedCalculations: CalculationRecord[] = [];
 
         if (supabase) {
             // Cloud Fetch - Clients (ID 1)
-            const { data: clientData, error: clientError } = await supabase
+            const { data: clientData } = await supabase
                 .from('clients')
                 .select('data')
-                .eq('id', 1) // Explicitly ID 1
+                .eq('id', 1)
                 .single();
                 
             if (clientData && clientData.data) {
@@ -80,20 +82,34 @@ const Dashboard: React.FC<DashboardProps> = ({
                 localStorage.setItem('inss_records', JSON.stringify(clientData.data));
             }
 
-            // Cloud Fetch - Contracts (Stored in 'clients' table as ID 2 to share table)
+            // Cloud Fetch - Contracts (ID 2)
             const { data: contractData, error: contractError } = await supabase
-                .from('clients') // Using 'clients' table instead of 'contracts'
+                .from('clients')
                 .select('data')
-                .eq('id', 2) // Explicitly ID 2
+                .eq('id', 2)
                 .single();
 
             if (contractData && contractData.data) {
                 fetchedContracts = contractData.data;
                 localStorage.setItem('inss_contracts', JSON.stringify(contractData.data));
             } else if (contractError && contractError.code === 'PGRST116') {
-                 // Row 2 doesn't exist yet, initialize it
                  await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS_LIST });
             }
+
+            // Cloud Fetch - Calculations (ID 3)
+            const { data: calcData, error: calcError } = await supabase
+                .from('clients')
+                .select('data')
+                .eq('id', 3)
+                .single();
+
+            if (calcData && calcData.data) {
+                fetchedCalculations = calcData.data;
+                localStorage.setItem('inss_calculations', JSON.stringify(calcData.data));
+            } else if (calcError && calcError.code === 'PGRST116') {
+                 await supabase.from('clients').upsert({ id: 3, data: [] });
+            }
+
         } else {
              // Local Fallback
              const localClients = localStorage.getItem('inss_records');
@@ -101,10 +117,14 @@ const Dashboard: React.FC<DashboardProps> = ({
 
              const localContracts = localStorage.getItem('inss_contracts');
              if (localContracts) fetchedContracts = JSON.parse(localContracts);
+
+             const localCalculations = localStorage.getItem('inss_calculations');
+             if (localCalculations) fetchedCalculations = JSON.parse(localCalculations);
         }
 
         setRecords(fetchedClients);
         setContracts(fetchedContracts);
+        setSavedCalculations(fetchedCalculations);
 
     } catch (e) {
         console.error("Erro geral", e);
@@ -126,10 +146,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                 {
                     event: '*',
                     schema: 'public',
-                    table: 'clients' // Listen only to clients table
+                    table: 'clients'
                 },
                 (payload: any) => {
-                     // Check ID to determine if it is Client Data (1) or Contract Data (2)
                      if (payload.new && payload.new.data) {
                          if (payload.new.id === 1) {
                              setRecords(payload.new.data);
@@ -137,6 +156,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                          } else if (payload.new.id === 2) {
                              setContracts(payload.new.data);
                              localStorage.setItem('inss_contracts', JSON.stringify(payload.new.data));
+                         } else if (payload.new.id === 3) {
+                             setSavedCalculations(payload.new.data);
+                             localStorage.setItem('inss_calculations', JSON.stringify(payload.new.data));
                          }
                      }
                 }
@@ -175,7 +197,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [records]);
 
   // Save Logic (Generic)
-  const saveData = async (type: 'clients' | 'contracts', newData: any[]) => {
+  const saveData = async (type: 'clients' | 'contracts' | 'calculations', newData: any[]) => {
       setIsSyncing(true);
       const supabase = initSupabase();
 
@@ -183,11 +205,14 @@ const Dashboard: React.FC<DashboardProps> = ({
           setRecords(newData);
           localStorage.setItem('inss_records', JSON.stringify(newData));
           if (supabase) await supabase.from('clients').upsert({ id: 1, data: newData });
-      } else {
+      } else if (type === 'contracts') {
           setContracts(newData);
           localStorage.setItem('inss_contracts', JSON.stringify(newData));
-          // FIX: Save contracts to ID 2 in 'clients' table
           if (supabase) await supabase.from('clients').upsert({ id: 2, data: newData });
+      } else if (type === 'calculations') {
+          setSavedCalculations(newData);
+          localStorage.setItem('inss_calculations', JSON.stringify(newData));
+          if (supabase) await supabase.from('clients').upsert({ id: 3, data: newData });
       }
       
       setTimeout(() => setIsSyncing(false), 800);
@@ -261,6 +286,24 @@ const Dashboard: React.FC<DashboardProps> = ({
           saveData('contracts', contracts.filter(c => c.id !== id));
       }
   }
+
+  // Handlers for Calculations
+  const handleSaveCalculation = (calc: CalculationRecord) => {
+      const exists = savedCalculations.find(c => c.id === calc.id);
+      let updated;
+      if (exists) {
+          updated = savedCalculations.map(c => c.id === calc.id ? calc : c);
+      } else {
+          updated = [calc, ...savedCalculations];
+      }
+      saveData('calculations', updated);
+  };
+
+  const handleDeleteCalculation = (id: string) => {
+      if (confirm('Excluir este cálculo salvo?')) {
+          saveData('calculations', savedCalculations.filter(c => c.id !== id));
+      }
+  };
 
   // Sorting and Filtering Logic
   const requestSort = (key: string) => {
@@ -475,7 +518,13 @@ const Dashboard: React.FC<DashboardProps> = ({
              
              {/* CONTENT SWITCHER */}
              {currentView === 'labor_calc' ? (
-                 <LaborCalc />
+                 <LaborCalc 
+                    clients={records} 
+                    contracts={contracts} 
+                    savedCalculations={savedCalculations}
+                    onSaveCalculation={handleSaveCalculation}
+                    onDeleteCalculation={handleDeleteCalculation}
+                 />
              ) : currentView === 'clients' ? (
                  <>
                     {/* ... (Conteúdo de Clients Mantido - Oculto aqui para brevidade, mas o código completo está no topo) ... */}
