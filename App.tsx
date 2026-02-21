@@ -16,6 +16,15 @@ export default function App() {
     const isDark = localStorage.getItem('inss_theme') === 'dark';
     setDarkMode(isDark);
     if (isDark) { document.documentElement.classList.add('dark'); }
+    
+    const savedUser = localStorage.getItem('inss_user');
+    if (savedUser) {
+        try {
+            setUser(JSON.parse(savedUser));
+        } catch (e) {
+            console.error("Failed to parse saved user", e);
+        }
+    }
   }, []);
   
   const checkCloudStatus = () => {
@@ -32,8 +41,15 @@ export default function App() {
     if (newMode) { document.documentElement.classList.add('dark'); } else { document.documentElement.classList.remove('dark'); }
   };
 
-  const handleLogin = (authenticatedUser: User) => { setUser(authenticatedUser); };
-  const handleLogout = () => { setUser(null); };
+  const handleLogin = (authenticatedUser: User) => { 
+      setUser(authenticatedUser); 
+      localStorage.setItem('inss_user', JSON.stringify(authenticatedUser));
+  };
+  
+  const handleLogout = () => { 
+      setUser(null); 
+      localStorage.removeItem('inss_user');
+  };
   const handleSettingsSave = () => { checkCloudStatus(); };
   
   const handleRestoreBackup = () => {
