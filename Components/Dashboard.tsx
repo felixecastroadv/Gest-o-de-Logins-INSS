@@ -51,6 +51,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [dbError, setDbError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
@@ -199,23 +200,38 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Save Logic (Generic)
   const saveData = async (type: 'clients' | 'contracts' | 'calculations', newData: any[]) => {
       setIsSyncing(true);
+      setSaveError(null);
       const supabase = initSupabase();
 
-      if (type === 'clients') {
-          setRecords(newData);
-          localStorage.setItem('inss_records', JSON.stringify(newData));
-          if (supabase) await supabase.from('clients').upsert({ id: 1, data: newData });
-      } else if (type === 'contracts') {
-          setContracts(newData);
-          localStorage.setItem('inss_contracts', JSON.stringify(newData));
-          if (supabase) await supabase.from('clients').upsert({ id: 2, data: newData });
-      } else if (type === 'calculations') {
-          setSavedCalculations(newData);
-          localStorage.setItem('inss_calculations', JSON.stringify(newData));
-          if (supabase) await supabase.from('clients').upsert({ id: 3, data: newData });
+      try {
+          if (type === 'clients') {
+              setRecords(newData);
+              localStorage.setItem('inss_records', JSON.stringify(newData));
+              if (supabase) {
+                  const { error } = await supabase.from('clients').upsert({ id: 1, data: newData });
+                  if (error) throw error;
+              }
+          } else if (type === 'contracts') {
+              setContracts(newData);
+              localStorage.setItem('inss_contracts', JSON.stringify(newData));
+              if (supabase) {
+                  const { error } = await supabase.from('clients').upsert({ id: 2, data: newData });
+                  if (error) throw error;
+              }
+          } else if (type === 'calculations') {
+              setSavedCalculations(newData);
+              localStorage.setItem('inss_calculations', JSON.stringify(newData));
+              if (supabase) {
+                  const { error } = await supabase.from('clients').upsert({ id: 3, data: newData });
+                  if (error) throw error;
+              }
+          }
+      } catch (err: any) {
+          console.error("Erro ao salvar na nuvem:", err);
+          setSaveError("Erro ao sincronizar com o banco de dados. Dados salvos apenas localmente.");
+      } finally {
+          setTimeout(() => setIsSyncing(false), 800);
       }
-      
-      setTimeout(() => setIsSyncing(false), 800);
   }
   
   // Handlers for Clients
@@ -493,6 +509,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                  </h2>
                  {isSyncing ? (
                       <span className="text-xs text-blue-500 flex items-center gap-1"><ArrowPathRoundedSquareIcon className="h-3 w-3 animate-spin" /> Salvando...</span>
+                 ) : saveError ? (
+                      <span className="text-xs text-red-500 flex items-center gap-1 font-bold" title={saveError}><ExclamationTriangleIcon className="h-3 w-3" /> Erro ao Salvar</span>
                  ) : isCloudConfigured ? (
                      <span className="text-xs text-green-500 flex items-center gap-1 font-medium bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-full border border-green-100 dark:border-green-800"><CloudIcon className="h-3 w-3" /> Online</span>
                  ) : (
