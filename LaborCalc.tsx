@@ -38,8 +38,15 @@ interface LaborData {
   // Adicionais
   insalubridadeLevel: 'nenhum' | 'minimo' | 'medio' | 'maximo'; // 10, 20, 40%
   periculosidade: boolean; // 30%
-  adicionalNoturno: boolean;
-  adicionalNoturnoHours: number; // Média mensal
+  adicionalNoturno: {
+    active: boolean;
+    periods: {
+      id: string;
+      hoursPerMonth: number;
+      startDate: string;
+      endDate: string;
+    }[];
+  };
 
   // Diferenças Salariais
   wageGap: {
@@ -87,8 +94,7 @@ const INITIAL_LABOR_DATA: LaborData = {
   hasFgtsBalance: 0,
   insalubridadeLevel: 'nenhum',
   periculosidade: false,
-  adicionalNoturno: false,
-  adicionalNoturnoHours: 0,
+  adicionalNoturno: { active: false, periods: [] },
   wageGap: [],
   overtime: [],
   stability: { isPregnant: false, childBirthDate: '', endDate: '' },
@@ -188,6 +194,34 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       const newGaps = [...data.wageGap];
       newGaps.splice(idx, 1);
       setData(prev => ({ ...prev, wageGap: newGaps }));
+  };
+
+  const addNightShiftPeriod = () => {
+    setData(prev => ({
+      ...prev,
+      adicionalNoturno: {
+        ...prev.adicionalNoturno,
+        periods: [
+          ...prev.adicionalNoturno.periods,
+          {
+            id: Math.random().toString(),
+            hoursPerMonth: 0,
+            startDate: prev.startDate,
+            endDate: prev.endDate
+          }
+        ]
+      }
+    }));
+  };
+
+  const removeNightShiftPeriod = (id: string) => {
+    setData(prev => ({
+      ...prev,
+      adicionalNoturno: {
+        ...prev.adicionalNoturno,
+        periods: prev.adicionalNoturno.periods.filter(p => p.id !== id)
+      }
+    }));
   };
 
   const handleSave = () => {
@@ -310,15 +344,23 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
         }
 
         // Adicional Noturno
-        if (calcData.adicionalNoturno && calcData.adicionalNoturnoHours > 0 && salary) {
+        if (calcData.adicionalNoturno.active && salary) {
             const hourlyRate = salary / 220;
             const nightRate = hourlyRate * 0.20; // 20% Urbano
-            const monthlyVal = nightRate * calcData.adicionalNoturnoHours;
-            const totalNight = monthlyVal * monthsWorked;
-            results.push({ desc: `Adicional Noturno (${calcData.adicionalNoturnoHours}h/mês - ${monthsWorked} meses)`, value: totalNight, category: 'Adicionais' });
             
-            // Reflexos
-            results.push({ desc: `Reflexos Ad. Noturno (Férias, 13º, FGTS, DSR)`, value: totalNight * 0.35, category: 'Reflexos' });
+            calcData.adicionalNoturno.periods.forEach((period, idx) => {
+                const pStart = parseDate(period.startDate) || start;
+                const pEnd = parseDate(period.endDate) || end;
+                
+                if (pStart && pEnd && period.hoursPerMonth > 0) {
+                    const months = diffMonths(pStart, pEnd);
+                    const monthlyVal = nightRate * period.hoursPerMonth;
+                    const totalNight = monthlyVal * months;
+                    
+                    results.push({ desc: `Adicional Noturno (${period.hoursPerMonth}h/mês - ${months} meses - Período ${idx + 1})`, value: totalNight, category: 'Adicionais' });
+                    results.push({ desc: `Reflexos Ad. Noturno (Férias, 13º, FGTS, DSR) - Período ${idx + 1}`, value: totalNight * 0.35, category: 'Reflexos' });
+                }
+            });
         }
     }
 
@@ -727,26 +769,77 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   <p className="text-[10px] text-slate-400 mt-1 pl-8">Base: Salário Base</p>
                               </div>
 
-                              <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                  <label className="flex items-center gap-3 cursor-pointer mb-2">
-                                      <input 
-                                          type="checkbox" 
-                                          checked={data.adicionalNoturno} 
-                                          onChange={e => handleInputChange('adicionalNoturno', e.target.checked)} 
-                                          className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" 
-                                      />
-                                      <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">
-                                          Adicional Noturno
-                                      </span>
-                                  </label>
-                                  {data.adicionalNoturno && (
-                                      <input 
-                                          type="number" 
-                                          placeholder="Horas/Mês" 
-                                          className="input-field"
-                                          value={data.adicionalNoturnoHours}
-                                          onChange={e => handleInputChange('adicionalNoturnoHours', Number(e.target.value))}
-                                      />
+                              <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 col-span-1 md:col-span-3">
+                                  <div className="flex justify-between items-center mb-2">
+                                      <label className="flex items-center gap-3 cursor-pointer">
+                                          <input 
+                                              type="checkbox" 
+                                              checked={data.adicionalNoturno.active} 
+                                              onChange={e => setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, active: e.target.checked } }))} 
+                                              className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" 
+                                          />
+                                          <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">
+                                              Adicional Noturno (20%)
+                                          </span>
+                                      </label>
+                                      {data.adicionalNoturno.active && (
+                                          <button onClick={addNightShiftPeriod} className="btn-secondary-sm text-[10px] py-1 px-2">
+                                              <PlusIcon className="h-3 w-3" /> Add Período
+                                          </button>
+                                      )}
+                                  </div>
+                                  
+                                  {data.adicionalNoturno.active && (
+                                      <div className="space-y-2 mt-2">
+                                          <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-2">
+                                              Considera-se noturno o trabalho entre <strong>22h e 5h</strong> (urbano). A hora noturna é reduzida (52min 30s).
+                                          </p>
+                                          {data.adicionalNoturno.periods.length === 0 && <p className="text-xs text-slate-400 italic">Nenhum período adicionado.</p>}
+                                          {data.adicionalNoturno.periods.map((period, idx) => (
+                                              <div key={period.id} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 relative">
+                                                  <button onClick={() => removeNightShiftPeriod(period.id)} className="absolute top-1 right-1 text-slate-400 hover:text-red-500"><TrashIcon className="h-3 w-3" /></button>
+                                                  <div>
+                                                      <label className="label-tiny">Horas/Mês (Média)</label>
+                                                      <input 
+                                                          type="number" 
+                                                          className="input-tiny"
+                                                          value={period.hoursPerMonth}
+                                                          onChange={e => {
+                                                              const newPeriods = [...data.adicionalNoturno.periods];
+                                                              newPeriods[idx].hoursPerMonth = Number(e.target.value);
+                                                              setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, periods: newPeriods } }));
+                                                          }}
+                                                      />
+                                                  </div>
+                                                  <div>
+                                                      <label className="label-tiny">Início</label>
+                                                      <input 
+                                                          type="date" 
+                                                          className="input-tiny"
+                                                          value={period.startDate}
+                                                          onChange={e => {
+                                                              const newPeriods = [...data.adicionalNoturno.periods];
+                                                              newPeriods[idx].startDate = e.target.value;
+                                                              setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, periods: newPeriods } }));
+                                                          }}
+                                                      />
+                                                  </div>
+                                                  <div>
+                                                      <label className="label-tiny">Fim</label>
+                                                      <input 
+                                                          type="date" 
+                                                          className="input-tiny"
+                                                          value={period.endDate}
+                                                          onChange={e => {
+                                                              const newPeriods = [...data.adicionalNoturno.periods];
+                                                              newPeriods[idx].endDate = e.target.value;
+                                                              setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, periods: newPeriods } }));
+                                                          }}
+                                                      />
+                                                  </div>
+                                              </div>
+                                          ))}
+                                      </div>
                                   )}
                               </div>
                           </div>
