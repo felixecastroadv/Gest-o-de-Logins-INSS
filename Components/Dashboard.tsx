@@ -8,7 +8,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { DashboardProps, ClientRecord, ContractRecord, NotificationItem } from '../types';
-import { INITIAL_DATA, INITIAL_CONTRACTS } from '../data';
+import { INITIAL_DATA, INITIAL_CONTRACTS_LIST } from '../data';
 import LaborCalc from '../LaborCalc';
 import { initSupabase } from '../supabaseClient';
 import { isUrgentDate, formatCurrency } from '../utils';
@@ -65,7 +65,7 @@ const Dashboard: React.FC<DashboardProps> = ({
     try {
         // Fetch Clients
         let fetchedClients = INITIAL_DATA;
-        let fetchedContracts = INITIAL_CONTRACTS;
+        let fetchedContracts = INITIAL_CONTRACTS_LIST;
 
         if (supabase) {
             // Cloud Fetch - Clients (ID 1)
@@ -92,7 +92,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 localStorage.setItem('inss_contracts', JSON.stringify(contractData.data));
             } else if (contractError && contractError.code === 'PGRST116') {
                  // Row 2 doesn't exist yet, initialize it
-                 await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS });
+                 await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS_LIST });
             }
         } else {
              // Local Fallback
