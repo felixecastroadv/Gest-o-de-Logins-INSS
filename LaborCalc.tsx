@@ -1201,16 +1201,24 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       
       {/* CSS Utility Classes for this component */}
       <style>{`
-        .label-text { @apply block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-2 tracking-wide; }
-        .label-tiny { @apply block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase mb-1; }
-        .input-field { @apply w-full px-4 py-3 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all duration-200 text-sm font-semibold text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 shadow-sm; }
-        .input-tiny { @apply w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-semibold outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-white; }
-        .btn-primary { @apply px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/20 transition flex items-center gap-2 transform active:scale-95; }
-        .btn-secondary { @apply px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition transform active:scale-95; }
+        .label-text { @apply block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5; }
+        .label-tiny { @apply block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1; }
+        
+        .input-field { @apply w-full px-4 py-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition text-sm font-medium shadow-sm; }
+        
+        .input-tiny { @apply w-full px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-semibold outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500; }
+        
+        .btn-primary { @apply px-5 py-2.5 text-white font-medium bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-500/30 transition flex items-center gap-2 transform active:scale-95; }
+        
+        .btn-secondary { @apply px-5 py-2.5 text-slate-600 dark:text-slate-300 font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition shadow-sm transform active:scale-95; }
+        
         .btn-secondary-sm { @apply px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition; }
-        .card-section { @apply bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-md border border-slate-100 dark:border-slate-700/50; }
+        
+        .card-section { @apply bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800; }
+        
         .card-title { @apply font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 text-lg; }
-        .empty-msg { @apply text-center text-sm text-slate-500 dark:text-slate-400 italic py-8 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50/50 dark:bg-slate-900/20; }
+        
+        .empty-msg { @apply text-center text-sm text-slate-500 dark:text-slate-400 italic py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/20; }
       `}</style>
     </div>
   );
