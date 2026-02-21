@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { User } from './types';
 import { INITIAL_DATA, INITIAL_CONTRACTS } from './data';
 import Login from './components/Login';
-import Dashboard from './Components/Dashboard';
+import Dashboard from './components/Dashboard';
 import SettingsModal from './components/SettingsModal';
 import { getDbConfig, initSupabase } from './supabaseClient';
 
