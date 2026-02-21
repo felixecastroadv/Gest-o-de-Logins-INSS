@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from './types';
-import { INITIAL_DATA, INITIAL_CONTRACTS } from './data';
+import { INITIAL_DATA, INITIAL_CONTRACTS_LIST } from './data';
 import Login from './Components/Login';
 import Dashboard from './Components/Dashboard'; 
 import SettingsModal from './Components/SettingsModal';
@@ -41,14 +41,14 @@ export default function App() {
         if(supabase) {
              const restore = async () => {
                  await supabase.from('clients').upsert({ id: 1, data: INITIAL_DATA });
-                 await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS });
+                 await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS_LIST });
                  alert("Dados restaurados com sucesso!");
                  window.location.reload();
              };
              restore();
         } else {
             localStorage.setItem('inss_records', JSON.stringify(INITIAL_DATA));
-            localStorage.setItem('inss_contracts', JSON.stringify(INITIAL_CONTRACTS));
+            localStorage.setItem('inss_contracts', JSON.stringify(INITIAL_CONTRACTS_LIST));
             alert("Dados locais restaurados!");
             window.location.reload();
         }
