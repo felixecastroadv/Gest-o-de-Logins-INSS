@@ -718,7 +718,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                           type="checkbox" 
                                           checked={data.periculosidade} 
                                           onChange={e => handleInputChange('periculosidade', e.target.checked)} 
-                                          className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500" 
+                                          className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" 
                                       />
                                       <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">
                                           Periculosidade (30%)
@@ -733,7 +733,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                           type="checkbox" 
                                           checked={data.adicionalNoturno} 
                                           onChange={e => handleInputChange('adicionalNoturno', e.target.checked)} 
-                                          className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500" 
+                                          className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" 
                                       />
                                       <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">
                                           Adicional Noturno
@@ -861,7 +861,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                            <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300 select-none">
                                                <input type="checkbox" checked={ot.applyDsr} onChange={(e) => {
                                                    const newOt = [...data.overtime]; newOt[idx].applyDsr = e.target.checked; setData({...data, overtime: newOt});
-                                               }} className="rounded text-indigo-600 focus:ring-indigo-500" />
+                                               }} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
                                                Reflexo DSR
                                            </label>
                                       </div>
@@ -887,11 +887,11 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                                <div className="space-y-3">
                                    <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
-                                       <input type="checkbox" checked={data.applyFine477} onChange={e => handleInputChange('applyFine477', e.target.checked)} className="w-5 h-5 text-indigo-600 rounded" />
+                                       <input type="checkbox" checked={data.applyFine477} onChange={e => handleInputChange('applyFine477', e.target.checked)} className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
                                        <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 477 (Atraso Pagamento)</span>
                                    </label>
                                    <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
-                                       <input type="checkbox" checked={data.applyFine467} onChange={e => handleInputChange('applyFine467', e.target.checked)} className="w-5 h-5 text-indigo-600 rounded" />
+                                       <input type="checkbox" checked={data.applyFine467} onChange={e => handleInputChange('applyFine467', e.target.checked)} className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
                                        <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 467 (Verbas Incontroversas)</span>
                                    </label>
                                </div>
@@ -941,7 +941,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                     type="checkbox" 
                                     checked={data.stability.isPregnant} 
                                     onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, isPregnant: e.target.checked } }))} 
-                                    className="w-5 h-5 text-pink-600 rounded focus:ring-pink-500" 
+                                    className="w-5 h-5 text-pink-600 bg-pink-50 dark:bg-slate-700 border-pink-300 dark:border-pink-700 rounded focus:ring-pink-500" 
                                 />
                                 <span className="font-bold text-slate-700 dark:text-slate-200">
                                     Calcular indenização do período de estabilidade gestacional
@@ -1046,16 +1046,16 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       
       {/* CSS Utility Classes for this component */}
       <style>{`
-        .label-text { @apply block text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1.5; }
-        .label-tiny { @apply block text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase mb-1; }
-        .input-field { @apply w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm text-slate-900 dark:text-white placeholder-slate-400; }
-        .input-tiny { @apply w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white; }
-        .btn-primary { @apply px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/20 transition flex items-center gap-2; }
-        .btn-secondary { @apply px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition; }
-        .btn-secondary-sm { @apply px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1; }
-        .card-section { @apply bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700; }
-        .card-title { @apply font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2; }
-        .empty-msg { @apply text-center text-sm text-slate-400 italic py-4 border-2 border-dashed border-slate-100 dark:border-slate-700 rounded-xl; }
+        .label-text { @apply block text-xs font-bold text-slate-800 dark:text-slate-100 uppercase mb-2; }
+        .label-tiny { @apply block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1; }
+        .input-field { @apply w-full px-4 py-3 bg-slate-50 dark:bg-slate-700 border border-slate-400 dark:border-slate-500 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm font-medium text-slate-900 dark:text-white placeholder-slate-500 dark:placeholder-slate-400 shadow-sm; }
+        .input-tiny { @apply w-full px-2 py-2 bg-slate-50 dark:bg-slate-700 border border-slate-300 dark:border-slate-500 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white font-medium; }
+        .btn-primary { @apply px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/20 transition flex items-center gap-2; }
+        .btn-secondary { @apply px-6 py-3 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition; }
+        .btn-secondary-sm { @apply px-3 py-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1; }
+        .card-section { @apply bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-md border border-slate-200 dark:border-slate-700; }
+        .card-title { @apply font-bold text-slate-900 dark:text-white mb-4 flex items-center gap-2; }
+        .empty-msg { @apply text-center text-sm text-slate-500 dark:text-slate-400 italic py-6 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl; }
       `}</style>
     </div>
   );
