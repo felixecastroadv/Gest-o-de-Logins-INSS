@@ -95,10 +95,13 @@ interface LaborData {
   moralDamages: number;
   unpaidFgtsMonths: number; // Quantos meses não foi depositado
   unpaid13thMonths: number; // Meses de 13o não pagos
-  vacationExpiredQty: number; // Quantas férias vencidas inteiras
+  vacationPeriods: {
+      id: string;
+      period: string; // "2021/2022"
+      isDouble: boolean;
+  }[];
   claim13thProportional: boolean;
   claimVacationProportional: boolean;
-  doubleVacation: boolean; // Férias em dobro (Art. 137 CLT)
   attorneyFees: number; // 5, 10, 15, 20, 25, 30%
 }
 
@@ -121,10 +124,9 @@ const INITIAL_LABOR_DATA: LaborData = {
   moralDamages: 0,
   unpaidFgtsMonths: 0,
   unpaid13thMonths: 0,
-  vacationExpiredQty: 0,
+  vacationPeriods: [],
   claim13thProportional: true,
   claimVacationProportional: true,
-  doubleVacation: false,
   attorneyFees: 0
 };
 
@@ -186,15 +188,16 @@ const calculateLaborResults = (calcData: LaborData) => {
 
     // 4. Férias
     if (salary) {
-        if (calcData.vacationExpiredQty > 0) {
-            let vacValue = (salary + (salary / 3)) * calcData.vacationExpiredQty;
-            if (calcData.doubleVacation) {
+        // Vencidas (Lista de Períodos)
+        calcData.vacationPeriods.forEach((vac, idx) => {
+            let vacValue = (salary + (salary / 3));
+            if (vac.isDouble) {
                 vacValue = vacValue * 2;
-                results.push({ desc: `Férias Vencidas em Dobro + 1/3 (${calcData.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
+                results.push({ desc: `Férias Vencidas em Dobro + 1/3 (Período: ${vac.period})`, value: vacValue, category: 'Rescisórias' });
             } else {
-                results.push({ desc: `Férias Vencidas + 1/3 (${calcData.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
+                results.push({ desc: `Férias Vencidas + 1/3 (Período: ${vac.period})`, value: vacValue, category: 'Rescisórias' });
             }
-        }
+        });
         
         if (end && calcData.claimVacationProportional) {
             const monthsWorkedYear = end.getMonth() + 1;
@@ -449,6 +452,30 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
         periods: prev.adicionalNoturno.periods.filter(p => p.id !== id)
       }
     }));
+  };
+
+  const addVacationPeriod = () => {
+      setData(prev => ({
+          ...prev,
+          vacationPeriods: [
+              ...prev.vacationPeriods,
+              { id: Math.random().toString(), period: '', isDouble: false }
+          ]
+      }));
+  };
+
+  const removeVacationPeriod = (id: string) => {
+      setData(prev => ({
+          ...prev,
+          vacationPeriods: prev.vacationPeriods.filter(v => v.id !== id)
+      }));
+  };
+
+  const updateVacationPeriod = (id: string, field: 'period' | 'isDouble', value: any) => {
+      setData(prev => ({
+          ...prev,
+          vacationPeriods: prev.vacationPeriods.map(v => v.id === id ? { ...v, [field]: value } : v)
+      }));
   };
 
   const handleSave = () => {
@@ -1019,13 +1046,42 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                             <input type="checkbox" checked={data.claimVacationProportional} onChange={e => handleInputChange('claimVacationProportional', e.target.checked)} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
                                             <span className="text-xs font-semibold dark:text-slate-300">Calcular Proporcionais + 1/3</span>
                                        </label>
-                                       <label className="flex items-center gap-3 mb-2 cursor-pointer">
-                                            <input type="checkbox" checked={data.doubleVacation} onChange={e => handleInputChange('doubleVacation', e.target.checked)} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
-                                            <span className="text-xs font-semibold dark:text-slate-300">Férias em Dobro (Art. 137 CLT)</span>
-                                       </label>
-                                       <div>
-                                           <label className={STYLES.LABEL_TINY}>Férias Vencidas (Qtd. Períodos Inteiros)</label>
-                                           <input type="number" className={STYLES.INPUT_TINY} value={data.vacationExpiredQty} onChange={e => handleInputChange('vacationExpiredQty', Number(e.target.value))} />
+                                       
+                                       <div className="mt-3">
+                                           <div className="flex justify-between items-center mb-2">
+                                               <label className={STYLES.LABEL_TINY}>Férias Vencidas (Períodos)</label>
+                                               <button onClick={addVacationPeriod} className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold hover:bg-indigo-200 transition">+ Adicionar</button>
+                                           </div>
+                                           
+                                           {data.vacationPeriods.length === 0 ? (
+                                               <p className="text-xs text-slate-400 italic text-center py-2 border border-dashed border-slate-300 rounded-lg">Nenhum período vencido adicionado.</p>
+                                           ) : (
+                                               <div className="space-y-2">
+                                                   {data.vacationPeriods.map((vac, idx) => (
+                                                       <div key={vac.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
+                                                           <div className="flex-1">
+                                                               <input 
+                                                                   type="text" 
+                                                                   placeholder="Ex: 2021/2022" 
+                                                                   className={`${STYLES.INPUT_TINY} mb-1`}
+                                                                   value={vac.period}
+                                                                   onChange={e => updateVacationPeriod(vac.id, 'period', e.target.value)}
+                                                               />
+                                                               <label className="flex items-center gap-2 cursor-pointer">
+                                                                   <input 
+                                                                       type="checkbox" 
+                                                                       checked={vac.isDouble} 
+                                                                       onChange={e => updateVacationPeriod(vac.id, 'isDouble', e.target.checked)} 
+                                                                       className="w-3 h-3 text-red-600 rounded focus:ring-red-500" 
+                                                                   />
+                                                                   <span className="text-[10px] font-bold text-red-600 dark:text-red-400">Em Dobro (Art. 137)</span>
+                                                               </label>
+                                                           </div>
+                                                           <button onClick={() => removeVacationPeriod(vac.id)} className="text-slate-400 hover:text-red-500 p-1"><TrashIcon className="h-4 w-4" /></button>
+                                                       </div>
+                                                   ))}
+                                               </div>
+                                           )}
                                        </div>
                                    </div>
 
@@ -1158,7 +1214,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                               <button onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-lg shadow-blue-500/50 flex items-center gap-2 transition">
                                   <ArchiveBoxIcon className="h-5 w-5" /> Salvar
                               </button>
-                              <button onClick={generatePDF} className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-bold text-sm shadow-lg shadow-indigo-500/50 flex items-center gap-2 transition">
+                              <button onClick={() => generatePDF()} className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-bold text-sm shadow-lg shadow-indigo-500/50 flex items-center gap-2 transition">
                                   <DocumentTextIcon className="h-5 w-5" /> PDF
                               </button>
                           </div>
