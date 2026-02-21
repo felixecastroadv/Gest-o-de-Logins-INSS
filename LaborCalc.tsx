@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   CalculatorIcon, 
   BanknotesIcon, 
@@ -7,11 +7,23 @@ import {
   DocumentTextIcon, 
   ArrowPathIcon,
   TrashIcon,
-  PlusIcon
+  PlusIcon,
+  ArchiveBoxIcon,
+  PencilSquareIcon,
+  UserIcon
 } from '@heroicons/react/24/outline';
 import { jsPDF } from "jspdf";
+import { ClientRecord, ContractRecord } from './types';
 
 // --- Tipos e Interfaces ---
+
+export interface CalculationRecord {
+    id: string;
+    date: string;
+    employeeName: string;
+    totalValue: number;
+    data: LaborData;
+}
 
 interface LaborData {
   // Dados Contratuais
@@ -22,6 +34,12 @@ interface LaborData {
   terminationReason: 'sem_justa_causa' | 'pedido_demissao' | 'justa_causa' | 'rescisao_indireta';
   noticePeriod: 'trabalhado' | 'indenizado' | 'dispensado';
   hasFgtsBalance: number; // Saldo já depositado para cálculo da multa
+
+  // Adicionais
+  insalubridadeLevel: 'nenhum' | 'minimo' | 'medio' | 'maximo'; // 10, 20, 40%
+  periculosidade: boolean; // 30%
+  adicionalNoturno: boolean;
+  adicionalNoturnoHours: number; // Média mensal
 
   // Diferenças Salariais
   wageGap: {
@@ -67,6 +85,10 @@ const INITIAL_LABOR_DATA: LaborData = {
   terminationReason: 'sem_justa_causa',
   noticePeriod: 'indenizado',
   hasFgtsBalance: 0,
+  insalubridadeLevel: 'nenhum',
+  periculosidade: false,
+  adicionalNoturno: false,
+  adicionalNoturnoHours: 0,
   wageGap: [],
   overtime: [],
   stability: { isPregnant: false, childBirthDate: '', endDate: '' },
@@ -95,15 +117,40 @@ const diffMonths = (d1: Date, d2: Date) => {
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-export default function LaborCalc() {
+interface LaborCalcProps {
+    clients?: ClientRecord[];
+    contracts?: ContractRecord[];
+    savedCalculations?: CalculationRecord[];
+    onSaveCalculation?: (calc: CalculationRecord) => void;
+    onDeleteCalculation?: (id: string) => void;
+}
+
+export default function LaborCalc({ clients = [], contracts = [], savedCalculations = [], onSaveCalculation, onDeleteCalculation }: LaborCalcProps) {
   const [data, setData] = useState<LaborData>(INITIAL_LABOR_DATA);
   const [activeTab, setActiveTab] = useState<number>(1);
   const [calcResult, setCalcResult] = useState<any[]>([]);
   const [totalValue, setTotalValue] = useState<number>(0);
+  const [showSavedList, setShowSavedList] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   // --- Handlers ---
   const handleInputChange = (field: keyof LaborData, value: any) => {
     setData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleClientSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const selectedName = e.target.value;
+      if (!selectedName) return;
+
+      // Tenta achar em clientes ou contratos
+      const client = clients.find(c => c.name === selectedName);
+      const contract = contracts.find(c => `${c.firstName} ${c.lastName}` === selectedName);
+
+      if (client) {
+          setData(prev => ({ ...prev, employeeName: client.name }));
+      } else if (contract) {
+          setData(prev => ({ ...prev, employeeName: `${contract.firstName} ${contract.lastName}` }));
+      }
   };
 
   const addOvertimeBatch = () => {
@@ -143,17 +190,44 @@ export default function LaborCalc() {
       setData(prev => ({ ...prev, wageGap: newGaps }));
   };
 
+  const handleSave = () => {
+      if (!data.employeeName) {
+          alert("Informe o nome do cliente para salvar.");
+          return;
+      }
+      if (onSaveCalculation) {
+          const record: CalculationRecord = {
+              id: editingId || Math.random().toString(36).substr(2, 9),
+              date: new Date().toISOString(),
+              employeeName: data.employeeName,
+              totalValue: totalValue,
+              data: data
+          };
+          onSaveCalculation(record);
+          setEditingId(null);
+          alert("Cálculo salvo com sucesso!");
+      }
+  };
+
+  const loadCalculation = (calc: CalculationRecord) => {
+      setData(calc.data);
+      setEditingId(calc.id);
+      setShowSavedList(false);
+      calculate(calc.data); // Recalcula para mostrar resultados
+  };
+
   // --- ENGINE DE CÁLCULO ---
-  const calculate = () => {
+  const calculate = (calcData = data) => {
     const results = [];
     let total = 0;
 
-    const start = parseDate(data.startDate);
-    const end = parseDate(data.endDate);
-    const salary = Number(data.baseSalary);
+    const start = parseDate(calcData.startDate);
+    const end = parseDate(calcData.endDate);
+    const salary = Number(calcData.baseSalary);
 
     if (!salary) {
-        alert("Por favor, insira ao menos o Salário Base para estimativa.");
+        // alert("Por favor, insira ao menos o Salário Base para estimativa.");
+        // Não alertar se for chamado internamente
     }
 
     // 1. Saldo de Salário
@@ -164,7 +238,7 @@ export default function LaborCalc() {
     }
 
     // 2. Aviso Prévio
-    if (start && end && salary && data.noticePeriod === 'indenizado' && data.terminationReason !== 'justa_causa' && data.terminationReason !== 'pedido_demissao') {
+    if (start && end && salary && calcData.noticePeriod === 'indenizado' && calcData.terminationReason !== 'justa_causa' && calcData.terminationReason !== 'pedido_demissao') {
         const years = Math.floor(diffMonths(start, end) / 12);
         const extraDays = Math.min(years * 3, 60); // Lei 12.506
         const totalDays = 30 + extraDays;
@@ -181,18 +255,18 @@ export default function LaborCalc() {
         results.push({ desc: `13º Salário Proporcional (${effectiveMonths}/12)`, value: thirteenth, category: 'Rescisórias' });
         
         // 13º Vencidos (Input manual de meses não pagos)
-        if (data.unpaid13thMonths > 0) {
-            const unpaid13th = (salary / 12) * data.unpaid13thMonths;
-            results.push({ desc: `13º Salário Vencidos (${data.unpaid13thMonths} meses)`, value: unpaid13th, category: 'Rescisórias' });
+        if (calcData.unpaid13thMonths > 0) {
+            const unpaid13th = (salary / 12) * calcData.unpaid13thMonths;
+            results.push({ desc: `13º Salário Vencidos (${calcData.unpaid13thMonths} meses)`, value: unpaid13th, category: 'Rescisórias' });
         }
     }
 
     // 4. Férias
     if (salary) {
         // Vencidas
-        if (data.vacationExpiredQty > 0) {
-            const vacValue = (salary + (salary / 3)) * data.vacationExpiredQty;
-            results.push({ desc: `Férias Vencidas + 1/3 (${data.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
+        if (calcData.vacationExpiredQty > 0) {
+            const vacValue = (salary + (salary / 3)) * calcData.vacationExpiredQty;
+            results.push({ desc: `Férias Vencidas + 1/3 (${calcData.vacationExpiredQty} períodos)`, value: vacValue, category: 'Rescisórias' });
         }
         
         // Proporcionais
@@ -205,8 +279,51 @@ export default function LaborCalc() {
         }
     }
 
-    // 5. Diferença Salarial
-    data.wageGap.forEach((gap, idx) => {
+    // 5. Adicionais (Insalubridade, Periculosidade, Noturno)
+    if (start && end) {
+        const monthsWorked = diffMonths(start, end);
+        const minimumWage = 1412; // Salário Mínimo 2024 (Base Insalubridade)
+        
+        // Insalubridade (Base Salário Mínimo)
+        if (calcData.insalubridadeLevel !== 'nenhum') {
+            let perc = 0;
+            if (calcData.insalubridadeLevel === 'minimo') perc = 0.10;
+            if (calcData.insalubridadeLevel === 'medio') perc = 0.20;
+            if (calcData.insalubridadeLevel === 'maximo') perc = 0.40;
+            
+            const monthlyVal = minimumWage * perc;
+            const totalInsalub = monthlyVal * monthsWorked;
+            results.push({ desc: `Adicional Insalubridade (${perc * 100}% s/ Mínimo - ${monthsWorked} meses)`, value: totalInsalub, category: 'Adicionais' });
+            
+            // Reflexos
+            results.push({ desc: `Reflexos Insalubridade (Férias, 13º, FGTS)`, value: totalInsalub * 0.3, category: 'Reflexos' });
+        }
+
+        // Periculosidade (Base Salário Base)
+        if (calcData.periculosidade && salary) {
+            const monthlyVal = salary * 0.30;
+            const totalPeric = monthlyVal * monthsWorked;
+            results.push({ desc: `Adicional Periculosidade (30% - ${monthsWorked} meses)`, value: totalPeric, category: 'Adicionais' });
+            
+            // Reflexos
+            results.push({ desc: `Reflexos Periculosidade (Férias, 13º, FGTS)`, value: totalPeric * 0.3, category: 'Reflexos' });
+        }
+
+        // Adicional Noturno
+        if (calcData.adicionalNoturno && calcData.adicionalNoturnoHours > 0 && salary) {
+            const hourlyRate = salary / 220;
+            const nightRate = hourlyRate * 0.20; // 20% Urbano
+            const monthlyVal = nightRate * calcData.adicionalNoturnoHours;
+            const totalNight = monthlyVal * monthsWorked;
+            results.push({ desc: `Adicional Noturno (${calcData.adicionalNoturnoHours}h/mês - ${monthsWorked} meses)`, value: totalNight, category: 'Adicionais' });
+            
+            // Reflexos
+            results.push({ desc: `Reflexos Ad. Noturno (Férias, 13º, FGTS, DSR)`, value: totalNight * 0.35, category: 'Reflexos' });
+        }
+    }
+
+    // 6. Diferença Salarial
+    calcData.wageGap.forEach((gap, idx) => {
         const gapStart = parseDate(gap.startDate) || start;
         const gapEnd = parseDate(gap.endDate) || end;
         
@@ -221,8 +338,8 @@ export default function LaborCalc() {
         }
     });
 
-    // 6. Horas Extras (Lote)
-    data.overtime.forEach((ot, idx) => {
+    // 7. Horas Extras (Lote)
+    calcData.overtime.forEach((ot, idx) => {
         const otStart = parseDate(ot.startDate) || start;
         const otEnd = parseDate(ot.endDate) || end;
         
@@ -244,14 +361,14 @@ export default function LaborCalc() {
         }
     });
 
-    // 7. Estabilidade Gestante
-    if (data.stability.isPregnant && salary) {
-        let stabEnd = parseDate(data.stability.endDate);
+    // 8. Estabilidade Gestante
+    if (calcData.stability.isPregnant && salary) {
+        let stabEnd = parseDate(calcData.stability.endDate);
         const stabStart = end || new Date();
         
         // Se não tem data fim, calcula parto + 5 meses
-        if (!stabEnd && data.stability.childBirthDate) {
-            const birth = parseDate(data.stability.childBirthDate);
+        if (!stabEnd && calcData.stability.childBirthDate) {
+            const birth = parseDate(calcData.stability.childBirthDate);
             if (birth) {
                 stabEnd = new Date(birth);
                 stabEnd.setMonth(stabEnd.getMonth() + 5);
@@ -265,44 +382,44 @@ export default function LaborCalc() {
         }
     }
 
-    // 8. FGTS + 40%
+    // 9. FGTS + 40%
     // Sobre salários não pagos
-    if (data.unpaidFgtsMonths > 0 && salary) {
-        const unpaidFgts = (salary * 0.08) * data.unpaidFgtsMonths;
-        results.push({ desc: `FGTS Não Depositado (${data.unpaidFgtsMonths} meses)`, value: unpaidFgts, category: 'FGTS' });
+    if (calcData.unpaidFgtsMonths > 0 && salary) {
+        const unpaidFgts = (salary * 0.08) * calcData.unpaidFgtsMonths;
+        results.push({ desc: `FGTS Não Depositado (${calcData.unpaidFgtsMonths} meses)`, value: unpaidFgts, category: 'FGTS' });
     }
     
     // Multa 40% (Sobre saldo existente + o que foi gerado na rescisão estimada)
-    let totalFgtsBase = Number(data.hasFgtsBalance) || 0;
+    let totalFgtsBase = Number(calcData.hasFgtsBalance) || 0;
     // Adiciona o FGTS da rescisão (Aviso + 13o) aprox
     // Simplificação: Soma dos valores salariais calculados * 8%
     const rescisaoFgtsBase = results
-        .filter(r => ['Rescisórias', 'Salários', 'Horas Extras'].includes(r.category))
+        .filter(r => ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais'].includes(r.category))
         .reduce((sum, item) => sum + item.value, 0);
     
     totalFgtsBase += (rescisaoFgtsBase * 0.08);
 
-    if (data.terminationReason === 'sem_justa_causa' || data.terminationReason === 'rescisao_indireta') {
+    if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta') {
         const fine40 = totalFgtsBase * 0.4;
         results.push({ desc: `Multa 40% do FGTS (Estimada)`, value: fine40, category: 'FGTS' });
     }
 
-    // 9. Multas CLT
-    if (data.applyFine477 && salary) {
+    // 10. Multas CLT
+    if (calcData.applyFine477 && salary) {
         results.push({ desc: `Multa Art. 477 (Atraso)`, value: salary, category: 'Multas' });
     }
     
     // Calcula subtotal para a multa do 467 (50% sobre verbas rescisórias incontroversas)
-    if (data.applyFine467) {
+    if (calcData.applyFine467) {
         const incontroverso = results
             .filter(r => r.category === 'Rescisórias')
             .reduce((sum, item) => sum + item.value, 0);
         results.push({ desc: `Multa Art. 467 (50% Incontroverso)`, value: incontroverso * 0.5, category: 'Multas' });
     }
 
-    // 10. Danos Morais
-    if (data.moralDamages > 0) {
-        results.push({ desc: `Indenização por Danos Morais`, value: Number(data.moralDamages), category: 'Indenizações' });
+    // 11. Danos Morais
+    if (calcData.moralDamages > 0) {
+        results.push({ desc: `Indenização por Danos Morais`, value: Number(calcData.moralDamages), category: 'Indenizações' });
     }
 
     // Finalizar
@@ -315,72 +432,121 @@ export default function LaborCalc() {
       // @ts-ignore
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      
+      // Header
+      doc.setFillColor(30, 58, 138); // Primary Blue
+      doc.rect(0, 0, pageWidth, 40, 'F');
       
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(18);
-      doc.setTextColor(30, 58, 138); // Primary Blue
-      doc.text("ESTIMATIVA DE CÁLCULO TRABALHISTA", pageWidth / 2, 20, { align: "center" });
-      
+      doc.setFontSize(22);
+      doc.setTextColor(255, 255, 255);
+      doc.text("RELATÓRIO DE CÁLCULO TRABALHISTA", pageWidth / 2, 20, { align: "center" });
       doc.setFontSize(10);
-      doc.setTextColor(100);
-      doc.text(`Cliente: ${data.employeeName || 'Não informado'}`, 14, 30);
-      doc.text(`Data Base: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth - 14, 30, { align: "right" });
-      doc.line(14, 32, pageWidth - 14, 32);
+      doc.text("Estimativa Preliminar", pageWidth / 2, 28, { align: "center" });
 
-      let y = 45;
-      
-      doc.setFontSize(12);
+      // Info Cliente
+      let y = 55;
       doc.setTextColor(0);
-      
-      // Cabeçalho Tabela
-      doc.setFillColor(241, 245, 249);
-      doc.rect(14, y - 6, pageWidth - 28, 8, 'F');
+      doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text("DESCRIÇÃO DA VERBA", 16, y);
-      doc.text("VALOR ESTIMADO", pageWidth - 16, y, { align: "right" });
+      doc.text("DADOS DO PROCESSO / CLIENTE", margin, y);
+      doc.setLineWidth(0.5);
+      doc.line(margin, y+2, pageWidth - margin, y+2);
+      
+      y += 10;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.text(`Cliente: ${data.employeeName || 'Não informado'}`, margin, y);
+      doc.text(`Data Base: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth - margin, y, { align: "right" });
+      y += 6;
+      doc.text(`Admissão: ${data.startDate ? new Date(data.startDate).toLocaleDateString('pt-BR') : '-'}`, margin, y);
+      doc.text(`Demissão: ${data.endDate ? new Date(data.endDate).toLocaleDateString('pt-BR') : '-'}`, pageWidth - margin, y, { align: "right" });
+      y += 6;
+      doc.text(`Salário Base: ${formatCurrency(data.baseSalary)}`, margin, y);
+      doc.text(`Motivo: ${data.terminationReason.replace(/_/g, ' ').toUpperCase()}`, pageWidth - margin, y, { align: "right" });
+
+      // Tabela de Verbas
+      y += 15;
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text("DETALHAMENTO DAS VERBAS", margin, y);
+      doc.line(margin, y+2, pageWidth - margin, y+2);
+      y += 10;
+
+      // Header Tabela
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin, y - 6, pageWidth - (margin*2), 8, 'F');
+      doc.setFontSize(10);
+      doc.text("DESCRIÇÃO", margin + 2, y);
+      doc.text("VALOR (R$)", pageWidth - margin - 2, y, { align: "right" });
       y += 10;
 
       doc.setFont("helvetica", "normal");
-      
       let currentCategory = '';
 
       calcResult.forEach((item) => {
-          if (y > 270) { doc.addPage(); y = 20; }
+          if (y > pageHeight - 40) { doc.addPage(); y = 30; }
 
           if (item.category !== currentCategory) {
-              y += 2;
+              y += 4;
               doc.setFont("helvetica", "bold");
-              doc.setTextColor(37, 99, 235); // Blue 600
-              doc.text(item.category.toUpperCase(), 14, y);
-              doc.line(14, y+1, pageWidth-14, y+1);
+              doc.setTextColor(30, 58, 138);
+              doc.text(item.category.toUpperCase(), margin, y);
+              doc.line(margin, y+1, pageWidth-margin, y+1);
               y += 6;
               currentCategory = item.category;
               doc.setTextColor(0);
               doc.setFont("helvetica", "normal");
           }
 
-          doc.text(item.desc, 14, y);
-          doc.text(formatCurrency(item.value), pageWidth - 14, y, { align: "right" });
-          y += 7;
+          doc.text(item.desc, margin + 2, y);
+          doc.text(formatCurrency(item.value), pageWidth - margin - 2, y, { align: "right" });
+          y += 6;
       });
 
+      // Total
       y += 5;
       doc.setLineWidth(0.5);
-      doc.line(14, y, pageWidth - 14, y);
+      doc.line(margin, y, pageWidth - margin, y);
       y += 10;
       
+      doc.setFillColor(30, 58, 138);
+      doc.rect(margin, y - 8, pageWidth - (margin*2), 12, 'F');
+      doc.setTextColor(255, 255, 255);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(14);
-      doc.text("TOTAL ESTIMADO:", 14, y);
-      doc.text(formatCurrency(totalValue), pageWidth - 14, y, { align: "right" });
+      doc.text("TOTAL ESTIMADO:", margin + 4, y);
+      doc.text(formatCurrency(totalValue), pageWidth - margin - 4, y, { align: "right" });
 
-      doc.setFontSize(8);
-      doc.setTextColor(150);
-      y += 15;
-      doc.text("* Este documento é uma estimativa preliminar baseada nas informações fornecidas.", 14, y);
-      doc.text("* Valores sujeitos a alteração conforme provas documentais e decisão judicial.", 14, y + 4);
+      // Explicação Metodológica (Justificado)
+      y += 20;
+      if (y > pageHeight - 60) { doc.addPage(); y = 30; }
 
-      doc.save(`Calculo_${data.employeeName || 'Trabalhista'}.pdf`);
+      doc.setTextColor(0);
+      doc.setFontSize(12);
+      doc.text("METODOLOGIA DE CÁLCULO", margin, y);
+      doc.line(margin, y+2, pageWidth - margin, y+2);
+      y += 8;
+
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      const text = "O presente cálculo é uma estimativa preliminar realizada com base nas informações fornecidas pelo cliente e nos parâmetros da CLT. As verbas rescisórias consideram o saldo de salário, aviso prévio (indenizado ou trabalhado), férias vencidas e proporcionais acrescidas de 1/3, e 13º salário proporcional. Adicionais como insalubridade e periculosidade foram calculados sobre o salário mínimo e salário base, respectivamente, conforme legislação vigente. A multa de 40% do FGTS é estimada sobre o saldo informado somado aos depósitos mensais devidos no período. Este documento não possui valor de sentença judicial e está sujeito a alterações mediante análise de provas documentais e convenções coletivas da categoria.";
+      
+      const splitText = doc.splitTextToSize(text, pageWidth - (margin * 2));
+      doc.text(splitText, margin, y, { align: "justify", maxWidth: pageWidth - (margin * 2) });
+
+      // Footer
+      const pageCount = doc.getNumberOfPages();
+      for(let i = 1; i <= pageCount; i++) {
+          doc.setPage(i);
+          doc.setFontSize(8);
+          doc.setTextColor(150);
+          doc.text(`Gerado por Gestão INSS Jurídico em ${new Date().toLocaleDateString()} - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: "center" });
+      }
+
+      doc.save(`Relatorio_Calculo_${data.employeeName || 'Trabalhista'}.pdf`);
   };
 
   return (
@@ -397,7 +563,10 @@ export default function LaborCalc() {
              </div>
          </div>
          <div className="flex gap-2">
-            <button onClick={() => setData(INITIAL_LABOR_DATA)} className="text-xs font-bold text-slate-500 hover:text-red-500 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition">
+            <button onClick={() => setShowSavedList(!showSavedList)} className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-700">
+                <ArchiveBoxIcon className="h-4 w-4" /> {showSavedList ? 'Ocultar Salvos' : 'Ver Salvos'}
+            </button>
+            <button onClick={() => { setData(INITIAL_LABOR_DATA); setEditingId(null); setCalcResult([]); setTotalValue(0); setActiveTab(1); }} className="text-xs font-bold text-slate-500 hover:text-red-500 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition">
                 <TrashIcon className="h-4 w-4" /> Limpar
             </button>
             {totalValue > 0 && (
@@ -408,6 +577,31 @@ export default function LaborCalc() {
             )}
          </div>
       </div>
+
+      {/* Saved List Overlay */}
+      {showSavedList && (
+          <div className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 animate-in slide-in-from-top-4">
+              <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-3">Cálculos Salvos</h3>
+              {savedCalculations.length === 0 ? (
+                  <p className="text-sm text-slate-500 italic">Nenhum cálculo salvo.</p>
+              ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                      {savedCalculations.map(calc => (
+                          <div key={calc.id} className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex justify-between items-center shadow-sm">
+                              <div>
+                                  <p className="font-bold text-slate-800 dark:text-white text-sm">{calc.employeeName}</p>
+                                  <p className="text-xs text-slate-500">{new Date(calc.date).toLocaleDateString()} - {formatCurrency(calc.totalValue)}</p>
+                              </div>
+                              <div className="flex gap-1">
+                                  <button onClick={() => loadCalculation(calc)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Carregar"><PencilSquareIcon className="h-4 w-4" /></button>
+                                  <button onClick={() => onDeleteCalculation && onDeleteCalculation(calc.id)} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Excluir"><TrashIcon className="h-4 w-4" /></button>
+                              </div>
+                          </div>
+                      ))}
+                  </div>
+              )}
+          </div>
+      )}
 
       {/* Tabs Navigation */}
       <div className="flex overflow-x-auto border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 gap-1 shrink-0">
@@ -440,7 +634,14 @@ export default function LaborCalc() {
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                               <div className="md:col-span-2">
                                   <label className="label-text">Nome do Cliente / Reclamante</label>
-                                  <input type="text" className="input-field" value={data.employeeName} onChange={e => handleInputChange('employeeName', e.target.value)} placeholder="Ex: João da Silva" />
+                                  <div className="flex gap-2">
+                                      <input type="text" className="input-field" value={data.employeeName} onChange={e => handleInputChange('employeeName', e.target.value)} placeholder="Ex: João da Silva" />
+                                      <select className="input-field w-1/3" onChange={handleClientSelect} defaultValue="">
+                                          <option value="" disabled>Selecionar...</option>
+                                          {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                                          {contracts.map(c => <option key={c.id} value={`${c.firstName} ${c.lastName}`}>{c.firstName} {c.lastName}</option>)}
+                                      </select>
+                                  </div>
                               </div>
                               <div>
                                   <label className="label-text">Data Admissão</label>
@@ -490,6 +691,67 @@ export default function LaborCalc() {
               {activeTab === 2 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                       
+                      {/* Seção Adicionais Fixos */}
+                      <div className="card-section">
+                          <h3 className="card-title text-indigo-600 dark:text-indigo-400">
+                              <PlusIcon className="h-5 w-5" /> Adicionais Recorrentes
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                  <label className="label-text mb-2">Insalubridade</label>
+                                  <select 
+                                      className="input-field" 
+                                      value={data.insalubridadeLevel} 
+                                      onChange={e => handleInputChange('insalubridadeLevel', e.target.value)}
+                                  >
+                                      <option value="nenhum">Não se aplica</option>
+                                      <option value="minimo">Grau Mínimo (10%)</option>
+                                      <option value="medio">Grau Médio (20%)</option>
+                                      <option value="maximo">Grau Máximo (40%)</option>
+                                  </select>
+                                  <p className="text-[10px] text-slate-400 mt-1">Base: Salário Mínimo</p>
+                              </div>
+
+                              <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 flex flex-col justify-center">
+                                  <label className="flex items-center gap-3 cursor-pointer">
+                                      <input 
+                                          type="checkbox" 
+                                          checked={data.periculosidade} 
+                                          onChange={e => handleInputChange('periculosidade', e.target.checked)} 
+                                          className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500" 
+                                      />
+                                      <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">
+                                          Periculosidade (30%)
+                                      </span>
+                                  </label>
+                                  <p className="text-[10px] text-slate-400 mt-1 pl-8">Base: Salário Base</p>
+                              </div>
+
+                              <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                  <label className="flex items-center gap-3 cursor-pointer mb-2">
+                                      <input 
+                                          type="checkbox" 
+                                          checked={data.adicionalNoturno} 
+                                          onChange={e => handleInputChange('adicionalNoturno', e.target.checked)} 
+                                          className="w-5 h-5 text-indigo-600 rounded focus:ring-indigo-500" 
+                                      />
+                                      <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">
+                                          Adicional Noturno
+                                      </span>
+                                  </label>
+                                  {data.adicionalNoturno && (
+                                      <input 
+                                          type="number" 
+                                          placeholder="Horas/Mês" 
+                                          className="input-field"
+                                          value={data.adicionalNoturnoHours}
+                                          onChange={e => handleInputChange('adicionalNoturnoHours', Number(e.target.value))}
+                                      />
+                                  )}
+                              </div>
+                          </div>
+                      </div>
+
                       {/* Seção Diferença Salarial */}
                       <div className="card-section">
                           <div className="flex justify-between items-center mb-4">
@@ -714,7 +976,7 @@ export default function LaborCalc() {
                         <div className="md:col-span-2 flex justify-between">
                           <button onClick={() => setActiveTab(3)} className="btn-secondary">Voltar</button>
                           <button 
-                            onClick={calculate} 
+                            onClick={() => calculate()} 
                             className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-green-500/30 flex items-center gap-2 transform hover:scale-105 transition-all"
                           >
                              <CalculatorIcon className="h-5 w-5" /> Calcular Tudo
@@ -736,6 +998,9 @@ export default function LaborCalc() {
                           <div className="flex gap-3">
                               <button onClick={() => setActiveTab(1)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-sm transition">
                                   Revisar Dados
+                              </button>
+                              <button onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-lg shadow-blue-500/50 flex items-center gap-2 transition">
+                                  <ArchiveBoxIcon className="h-5 w-5" /> Salvar
                               </button>
                               <button onClick={generatePDF} className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-bold text-sm shadow-lg shadow-indigo-500/50 flex items-center gap-2 transition">
                                   <DocumentTextIcon className="h-5 w-5" /> PDF
@@ -781,10 +1046,10 @@ export default function LaborCalc() {
       
       {/* CSS Utility Classes for this component */}
       <style>{`
-        .label-text { @apply block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5; }
-        .label-tiny { @apply block text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase mb-1; }
-        .input-field { @apply w-full px-4 py-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm dark:text-white; }
-        .input-tiny { @apply w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 dark:text-white; }
+        .label-text { @apply block text-xs font-bold text-slate-600 dark:text-slate-400 uppercase mb-1.5; }
+        .label-tiny { @apply block text-[10px] font-bold text-slate-500 dark:text-slate-500 uppercase mb-1; }
+        .input-field { @apply w-full px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-sm text-slate-900 dark:text-white placeholder-slate-400; }
+        .input-tiny { @apply w-full px-2 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-slate-900 dark:text-white; }
         .btn-primary { @apply px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-500/20 transition flex items-center gap-2; }
         .btn-secondary { @apply px-6 py-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 font-bold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition; }
         .btn-secondary-sm { @apply px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition flex items-center gap-1; }
