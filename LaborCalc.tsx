@@ -94,7 +94,7 @@ interface LaborData {
   applyFine467: boolean; // Verbas incontroversas
   moralDamages: number;
   unpaidFgtsMonths: number; // Quantos meses não foi depositado
-  unpaid13thMonths: number; // Meses de 13o não pagos
+  unpaid13thPeriods: { id: string; year: number; }[]; // Anos de 13o não pagos
   vacationPeriods: {
       id: string;
       period: string; // "2021/2022"
@@ -137,7 +137,7 @@ const INITIAL_LABOR_DATA: LaborData = {
   applyFine467: false,
   moralDamages: 0,
   unpaidFgtsMonths: 0,
-  unpaid13thMonths: 0,
+  unpaid13thPeriods: [],
   vacationPeriods: [],
   claim13thProportional: true,
   claimVacationProportional: true,
@@ -209,9 +209,10 @@ const calculateLaborResults = (calcData: LaborData) => {
             results.push({ desc: `13º Salário Proporcional (${effectiveMonths}/12)`, value: thirteenth, category: 'Rescisórias' });
         }
         
-        if (calcData.unpaid13thMonths > 0) {
-            const unpaid13th = (salary / 12) * calcData.unpaid13thMonths;
-            results.push({ desc: `13º Salário Vencidos (${calcData.unpaid13thMonths} meses)`, value: unpaid13th, category: 'Rescisórias' });
+        if (calcData.unpaid13thPeriods.length > 0) {
+            calcData.unpaid13thPeriods.forEach(p => {
+                results.push({ desc: `13º Salário Vencido (Ano: ${p.year})`, value: salary, category: 'Rescisórias' });
+            });
         }
     }
 
@@ -566,6 +567,30 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       }));
   };
 
+  const add13thPeriod = () => {
+      setData(prev => ({
+          ...prev,
+          unpaid13thPeriods: [
+              ...prev.unpaid13thPeriods,
+              { id: Math.random().toString(), year: new Date().getFullYear() - 1 }
+          ]
+      }));
+  };
+
+  const remove13thPeriod = (id: string) => {
+      setData(prev => ({
+          ...prev,
+          unpaid13thPeriods: prev.unpaid13thPeriods.filter(p => p.id !== id)
+      }));
+  };
+
+  const update13thPeriod = (id: string, year: number) => {
+      setData(prev => ({
+          ...prev,
+          unpaid13thPeriods: prev.unpaid13thPeriods.map(p => p.id === id ? { ...p, year } : p)
+      }));
+  };
+
   const handleSave = () => {
       if (!data.employeeName) {
           alert("Informe o nome do cliente para salvar.");
@@ -589,6 +614,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       const mergedData = { ...INITIAL_LABOR_DATA, ...calc.data };
       // Ensure arrays are initialized if missing in saved data
       if (!mergedData.salaryHistory) mergedData.salaryHistory = [];
+      if (!mergedData.unpaid13thPeriods) mergedData.unpaid13thPeriods = [];
       if (!mergedData.vacationPeriods) mergedData.vacationPeriods = [];
       if (!mergedData.adicionalNoturno) mergedData.adicionalNoturno = { active: false, periods: [] };
       if (!mergedData.wageGap) mergedData.wageGap = [];
@@ -1292,9 +1318,32 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                             <input type="checkbox" checked={data.claim13thProportional} onChange={e => handleInputChange('claim13thProportional', e.target.checked)} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
                                             <span className="text-xs font-semibold dark:text-slate-300">Calcular Proporcional</span>
                                        </label>
-                                       <div>
-                                           <label className={STYLES.LABEL_TINY}>Meses Vencidos (Anos Anteriores)</label>
-                                           <input type="number" className={STYLES.INPUT_TINY} value={data.unpaid13thMonths} onChange={e => handleInputChange('unpaid13thMonths', Number(e.target.value))} />
+                                       <div className="mt-3">
+                                           <div className="flex justify-between items-center mb-2">
+                                               <label className={STYLES.LABEL_TINY}>13º Vencidos (Anos)</label>
+                                               <button onClick={add13thPeriod} className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold hover:bg-indigo-200 transition">+ Adicionar</button>
+                                           </div>
+                                           
+                                           {data.unpaid13thPeriods.length === 0 ? (
+                                               <p className="text-xs text-slate-400 italic text-center py-2 border border-dashed border-slate-300 rounded-lg">Nenhum ano adicionado.</p>
+                                           ) : (
+                                               <div className="space-y-2">
+                                                   {data.unpaid13thPeriods.map((period, idx) => (
+                                                       <div key={period.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
+                                                           <div className="flex-1">
+                                                               <input 
+                                                                   type="number" 
+                                                                   placeholder="Ano (Ex: 2022)" 
+                                                                   className={`${STYLES.INPUT_TINY}`}
+                                                                   value={period.year}
+                                                                   onChange={e => update13thPeriod(period.id, Number(e.target.value))}
+                                                               />
+                                                           </div>
+                                                           <button onClick={() => remove13thPeriod(period.id)} className="text-slate-400 hover:text-red-500 p-1"><TrashIcon className="h-4 w-4" /></button>
+                                                       </div>
+                                                   ))}
+                                               </div>
+                                           )}
                                        </div>
                                    </div>
                                </div>
