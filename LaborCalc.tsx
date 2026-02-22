@@ -94,10 +94,11 @@ interface LaborData {
   applyFine467: boolean; // Verbas incontroversas
   moralDamages: number;
   unpaidFgtsMonths: number; // Quantos meses não foi depositado
-  unpaid13thPeriods: { id: string; year: number; }[]; // Anos de 13o não pagos
+  unpaid13thPeriods: { id: string; year: number; month: number; }[]; // Anos de 13o não pagos (mês/ano)
   vacationPeriods: {
       id: string;
-      period: string; // "2021/2022"
+      startDate: string; // Data inicio aquisitivo
+      endDate: string;   // Data fim aquisitivo
       isDouble: boolean;
   }[];
   claim13thProportional: boolean;
@@ -164,6 +165,60 @@ const diffMonths = (d1: Date, d2: Date) => {
 
 const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+const getSalaryAtDate = (date: Date, history: LaborData['salaryHistory'], currentSalary: number): number => {
+    if (!history || history.length === 0) return currentSalary;
+    
+    // Find history record that covers the date
+    const record = history.find(h => {
+        const start = parseDate(h.startDate);
+        const end = h.endDate ? parseDate(h.endDate) : new Date(); // Assume open-ended if no end date? Or maybe current date.
+        // Actually, if no end date, it might mean "until now".
+        // Let's assume history records are sequential and cover periods.
+        if (!start) return false;
+        
+        if (h.endDate) {
+             const endDate = parseDate(h.endDate);
+             return date >= start && endDate && date <= endDate;
+        } else {
+             return date >= start;
+        }
+    });
+
+    return record ? Number(record.salary) : currentSalary;
+};
+
+const countMonths15DayRule = (start: Date, end: Date): number => {
+    let months = 0;
+    let current = new Date(start);
+    
+    // Iterate through months
+    while (current <= end) {
+        const year = current.getFullYear();
+        const month = current.getMonth();
+        
+        const monthStart = new Date(year, month, 1);
+        const monthEnd = new Date(year, month + 1, 0);
+        
+        // Determine overlap of period with this month
+        const periodStartInMonth = current > monthStart ? current : monthStart;
+        const periodEndInMonth = end < monthEnd ? end : monthEnd;
+        
+        if (periodStartInMonth <= periodEndInMonth) {
+            const diffTime = Math.abs(periodEndInMonth.getTime() - periodStartInMonth.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Inclusive
+            
+            if (diffDays >= 15) {
+                months++;
+            }
+        }
+        
+        // Move to next month
+        current.setMonth(current.getMonth() + 1);
+        current.setDate(1); // Reset to 1st of next month
+    }
+    return months;
+};
+
 const calculateLaborResults = (calcData: LaborData) => {
     const results = [];
     const start = parseDate(calcData.startDate);
@@ -211,7 +266,12 @@ const calculateLaborResults = (calcData: LaborData) => {
         
         if (calcData.unpaid13thPeriods.length > 0) {
             calcData.unpaid13thPeriods.forEach(p => {
-                results.push({ desc: `13º Salário Vencido (Ano: ${p.year})`, value: salary, category: 'Rescisórias' });
+                // Determine reference date for salary lookup (Dec 20th of that year)
+                const refDate = new Date(p.year, (p.month || 12) - 1, 20);
+                const historicalSalary = getSalaryAtDate(refDate, calcData.salaryHistory, salary);
+                
+                const label = p.month ? `${String(p.month).padStart(2, '0')}/${p.year}` : `${p.year}`;
+                results.push({ desc: `13º Salário Vencido (${label})`, value: historicalSalary, category: 'Rescisórias' });
             });
         }
     }
@@ -220,12 +280,46 @@ const calculateLaborResults = (calcData: LaborData) => {
     if (salary) {
         // Vencidas (Lista de Períodos)
         calcData.vacationPeriods.forEach((vac, idx) => {
-            let vacValue = (salary + (salary / 3));
+            let baseVal = salary;
+            let periodLabel = "Período Indefinido";
+            
+            if (vac.startDate && vac.endDate) {
+                const vacStart = parseDate(vac.startDate);
+                const vacEnd = parseDate(vac.endDate);
+                
+                if (vacStart && vacEnd) {
+                    periodLabel = `${vacStart.toLocaleDateString('pt-BR')} a ${vacEnd.toLocaleDateString('pt-BR')}`;
+                    
+                    // Calculate concessive period end (end date + 1 year)
+                    const concessiveEnd = new Date(vacEnd);
+                    concessiveEnd.setFullYear(concessiveEnd.getFullYear() + 1);
+                    
+                    // Determine reference date for salary
+                    // "senão recebi as férias deve ser referente ao salário de fevereiro 2023 (que era a última data que tinha para receber as férias)"
+                    // If concessive period ended in the past, use that date. If it's in the future relative to now/termination, use termination salary.
+                    const terminationDate = end || new Date();
+                    const refDate = concessiveEnd < terminationDate ? concessiveEnd : terminationDate;
+                    
+                    baseVal = getSalaryAtDate(refDate, calcData.salaryHistory, salary);
+                    
+                    // Check if period is less than a year (using 15 day rule)
+                    // If the user inputs a full year (e.g. 01/01/2021 to 31/12/2021), countMonths should be 12.
+                    // If partial, calculate proportional.
+                    const months = countMonths15DayRule(vacStart, vacEnd);
+                    if (months < 12) {
+                        baseVal = (baseVal / 12) * months;
+                        periodLabel += ` (${months}/12 avos)`;
+                    }
+                }
+            }
+            
+            let vacValue = baseVal + (baseVal / 3);
+            
             if (vac.isDouble) {
                 vacValue = vacValue * 2;
-                results.push({ desc: `Férias Vencidas em Dobro + 1/3 (Período: ${vac.period})`, value: vacValue, category: 'Rescisórias' });
+                results.push({ desc: `Férias Vencidas em Dobro + 1/3 (${periodLabel})`, value: vacValue, category: 'Rescisórias' });
             } else {
-                results.push({ desc: `Férias Vencidas + 1/3 (Período: ${vac.period})`, value: vacValue, category: 'Rescisórias' });
+                results.push({ desc: `Férias Vencidas + 1/3 (${periodLabel})`, value: vacValue, category: 'Rescisórias' });
             }
         });
         
@@ -524,7 +618,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
           ...prev,
           vacationPeriods: [
               ...prev.vacationPeriods,
-              { id: Math.random().toString(), period: '', isDouble: false }
+              { id: Math.random().toString(), startDate: '', endDate: '', isDouble: false }
           ]
       }));
   };
@@ -536,7 +630,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       }));
   };
 
-  const updateVacationPeriod = (id: string, field: 'period' | 'isDouble', value: any) => {
+  const updateVacationPeriod = (id: string, field: 'startDate' | 'endDate' | 'isDouble', value: any) => {
       setData(prev => ({
           ...prev,
           vacationPeriods: prev.vacationPeriods.map(v => v.id === id ? { ...v, [field]: value } : v)
@@ -572,7 +666,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
           ...prev,
           unpaid13thPeriods: [
               ...prev.unpaid13thPeriods,
-              { id: Math.random().toString(), year: new Date().getFullYear() - 1 }
+              { id: Math.random().toString(), year: new Date().getFullYear() - 1, month: 12 }
           ]
       }));
   };
@@ -584,10 +678,10 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       }));
   };
 
-  const update13thPeriod = (id: string, year: number) => {
+  const update13thPeriod = (id: string, field: 'year' | 'month', value: number) => {
       setData(prev => ({
           ...prev,
-          unpaid13thPeriods: prev.unpaid13thPeriods.map(p => p.id === id ? { ...p, year } : p)
+          unpaid13thPeriods: prev.unpaid13thPeriods.map(p => p.id === id ? { ...p, [field]: value } : p)
       }));
   };
 
@@ -1276,7 +1370,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                        
                                        <div className="mt-3">
                                            <div className="flex justify-between items-center mb-2">
-                                               <label className={STYLES.LABEL_TINY}>Férias Vencidas (Períodos)</label>
+                                               <label className={STYLES.LABEL_TINY}>Férias Vencidas (Períodos Aquisitivos)</label>
                                                <button onClick={addVacationPeriod} className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold hover:bg-indigo-200 transition">+ Adicionar</button>
                                            </div>
                                            
@@ -1285,26 +1379,39 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                            ) : (
                                                <div className="space-y-2">
                                                    {data.vacationPeriods.map((vac, idx) => (
-                                                       <div key={vac.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-                                                           <div className="flex-1">
-                                                               <input 
-                                                                   type="text" 
-                                                                   placeholder="Ex: 2021/2022" 
-                                                                   className={`${STYLES.INPUT_TINY} mb-1`}
-                                                                   value={vac.period}
-                                                                   onChange={e => updateVacationPeriod(vac.id, 'period', e.target.value)}
-                                                               />
-                                                               <label className="flex items-center gap-2 cursor-pointer">
-                                                                   <input 
-                                                                       type="checkbox" 
-                                                                       checked={vac.isDouble} 
-                                                                       onChange={e => updateVacationPeriod(vac.id, 'isDouble', e.target.checked)} 
-                                                                       className="w-3 h-3 text-red-600 rounded focus:ring-red-500" 
-                                                                   />
-                                                                   <span className="text-[10px] font-bold text-red-600 dark:text-red-400">Em Dobro (Art. 137)</span>
-                                                               </label>
+                                                       <div key={vac.id} className="flex flex-col gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
+                                                           <div className="flex items-center gap-2">
+                                                               <div className="grid grid-cols-2 gap-2 flex-1">
+                                                                   <div>
+                                                                       <label className={STYLES.LABEL_TINY}>Início</label>
+                                                                       <input 
+                                                                           type="date" 
+                                                                           className={STYLES.INPUT_TINY}
+                                                                           value={vac.startDate}
+                                                                           onChange={e => updateVacationPeriod(vac.id, 'startDate', e.target.value)}
+                                                                       />
+                                                                   </div>
+                                                                   <div>
+                                                                       <label className={STYLES.LABEL_TINY}>Fim</label>
+                                                                       <input 
+                                                                           type="date" 
+                                                                           className={STYLES.INPUT_TINY}
+                                                                           value={vac.endDate}
+                                                                           onChange={e => updateVacationPeriod(vac.id, 'endDate', e.target.value)}
+                                                                       />
+                                                                   </div>
+                                                               </div>
+                                                               <button onClick={() => removeVacationPeriod(vac.id)} className="text-slate-400 hover:text-red-500 p-1 self-end mb-1"><TrashIcon className="h-4 w-4" /></button>
                                                            </div>
-                                                           <button onClick={() => removeVacationPeriod(vac.id)} className="text-slate-400 hover:text-red-500 p-1"><TrashIcon className="h-4 w-4" /></button>
+                                                           <label className="flex items-center gap-2 cursor-pointer">
+                                                               <input 
+                                                                   type="checkbox" 
+                                                                   checked={vac.isDouble} 
+                                                                   onChange={e => updateVacationPeriod(vac.id, 'isDouble', e.target.checked)} 
+                                                                   className="w-3 h-3 text-red-600 rounded focus:ring-red-500" 
+                                                               />
+                                                               <span className="text-[10px] font-bold text-red-600 dark:text-red-400">Em Dobro (Art. 137)</span>
+                                                           </label>
                                                        </div>
                                                    ))}
                                                </div>
@@ -1320,7 +1427,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                        </label>
                                        <div className="mt-3">
                                            <div className="flex justify-between items-center mb-2">
-                                               <label className={STYLES.LABEL_TINY}>13º Vencidos (Anos)</label>
+                                               <label className={STYLES.LABEL_TINY}>13º Vencidos (Mês/Ano)</label>
                                                <button onClick={add13thPeriod} className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold hover:bg-indigo-200 transition">+ Adicionar</button>
                                            </div>
                                            
@@ -1330,13 +1437,21 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                <div className="space-y-2">
                                                    {data.unpaid13thPeriods.map((period, idx) => (
                                                        <div key={period.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-                                                           <div className="flex-1">
+                                                           <div className="flex-1 grid grid-cols-2 gap-2">
                                                                <input 
                                                                    type="number" 
-                                                                   placeholder="Ano (Ex: 2022)" 
+                                                                   placeholder="Mês" 
+                                                                   className={`${STYLES.INPUT_TINY}`}
+                                                                   value={period.month}
+                                                                   onChange={e => update13thPeriod(period.id, 'month', Number(e.target.value))}
+                                                                   min={1} max={12}
+                                                               />
+                                                               <input 
+                                                                   type="number" 
+                                                                   placeholder="Ano" 
                                                                    className={`${STYLES.INPUT_TINY}`}
                                                                    value={period.year}
-                                                                   onChange={e => update13thPeriod(period.id, Number(e.target.value))}
+                                                                   onChange={e => update13thPeriod(period.id, 'year', Number(e.target.value))}
                                                                />
                                                            </div>
                                                            <button onClick={() => remove13thPeriod(period.id)} className="text-slate-400 hover:text-red-500 p-1"><TrashIcon className="h-4 w-4" /></button>
