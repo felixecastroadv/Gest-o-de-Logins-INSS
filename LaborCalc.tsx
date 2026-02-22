@@ -103,6 +103,20 @@ interface LaborData {
   claim13thProportional: boolean;
   claimVacationProportional: boolean;
   attorneyFees: number; // 5, 10, 15, 20, 25, 30%
+  
+  // Novos Campos
+  salaryBalance: {
+    active: boolean;
+    days: number; // Dias de saldo
+    customAmount?: number; // Valor manual opcional
+  };
+  severancePaid: number; // Valor já pago na rescisão (dedução)
+  salaryHistory: {
+    id: string;
+    startDate: string;
+    endDate: string;
+    salary: number;
+  }[];
 }
 
 const INITIAL_LABOR_DATA: LaborData = {
@@ -127,7 +141,10 @@ const INITIAL_LABOR_DATA: LaborData = {
   vacationPeriods: [],
   claim13thProportional: true,
   claimVacationProportional: true,
-  attorneyFees: 0
+  attorneyFees: 0,
+  salaryBalance: { active: true, days: 0 },
+  severancePaid: 0,
+  salaryHistory: []
 };
 
 // --- Helpers de Cálculo ---
@@ -156,10 +173,22 @@ const calculateLaborResults = (calcData: LaborData) => {
     if (!salary) return [];
 
     // 1. Saldo de Salário
-    if (end && salary) {
-        const daysWorked = end.getDate();
-        const balance = (salary / 30) * daysWorked;
-        results.push({ desc: `Saldo de Salário (${daysWorked} dias)`, value: balance, category: 'Rescisórias' });
+    if (end && salary && calcData.salaryBalance.active) {
+        let balance = 0;
+        let days = calcData.salaryBalance.days;
+        
+        // Se dias for 0, tenta calcular automático
+        if (days === 0) {
+            days = end.getDate();
+        }
+
+        if (calcData.salaryBalance.customAmount) {
+            balance = calcData.salaryBalance.customAmount;
+        } else {
+            balance = (salary / 30) * days;
+        }
+        
+        results.push({ desc: `Saldo de Salário (${days} dias)`, value: balance, category: 'Rescisórias' });
     }
 
     // 2. Aviso Prévio
@@ -309,21 +338,51 @@ const calculateLaborResults = (calcData: LaborData) => {
     }
 
     // 9. FGTS + 40%
+    let totalFgtsBase = Number(calcData.hasFgtsBalance) || 0;
+    
+    // Se não tem saldo informado, estima com base no histórico ou salário atual
+    if (totalFgtsBase === 0 && start && end) {
+        const monthsWorked = diffMonths(start, end);
+        // Se tiver histórico, usa média ponderada (simplificado: usa salário base atual para tudo se não tiver histórico complexo)
+        // Melhoria: Iterar meses e pegar salário vigente
+        if (calcData.salaryHistory.length > 0) {
+            // Lógica complexa de histórico: para cada mês, acha o salário
+            let estimatedFgts = 0;
+            let currentDate = new Date(start);
+            while (currentDate < end) {
+                const currentMonthStr = currentDate.toISOString().slice(0, 7); // YYYY-MM
+                // Acha salário vigente
+                const hist = calcData.salaryHistory.find(h => {
+                    const hStart = new Date(h.startDate);
+                    const hEnd = h.endDate ? new Date(h.endDate) : new Date();
+                    return currentDate >= hStart && currentDate <= hEnd;
+                });
+                const monthSalary = hist ? Number(hist.salary) : salary;
+                estimatedFgts += (monthSalary * 0.08);
+                currentDate.setMonth(currentDate.getMonth() + 1);
+            }
+            totalFgtsBase = estimatedFgts;
+        } else {
+             // Estima com salário atual
+             totalFgtsBase = (salary * 0.08) * monthsWorked;
+        }
+    }
+
     if (calcData.unpaidFgtsMonths > 0 && salary) {
+        // Usa salário atual para meses não pagos (padrão)
         const unpaidFgts = (salary * 0.08) * calcData.unpaidFgtsMonths;
         results.push({ desc: `FGTS Não Depositado (${calcData.unpaidFgtsMonths} meses)`, value: unpaidFgts, category: 'FGTS' });
     }
     
-    let totalFgtsBase = Number(calcData.hasFgtsBalance) || 0;
     const rescisaoFgtsBase = results
         .filter(r => ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais'].includes(r.category))
         .reduce((sum, item) => sum + item.value, 0);
     
-    totalFgtsBase += (rescisaoFgtsBase * 0.08);
+    const totalFgtsParaMulta = totalFgtsBase + (rescisaoFgtsBase * 0.08);
 
     if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta') {
-        const fine40 = totalFgtsBase * 0.4;
-        results.push({ desc: `Multa 40% do FGTS (Estimada)`, value: fine40, category: 'FGTS' });
+        const fine40 = totalFgtsParaMulta * 0.4;
+        results.push({ desc: `Multa 40% do FGTS (Base Est.: ${formatCurrency(totalFgtsParaMulta)})`, value: fine40, category: 'FGTS' });
     }
 
     // 10. Multas CLT
@@ -348,6 +407,11 @@ const calculateLaborResults = (calcData: LaborData) => {
     if (calcData.attorneyFees > 0) {
         const feesValue = currentTotal * (calcData.attorneyFees / 100);
         results.push({ desc: `Honorários Advocatícios (${calcData.attorneyFees}%)`, value: feesValue, category: 'Honorários' });
+    }
+
+    // 13. Deduções
+    if (calcData.severancePaid > 0) {
+        results.push({ desc: `Valor Pago na Rescisão (Dedução)`, value: -Math.abs(calcData.severancePaid), category: 'Deduções' });
     }
 
     return results;
@@ -478,6 +542,30 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       }));
   };
 
+  const addSalaryHistory = () => {
+      setData(prev => ({
+          ...prev,
+          salaryHistory: [
+              ...prev.salaryHistory,
+              { id: Math.random().toString(), startDate: prev.startDate, endDate: prev.endDate, salary: prev.baseSalary }
+          ]
+      }));
+  };
+
+  const removeSalaryHistory = (id: string) => {
+      setData(prev => ({
+          ...prev,
+          salaryHistory: prev.salaryHistory.filter(s => s.id !== id)
+      }));
+  };
+
+  const updateSalaryHistory = (id: string, field: keyof LaborData['salaryHistory'][0], value: any) => {
+      setData(prev => ({
+          ...prev,
+          salaryHistory: prev.salaryHistory.map(s => s.id === id ? { ...s, [field]: value } : s)
+      }));
+  };
+
   const handleSave = () => {
       if (!data.employeeName) {
           alert("Informe o nome do cliente para salvar.");
@@ -498,10 +586,19 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
   };
 
   const loadCalculation = (calc: CalculationRecord) => {
-      setData(calc.data);
+      const mergedData = { ...INITIAL_LABOR_DATA, ...calc.data };
+      // Ensure arrays are initialized if missing in saved data
+      if (!mergedData.salaryHistory) mergedData.salaryHistory = [];
+      if (!mergedData.vacationPeriods) mergedData.vacationPeriods = [];
+      if (!mergedData.adicionalNoturno) mergedData.adicionalNoturno = { active: false, periods: [] };
+      if (!mergedData.wageGap) mergedData.wageGap = [];
+      if (!mergedData.overtime) mergedData.overtime = [];
+      if (!mergedData.salaryBalance) mergedData.salaryBalance = { active: true, days: 0 };
+      
+      setData(mergedData);
       setEditingId(calc.id);
       setShowSavedList(false);
-      calculate(calc.data); // Recalcula para mostrar resultados
+      calculate(mergedData); // Recalcula para mostrar resultados
   };
 
   // --- ENGINE DE CÁLCULO ---
@@ -772,6 +869,46 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                               </div>
                           </div>
                       </div>
+
+                      {/* Histórico Salarial */}
+                      <div className={`md:col-span-2 ${STYLES.CARD_SECTION}`}>
+                          <div className="flex justify-between items-center mb-4">
+                              <h3 className={STYLES.CARD_TITLE}>
+                                  <BanknotesIcon className="h-5 w-5 text-indigo-500" /> Histórico Salarial
+                              </h3>
+                              <button onClick={addSalaryHistory} className={STYLES.BTN_SECONDARY_SM}>
+                                  <PlusIcon className="h-4 w-4" /> Adicionar Período
+                              </button>
+                          </div>
+                          
+                          {data.salaryHistory.length === 0 ? (
+                              <div className="text-center py-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
+                                  <p className="text-sm text-slate-500">Nenhum histórico adicionado. O cálculo usará o <strong>Último Salário Base</strong> para todo o período.</p>
+                              </div>
+                          ) : (
+                              <div className="space-y-3">
+                                  {data.salaryHistory.map((hist, idx) => (
+                                      <div key={hist.id} className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                                          <div className="md:col-span-2">
+                                              <label className={STYLES.LABEL_TINY}>Início</label>
+                                              <input type="date" className={STYLES.INPUT_TINY} value={hist.startDate} onChange={e => updateSalaryHistory(hist.id, 'startDate', e.target.value)} />
+                                          </div>
+                                          <div className="md:col-span-2">
+                                              <label className={STYLES.LABEL_TINY}>Fim</label>
+                                              <input type="date" className={STYLES.INPUT_TINY} value={hist.endDate} onChange={e => updateSalaryHistory(hist.id, 'endDate', e.target.value)} />
+                                          </div>
+                                          <div className="md:col-span-2">
+                                              <label className={STYLES.LABEL_TINY}>Salário (R$)</label>
+                                              <input type="number" className={STYLES.INPUT_TINY} value={hist.salary} onChange={e => updateSalaryHistory(hist.id, 'salary', Number(e.target.value))} />
+                                          </div>
+                                          <div className="md:col-span-1 flex justify-end">
+                                              <button onClick={() => removeSalaryHistory(hist.id)} className="p-2 text-slate-400 hover:text-red-500 transition"><TrashIcon className="h-4 w-4" /></button>
+                                          </div>
+                                      </div>
+                                  ))}
+                              </div>
+                          )}
+                      </div>
                       
                       <div className="md:col-span-2 flex justify-end">
                           <button onClick={() => setActiveTab(2)} className={STYLES.BTN_PRIMARY}>
@@ -785,6 +922,69 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
               {activeTab === 2 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                       
+                      {/* Seção Saldo de Salário e Deduções */}
+                      <div className={STYLES.CARD_SECTION}>
+                          <h3 className={`${STYLES.CARD_TITLE} text-emerald-600 dark:text-emerald-400`}>
+                              <BanknotesIcon className="h-5 w-5" /> Saldo de Salário & Deduções
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* Saldo de Salário */}
+                              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl">
+                                  <label className="flex items-center gap-3 cursor-pointer mb-3">
+                                      <input 
+                                          type="checkbox" 
+                                          checked={data.salaryBalance.active} 
+                                          onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, active: e.target.checked } }))} 
+                                          className="w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" 
+                                      />
+                                      <span className="font-bold text-slate-700 dark:text-slate-200">Calcular Saldo de Salário</span>
+                                  </label>
+                                  
+                                  {data.salaryBalance.active && (
+                                      <div className="grid grid-cols-2 gap-3 pl-8">
+                                          <div>
+                                              <label className={STYLES.LABEL_TINY}>Dias Trabalhados (Mês Rescisão)</label>
+                                              <input 
+                                                  type="number" 
+                                                  className={STYLES.INPUT_TINY} 
+                                                  value={data.salaryBalance.days} 
+                                                  onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, days: Number(e.target.value) } }))} 
+                                                  placeholder="0 = Automático"
+                                              />
+                                              <p className="text-[9px] text-slate-400 mt-1">Deixe 0 para usar data de demissão.</p>
+                                          </div>
+                                          <div>
+                                              <label className={STYLES.LABEL_TINY}>Valor Manual (Opcional)</label>
+                                              <input 
+                                                  type="number" 
+                                                  className={STYLES.INPUT_TINY} 
+                                                  value={data.salaryBalance.customAmount || ''} 
+                                                  onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, customAmount: Number(e.target.value) } }))} 
+                                                  placeholder="R$ 0,00"
+                                              />
+                                          </div>
+                                      </div>
+                                  )}
+                              </div>
+
+                              {/* Deduções */}
+                              <div className="p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-xl">
+                                  <h4 className="font-bold text-red-700 dark:text-red-400 mb-3 text-sm">Deduções / Compensações</h4>
+                                  <div>
+                                      <label className={STYLES.LABEL_TINY}>Valor Pago na Rescisão (TRCT)</label>
+                                      <input 
+                                          type="number" 
+                                          className={STYLES.INPUT_TINY} 
+                                          value={data.severancePaid} 
+                                          onChange={e => handleInputChange('severancePaid', Number(e.target.value))} 
+                                          placeholder="R$ 0,00"
+                                      />
+                                      <p className="text-[9px] text-slate-400 mt-1">Este valor será subtraído do total estimado.</p>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+
                       {/* Seção Adicionais Fixos */}
                       <div className={STYLES.CARD_SECTION}>
                           <h3 className={`${STYLES.CARD_TITLE} text-indigo-600 dark:text-indigo-400`}>
@@ -1025,6 +1225,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
               {/* TAB 3: INDENIZAÇÕES E MULTAS */}
               {activeTab === 3 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      
                        <div className={STYLES.CARD_SECTION}>
                            <h3 className={`${STYLES.CARD_TITLE} text-red-600 dark:text-red-400`}>
                                <ExclamationTriangleIcon className="h-5 w-5" /> Multas e Verbas Vencidas
