@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
 import { 
   UserIcon, DocumentTextIcon, CalculatorIcon, 
   ArrowDownTrayIcon, TrashIcon, PlusIcon, 
   CheckCircleIcon, ExclamationTriangleIcon,
-  CalendarDaysIcon, CurrencyDollarIcon
+  CalendarDaysIcon, CurrencyDollarIcon, CloudArrowUpIcon
 } from '@heroicons/react/24/outline';
 import { ClientRecord } from './types';
 import { formatCurrency } from './utils';
+
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 // --- Types ---
 
@@ -71,6 +75,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     const [activeTab, setActiveTab] = useState(1);
     const [data, setData] = useState<SocialSecurityData>(INITIAL_SS_DATA);
 
+    const [isProcessing, setIsProcessing] = useState(false);
+
     // --- Handlers ---
     const handleInputChange = (field: keyof SocialSecurityData, value: any) => {
         setData(prev => ({ ...prev, [field]: value }));
@@ -92,18 +98,57 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         }
     };
 
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (file.type !== 'application/pdf') {
+            alert('Por favor, selecione um arquivo PDF.');
+            return;
+        }
+
+        setIsProcessing(true);
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            
+            let fullText = '';
+            
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map((item: any) => item.str).join(' ');
+                fullText += pageText + '\n';
+            }
+
+            setData(prev => ({ ...prev, cnisContent: fullText }));
+            
+            // Auto-trigger parsing after upload
+            setTimeout(() => parseCNIS(fullText), 500);
+
+        } catch (error) {
+            console.error('Erro ao ler PDF:', error);
+            alert('Erro ao processar o arquivo PDF. Verifique se o arquivo é válido.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
     // --- CNIS Parsing Logic ---
-    const parseCNIS = () => {
-        if (!data.cnisContent) return;
+    const parseCNIS = (contentOverride?: string) => {
+        const content = contentOverride || data.cnisContent;
+        if (!content) return;
         
-        const content = data.cnisContent;
         const bonds: CNISBond[] = [];
         
         // 1. Extract Personal Data
-        const nameMatch = content.match(/Nome:\s+([A-Z\s]+)/);
+        // Regex to handle fields that might be on the same line or separate lines
+        // We use specific lookaheads or stop characters to capture the value
+        
+        const nameMatch = content.match(/Nome:\s+(.+?)(?=\s+Data|\s+CPF|\s+NIT|$)/);
         const cpfMatch = content.match(/CPF:\s+([\d.-]+)/);
         const birthMatch = content.match(/Data de nascimento:\s+(\d{2}\/\d{2}\/\d{4})/);
-        const motherMatch = content.match(/Nome da mãe:\s+([A-Z\s]+)/);
+        const motherMatch = content.match(/Nome da mãe:\s+(.+?)(?=\s+Página|$)/);
         const nitMatch = content.match(/NIT:\s+([\d.-]+)/);
 
         const newData: Partial<SocialSecurityData> = {};
@@ -116,83 +161,108 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         if (motherMatch) newData.motherName = motherMatch[1].trim();
 
         // 2. Extract Bonds (Vínculos)
-        // Strategy: Find blocks starting with a sequence number and NIT, followed by company info
-        // Regex explanation:
-        // Seq\.\s+NIT -> Header
-        // (\d+)\s+([\d.-]+)\s+([\d./-]+)\s+(.*?)\s+(Empregado|Contribuinte Individual|Facultativo|Trabalhador Avulso|Segurado Especial|Menor Aprendiz|Doméstico).*?(\d{2}\/\d{2}\/\d{4})\s+(\d{2}\/\d{2}\/\d{4})?
+        // We split by "Seq." which seems to be a reliable delimiter for the start of a bond block in the OCR text.
+        // However, "Seq." also appears in the header "Seq. NIT ...".
+        // We can split by the header pattern to get blocks.
         
-        // Simplified approach: Split by "Seq." and process each block
         const blocks = content.split(/Seq\.\s+NIT/);
         
         blocks.slice(1).forEach((block, index) => {
-            // Extract Bond Info
-            // Looking for: 1 123.456.789-0 12.345.678/0001-99 RAZAO SOCIAL TIPO 01/01/2000 01/01/2001
-            // Note: The OCR might put these on different lines or merged lines.
-            // Let's try to find the date pattern which is reliable: dd/mm/yyyy
+            // The block starts with the bond line (or close to it)
+            // Example: "1 123.456.789-0 33.279.993/0058-77 DISTRIBUIDORA ... 07/11/1988 12/1989"
             
-            const datePattern = /(\d{2}\/\d{2}\/\d{4})/g;
-            const dates = [...block.matchAll(datePattern)].map(m => m[0]);
+            // Find the line that looks like a bond definition
+            // It must start with a number (Sequence) and contain a NIT-like pattern
+            const bondLineMatch = block.match(/^\s*(\d+)\s+([\d.-]+)\s+/m);
             
-            if (dates.length > 0) {
-                const startDate = dates[0];
-                const endDate = dates.length > 1 ? dates[1] : ''; // Might be empty if active
+            if (bondLineMatch) {
+                const seq = parseInt(bondLineMatch[1]);
+                const nit = bondLineMatch[2];
                 
-                // Try to find company name and code
-                // Usually comes before the type "Empregado" etc.
-                const typeMatch = block.match(/(Empregado|Contribuinte Individual|Facultativo|Trabalhador Avulso|Segurado Especial|Menor Aprendiz|Doméstico)/i);
-                const type = typeMatch ? typeMatch[0] : 'Desconhecido';
+                // Extract the full line or the first few lines until we hit remunerations
+                // Remunerations start with mm/yyyy
+                const lines = block.split('\n');
+                let bondInfoText = "";
+                for (const line of lines) {
+                    if (/\d{2}\/\d{4}\s+[\d.,]+/.test(line)) break; // Stop at remuneration
+                    if (line.includes("Competência") && line.includes("Remuneração")) continue; // Skip header
+                    bondInfoText += " " + line;
+                }
                 
-                // Extract Code (CNPJ/CEI) - usually looks like 00.000.000/0000-00
-                const codeMatch = block.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{11,14}/);
+                // Extract Dates from the bond info text
+                // We look for full dates dd/mm/yyyy
+                const datePattern = /(\d{2}\/\d{2}\/\d{4})/g;
+                const dates = [...bondInfoText.matchAll(datePattern)].map(m => m[0]);
+                
+                let startDate = '';
+                let endDate = '';
+                
+                if (dates.length > 0) startDate = dates[0];
+                if (dates.length > 1) endDate = dates[1];
+                
+                // Extract Code (CNPJ/CEI)
+                const codeMatch = bondInfoText.match(/\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{11,14}/);
                 const code = codeMatch ? codeMatch[0] : '';
-
-                // Extract Origin (Company Name)
-                // It's hard to regex perfectly, but usually between Code and Type
+                
+                // Extract Type
+                const typeMatch = bondInfoText.match(/(Empregado|Contribuinte Individual|Facultativo|Trabalhador Avulso|Segurado Especial|Menor Aprendiz|Doméstico)/i);
+                const type = typeMatch ? typeMatch[0] : 'Indefinido';
+                
+                // Extract Origin
+                // It's usually between Code and Type
                 let origin = 'VÍNCULO IMPORTADO';
-                if (codeMatch && typeMatch) {
-                    const startIdx = block.indexOf(codeMatch[0]) + codeMatch[0].length;
-                    const endIdx = block.indexOf(typeMatch[0]);
+                if (code && type !== 'Indefinido') {
+                    const startIdx = bondInfoText.indexOf(code) + code.length;
+                    const endIdx = bondInfoText.indexOf(type);
                     if (endIdx > startIdx) {
-                        origin = block.substring(startIdx, endIdx).trim();
+                        origin = bondInfoText.substring(startIdx, endIdx).trim();
+                        // Clean up "ou Agente Público" if present
+                        origin = origin.replace(/ou Agente Público/i, '').trim();
                     }
+                } else if (code) {
+                     // Fallback if type not found
+                     const startIdx = bondInfoText.indexOf(code) + code.length;
+                     // Take next 30 chars?
+                     origin = bondInfoText.substring(startIdx, startIdx + 50).trim();
                 }
 
                 // Extract Remunerations
-                // Pattern: mm/yyyy value
-                // Value might have dots and commas: 1.234,56
                 const sc: { month: string; value: number }[] = [];
                 const remunRegex = /(\d{2}\/\d{4})\s+([\d.]*,\d{2})/g;
                 let remunMatch;
                 while ((remunMatch = remunRegex.exec(block)) !== null) {
                     const [_, m, v] = remunMatch;
-                    // Filter out dates that are likely start/end dates (though regex requires comma, dates usually don't have comma)
-                    // But sometimes OCR is messy.
-                    // Also check if it's not a date like 01/2000 (could be Jan 2000)
-                    
                     const value = parseFloat(v.replace(/\./g, '').replace(',', '.'));
                     sc.push({ month: m, value });
                 }
 
                 // Extract Indicators
-                // Look for common indicators like IREM-INDP, PREC-FACULT, etc.
-                // They are usually uppercase words, sometimes with hyphens
                 const indicators: string[] = [];
-                const indicatorRegex = /\b[A-Z]{4,}-[A-Z]{3,}\b|\bPEXT\b|\bAEXT-VT\b/g; // Example patterns
-                const indMatches = block.match(indicatorRegex);
-                if (indMatches) {
-                    indMatches.forEach(i => {
-                        if (!indicators.includes(i)) indicators.push(i);
-                    });
+                // Capture uppercase codes that are likely indicators
+                // Exclude common header words
+                const indicatorRegex = /\b([A-Z0-9]{4,}(?:-[A-Z0-9]+)?)\b/g;
+                const ignoredWords = ['COMPETENCIA', 'REMUNERACAO', 'INDICADORES', 'TOTAL', 'PAGINA', 'CNIS', 'INSS', 'DATA', 'NOME', 'FILIADO', 'ORIGEM', 'VINCULO'];
+                
+                let indMatch;
+                while ((indMatch = indicatorRegex.exec(block)) !== null) {
+                    const ind = indMatch[1];
+                    if (!ignoredWords.includes(ind) && !indicators.includes(ind)) {
+                        // Basic validation: Indicators usually don't have numbers unless specific codes
+                        // Let's assume valid indicators are mostly letters
+                        if (/[A-Z]/.test(ind)) {
+                            indicators.push(ind);
+                        }
+                    }
                 }
 
                 bonds.push({
                     id: Math.random().toString(),
-                    seq: index + 1,
-                    nit: nitMatch ? nitMatch[1] : '',
+                    seq,
+                    nit,
                     code,
                     origin,
                     type,
-                    startDate: startDate.split('/').reverse().join('-'), // Convert to YYYY-MM-DD
+                    startDate: startDate.split('/').reverse().join('-'),
                     endDate: endDate ? endDate.split('/').reverse().join('-') : '',
                     indicators,
                     sc
@@ -332,23 +402,41 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     {activeTab === 2 && (
                         <div className={STYLES.CARD_SECTION}>
                             <h3 className={STYLES.CARD_TITLE}>Importação de Dados (CNIS)</h3>
-                            <div className="mb-4">
-                                <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">
-                                    Copie todo o conteúdo do PDF do CNIS (Ctrl+A, Ctrl+C) e cole no campo abaixo.
-                                    O sistema identificará automaticamente os vínculos e remunerações.
-                                </p>
-                                <textarea 
-                                    className={`${STYLES.INPUT_FIELD} h-64 font-mono text-xs`}
-                                    placeholder="Cole o conteúdo do CNIS aqui..."
-                                    value={data.cnisContent}
-                                    onChange={e => handleInputChange('cnisContent', e.target.value)}
-                                />
+                            
+                            <div className="mb-6">
+                                <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 dark:hover:bg-bray-800 dark:bg-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:hover:border-slate-500 dark:hover:bg-slate-600 transition-all">
+                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                        <CloudArrowUpIcon className={`w-12 h-12 mb-4 ${isProcessing ? 'text-indigo-500 animate-bounce' : 'text-slate-500 dark:text-slate-400'}`} />
+                                        <p className="mb-2 text-sm text-slate-500 dark:text-slate-400">
+                                            <span className="font-bold">Clique para enviar</span> ou arraste o arquivo aqui
+                                        </p>
+                                        <p className="text-xs text-slate-500 dark:text-slate-400">PDF do CNIS (Extrato Previdenciário)</p>
+                                        {isProcessing && <p className="mt-2 text-sm font-bold text-indigo-500">Processando arquivo...</p>}
+                                    </div>
+                                    <input 
+                                        type="file" 
+                                        className="hidden" 
+                                        accept="application/pdf"
+                                        onChange={handleFileUpload}
+                                        disabled={isProcessing}
+                                    />
+                                </label>
                             </div>
-                            <div className="flex justify-end">
-                                <button onClick={parseCNIS} className={STYLES.BTN_PRIMARY}>
-                                    <DocumentTextIcon className="h-5 w-5" />
-                                    Processar CNIS
-                                </button>
+
+                            <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                                <p className="text-xs font-bold text-slate-500 uppercase mb-2">Conteúdo Extraído (Depuração)</p>
+                                <textarea 
+                                    className={`${STYLES.INPUT_FIELD} h-32 font-mono text-[10px] opacity-70`}
+                                    placeholder="O conteúdo do PDF aparecerá aqui após o upload..."
+                                    value={data.cnisContent}
+                                    readOnly
+                                />
+                                <div className="flex justify-end mt-2">
+                                    <button onClick={() => parseCNIS()} className={STYLES.BTN_SECONDARY} disabled={!data.cnisContent}>
+                                        <ArrowDownTrayIcon className="h-4 w-4" />
+                                        Reprocessar Texto
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -462,9 +550,104 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     {activeTab === 4 && (
                         <div className={STYLES.CARD_SECTION}>
                             <h3 className={STYLES.CARD_TITLE}>Resumo da Análise</h3>
-                            <div className={STYLES.EMPTY_MSG}>
-                                A análise será gerada após o processamento dos vínculos.
-                            </div>
+                            
+                            {data.bonds.length === 0 ? (
+                                <div className={STYLES.EMPTY_MSG}>
+                                    Nenhum vínculo para analisar. Importe o CNIS primeiro.
+                                </div>
+                            ) : (
+                                <div className="space-y-6">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800">
+                                            <p className="text-xs font-bold text-indigo-500 uppercase">Tempo Total (Bruto)</p>
+                                            <p className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">
+                                                {(() => {
+                                                    let totalDays = 0;
+                                                    data.bonds.forEach(b => {
+                                                        if (b.startDate && b.endDate) {
+                                                            const start = new Date(b.startDate);
+                                                            const end = new Date(b.endDate);
+                                                            const diff = end.getTime() - start.getTime();
+                                                            totalDays += Math.ceil(diff / (1000 * 60 * 60 * 24));
+                                                        }
+                                                    });
+                                                    const years = Math.floor(totalDays / 365);
+                                                    const months = Math.floor((totalDays % 365) / 30);
+                                                    const days = (totalDays % 365) % 30;
+                                                    return `${years}a ${months}m ${days}d`;
+                                                })()}
+                                            </p>
+                                        </div>
+                                        <div className="bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-xl border border-emerald-100 dark:border-emerald-800">
+                                            <p className="text-xs font-bold text-emerald-500 uppercase">Carência (Contribuições)</p>
+                                            <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">
+                                                {data.bonds.reduce((acc, b) => acc + b.sc.length, 0)} meses
+                                            </p>
+                                        </div>
+                                        <div className="bg-amber-50 dark:bg-amber-900/20 p-4 rounded-xl border border-amber-100 dark:border-amber-800">
+                                            <p className="text-xs font-bold text-amber-500 uppercase">Vínculos Analisados</p>
+                                            <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">
+                                                {data.bonds.length}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden">
+                                        <table className="w-full text-sm text-left">
+                                            <thead className="bg-slate-50 dark:bg-slate-900 text-slate-500 dark:text-slate-400 font-bold uppercase text-xs">
+                                                <tr>
+                                                    <th className="px-4 py-3">Período</th>
+                                                    <th className="px-4 py-3">Origem / Empresa</th>
+                                                    <th className="px-4 py-3 text-center">Tempo</th>
+                                                    <th className="px-4 py-3 text-center">Carência</th>
+                                                    <th className="px-4 py-3">Indicadores</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                                {data.bonds.map(bond => {
+                                                    const start = bond.startDate ? new Date(bond.startDate) : null;
+                                                    const end = bond.endDate ? new Date(bond.endDate) : null;
+                                                    let durationStr = "-";
+                                                    if (start && end) {
+                                                        const diff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+                                                        const y = Math.floor(diff / 365);
+                                                        const m = Math.floor((diff % 365) / 30);
+                                                        durationStr = `${y}a ${m}m`;
+                                                    }
+
+                                                    return (
+                                                        <tr key={bond.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition">
+                                                            <td className="px-4 py-3 font-mono text-xs">
+                                                                {bond.startDate ? bond.startDate.split('-').reverse().join('/') : '?'} <br/>
+                                                                {bond.endDate ? bond.endDate.split('-').reverse().join('/') : 'Ativo'}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="font-bold text-slate-700 dark:text-slate-200">{bond.origin}</div>
+                                                                <div className="text-xs text-slate-500">{bond.type}</div>
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center font-mono text-xs text-slate-600 dark:text-slate-400">
+                                                                {durationStr}
+                                                            </td>
+                                                            <td className="px-4 py-3 text-center font-bold text-emerald-600">
+                                                                {bond.sc.length}
+                                                            </td>
+                                                            <td className="px-4 py-3">
+                                                                <div className="flex flex-wrap gap-1">
+                                                                    {bond.indicators.map(ind => (
+                                                                        <span key={ind} className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded text-[10px] font-bold border border-slate-200 dark:border-slate-600">
+                                                                            {ind}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
 
