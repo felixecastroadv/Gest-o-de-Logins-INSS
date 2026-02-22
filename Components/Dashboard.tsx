@@ -10,6 +10,7 @@ import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { DashboardProps, ClientRecord, ContractRecord, NotificationItem } from '../types';
 import { INITIAL_DATA, INITIAL_CONTRACTS_LIST } from '../data';
 import LaborCalc, { CalculationRecord } from '../LaborCalc';
+import SocialSecurityCalc from '../SocialSecurityCalc';
 import { initSupabase } from '../supabaseClient';
 import { isUrgentDate, formatCurrency } from '../utils';
 import StatsCards from './StatsCards';
@@ -32,7 +33,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSettingsSaved,
   onRestoreBackup
 }) => {
-  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc'>('clients');
+  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc'>('clients');
   const [showArchived, setShowArchived] = useState(false);
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
@@ -476,7 +477,15 @@ const Dashboard: React.FC<DashboardProps> = ({
                    className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'labor_calc' ? 'bg-emerald-600 shadow-lg shadow-emerald-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
                >
                    <CalculatorIcon className="h-6 w-6 lg:mr-3" />
-                   <span className="hidden lg:block font-medium">Calculadora</span>
+                   <span className="hidden lg:block font-medium">Calc. Trabalhista</span>
+               </button>
+
+               <button 
+                   onClick={() => setCurrentView('social_calc')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'social_calc' ? 'bg-orange-600 shadow-lg shadow-orange-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <CalculatorIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Calc. Previdenciária</span>
                </button>
            </div>
            
@@ -505,7 +514,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                  <h2 className="text-xl font-bold text-slate-800 dark:text-white">
                      {currentView === 'clients' ? 'Painel de Processos' : 
                       currentView === 'contracts' ? 'Gestão de Contratos' :
-                      'Cálculos Trabalhistas'}
+                      currentView === 'labor_calc' ? 'Cálculos Trabalhistas' :
+                      'Cálculos Previdenciários'}
                  </h2>
                  {isSyncing ? (
                       <span className="text-xs text-blue-500 flex items-center gap-1"><ArrowPathRoundedSquareIcon className="h-3 w-3 animate-spin" /> Salvando...</span>
@@ -542,6 +552,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                     savedCalculations={savedCalculations}
                     onSaveCalculation={handleSaveCalculation}
                     onDeleteCalculation={handleDeleteCalculation}
+                 />
+             ) : currentView === 'social_calc' ? (
+                 <SocialSecurityCalc 
+                    clients={records}
                  />
              ) : currentView === 'clients' ? (
                  <>
