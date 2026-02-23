@@ -53,11 +53,14 @@ Sua tarefa é analisar o texto extraído de um CNIS (Cadastro Nacional de Inform
 `;
 
 export async function analyzeCNIS(cnisText: string) {
-  if (!process.env.GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY not found");
+  // Use API_KEY_2 as requested by the user (Plan B)
+  const apiKey = process.env.API_KEY_2 || process.env.GEMINI_API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("API_KEY_2 (or GEMINI_API_KEY) not found");
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const ai = new GoogleGenAI({ apiKey });
 
   try {
     const response = await ai.models.generateContent({
