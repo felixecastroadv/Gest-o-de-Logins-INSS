@@ -278,8 +278,9 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             setData(prev => ({ ...prev, cnisContent: fullText }));
             
             // Try AI first
-            // Truncate text to ~100k characters to avoid payload limits and timeouts (approx 30-40 pages of dense text)
-            const truncatedText = fullText.length > 100000 ? fullText.substring(0, 100000) + "\n...[Texto truncado para análise]..." : fullText;
+            // Truncate text to ~50k characters to avoid Vercel function timeouts (approx 15-20 pages of dense text)
+            // The free tier has a 10s limit, Pro has 60s (or 300s if configured). 100k chars is too much for synchronous processing.
+            const truncatedText = fullText.length > 50000 ? fullText.substring(0, 50000) + "\n...[Texto truncado para análise]..." : fullText;
             
             const aiResult = await analyzeCNISWithAI(truncatedText);
             if (aiResult) {
