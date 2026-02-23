@@ -109,7 +109,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             const ai = new GoogleGenAI({ apiKey: apiKey! });
             
-            const response = await ai.models.generateContent({
+            // Add timeout promise to race against AI call
+            const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("AI Request Timeout (45s)")), 45000)
+            );
+
+            const aiPromise = ai.models.generateContent({
                 model: "gemini-3-flash-preview",
                 contents: {
                     role: "user",
@@ -120,6 +125,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     responseMimeType: "application/json"
                 }
             });
+
+            // Race the AI call against the timeout
+            const response: any = await Promise.race([aiPromise, timeoutPromise]);
 
             const text = response.text;
             if (!text) throw new Error("No text returned from AI");
