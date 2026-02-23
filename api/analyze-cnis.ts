@@ -110,8 +110,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             const ai = new GoogleGenAI({ apiKey: apiKey! });
             
             // Add timeout promise to race against AI call
+            // User is on Vercel Pro (limit 300s), so we set internal timeout to 250s to be safe
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("AI Request Timeout (45s)")), 45000)
+                setTimeout(() => reject(new Error("AI Request Timeout (250s)")), 250000)
             );
 
             const aiPromise = ai.models.generateContent({
