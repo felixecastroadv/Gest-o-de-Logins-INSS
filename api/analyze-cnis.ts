@@ -16,13 +16,14 @@ Ler o texto do CNIS e retornar uma lista de vínculos (bonds) limpa e correta.
     *   **NÃO CRIE** vínculos fantasmas. Se não tiver certeza, não invente.
     *   **NOME DA EMPRESA (Origin):** Extraia o nome exato da empresa ou empregador. Evite "VÍNCULO SEM NOME". Se for recolhimento por carnê, use "CONTRIBUINTE INDIVIDUAL" ou "RECOLHIMENTO PRÓPRIO".
 
-2.  **DATAS (Início e Fim):**
-    *   **Data Início:** Extraia a data de admissão/início.
+2.  **DATAS (Início e Fim) - PRIORIDADE MÁXIMA:**
+    *   **Data Início:** Extraia a data de admissão/início que aparece logo após o nome da empresa ou NIT.
     *   **Data Fim (CRUCIAL):**
-        *   Se a "Data Fim" estiver explícita, use-a.
-        *   **SE A DATA FIM ESTIVER VAZIA:** Procure IMEDIATAMENTE pelo campo **"Últ. Remun."** (Última Remuneração) dentro do bloco daquele vínculo.
+        *   Se a "Data Fim" estiver explícita (ex: 30/04/2003), USE-A.
+        *   **SE A DATA FIM ESTIVER VAZIA:** Procure IMEDIATAMENTE pelo campo **"Últ. Remun."** (Última Remuneração) dentro do bloco daquele vínculo (geralmente ao lado da Data Fim vazia).
         *   **REGRA DE PREENCHIMENTO:** Se usar a "Últ. Remun." (ex: 04/2023), a Data Fim DEVE ser o **ÚLTIMO DIA** daquele mês (ex: 30/04/2023).
-        *   Se não houver Data Fim E não houver Última Remuneração, o vínculo é ATIVO (Data Fim = null).
+        *   **VÍNCULOS ATIVOS:** Se não houver Data Fim E não houver "Últ. Remun." no cabeçalho, verifique a lista de remunerações. Se houver remunerações recentes (ex: 2024, 2025, 2026), o vínculo está ATIVO. Nesse caso, deixe "endDate" como null.
+        *   **NÃO DEIXE DATA FIM VAZIA SE HOUVER "ÚLT. REMUN."**.
 
 3.  **SALÁRIOS DE CONTRIBUIÇÃO (SC):**
     *   Extraia todos os salários (Competência e Valor).
@@ -39,7 +40,7 @@ Ler o texto do CNIS e retornar uma lista de vínculos (bonds) limpa e correta.
       "seq": 1,
       "origin": "NOME DA EMPRESA",
       "startDate": "AAAA-MM-DD",
-      "endDate": "AAAA-MM-DD", // Use null se aberto
+      "endDate": "AAAA-MM-DD", // Use null se aberto/ativo
       "sc": [],
       "indicators": []
     }
@@ -50,6 +51,7 @@ Ler o texto do CNIS e retornar uma lista de vínculos (bonds) limpa e correta.
 **ATENÇÃO:**
 *   O usuário reclamou de "Vínculos Fantasmas" e "Datas Erradas". SEJA PRECISO.
 *   Compare a sequência numérica. Se o CNIS tem 10 vínculos, retorne 10 vínculos.
+*   **CONCOMITÂNCIA:** Retorne os vínculos brutos com suas datas reais. O sistema fará o cálculo de tempo unificado.
 `;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
