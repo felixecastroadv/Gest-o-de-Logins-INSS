@@ -8,10 +8,11 @@ Sua tarefa é analisar o texto extraído de um CNIS (Cadastro Nacional de Inform
 
 **REGRAS DE NEGÓCIO E JURÍDICAS:**
 
-1.  **Saneamento de Vínculos:**
+1.  **Saneamento de Vínculos (CRÍTICO):**
     *   Identifique vínculos com datas de início ou fim ausentes.
-    *   Se a data fim estiver ausente, verifique se há "Últ. Remun." (Última Remuneração). Se houver, a data fim deve ser o último dia daquele mês (ou o dia 1, conforme preferência conservadora para competência).
-    *   Se não houver data fim nem última remuneração, marque como "Vínculo Aberto" (pode ser o emprego atual ou erro).
+    *   **REGRA DE OURO PARA DATA FIM:** Se a data fim ("Data Fim") estiver ausente ou em branco, você **OBRIGATORIAMENTE** deve procurar pelo campo "Últ. Remun." (Última Remuneração) dentro daquele vínculo.
+        *   Se encontrar "Últ. Remun." (ex: 04/2023), a Data Fim será o último dia desse mês (ex: 30/04/2023).
+    *   Se não houver data fim E não houver última remuneração, marque como "Vínculo Aberto" (null).
     *   Corrija nomes de empresas cortados ou com erros de OCR.
     *   Identifique o tipo de filiado (Empregado, Contribuinte Individual, Facultativo, etc.).
 
@@ -44,7 +45,7 @@ Sua tarefa é analisar o texto extraído de um CNIS (Cadastro Nacional de Inform
         *   \`indicators\`: Lista de indicadores (ex: IREM-INDP, PEXT, etc.).
         *   \`sc\`: Lista de salários de contribuição ({ month: 'MM/AAAA', value: number }).
         *   \`isConcomitant\`: Booleano indicando se há concomitância neste período.
-        *   \`notes\`: Notas jurídicas sobre o vínculo (ex: "Vínculo sem data fim, ajustado pela última remuneração").
+        *   \`notes\`: Notas jurídicas sobre o vínculo (ex: "Data Fim fixada pela Última Remuneração em 04/2023").
     *   \`analysis\`: Texto com a análise jurídica preliminar do Dr. Michel Felix, citando artigos de lei e sugerindo ações (ex: "Verificar indicador PEXT", "Possível direito adquirido em 2018").
 
 **IMPORTANTE:**
@@ -79,55 +80,68 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'CNIS content is required' });
     }
 
-    // 1. Check API Key - Robust Strategy
-    // Try specific keys first, then fallbacks
-    let apiKey = process.env.API_KEY_2 || 
-                 process.env.GEMINI_API_KEY || 
-                 process.env.API_KEY_3 || 
-                 process.env.API_KEY_4 || 
-                 process.env.API_KEY_5 || 
-                 process.env.API_KEY_6 || 
-                 process.env.GOOGLE_API_KEY;
+    // 1. Define API Keys in Priority Order
+    const apiKeys = [
+        process.env.API_KEY_1,
+        process.env.API_KEY_2,
+        process.env.API_KEY_3,
+        process.env.API_KEY_4,
+        process.env.API_KEY_5,
+        process.env.API_KEY_6,
+        process.env.GEMINI_API_KEY,
+        process.env.GOOGLE_API_KEY
+    ].filter(key => !!key); // Remove undefined/empty keys
 
-    if (!apiKey) {
-      // Debug: Log available environment variable names (security: do NOT log values)
-      const availableKeys = Object.keys(process.env).filter(k => k.includes('KEY') || k.includes('SECRET') || k.includes('TOKEN'));
-      console.error("API Key missing. Available relevant env vars:", availableKeys);
-      
+    if (apiKeys.length === 0) {
+      const availableKeys = Object.keys(process.env).filter(k => k.includes('KEY') || k.includes('SECRET'));
+      console.error("No API Keys found. Available vars:", availableKeys);
       return res.status(500).json({ 
-        error: 'Server misconfiguration: API Key not found',
-        debug: {
-            message: 'Nenhuma chave de API válida encontrada nas variáveis de ambiente.',
-            availableVarNames: availableKeys // Helps user debug on Vercel
-        }
+        error: 'Server misconfiguration: No API Keys found',
+        debug: { availableVarNames: availableKeys }
       });
     }
 
-    // 2. Initialize AI
-    const ai = new GoogleGenAI({ apiKey });
+    // 2. Try keys sequentially (Rotation Logic)
+    let lastError = null;
+    let successResponse = null;
 
-    // 3. Call Gemini
-    console.log("Calling Gemini API...");
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: {
-        role: "user",
-        parts: [{ text: cnisContent }]
-      },
-      config: {
-        systemInstruction: SYSTEM_PROMPT,
-        responseMimeType: "application/json"
-      }
-    });
+    for (const [index, apiKey] of apiKeys.entries()) {
+        try {
+            console.log(`Attempting with API Key #${index + 1} (ending in ...${apiKey?.slice(-4)})...`);
+            
+            const ai = new GoogleGenAI({ apiKey: apiKey! });
+            
+            const response = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: {
+                    role: "user",
+                    parts: [{ text: cnisContent }]
+                },
+                config: {
+                    systemInstruction: SYSTEM_PROMPT,
+                    responseMimeType: "application/json"
+                }
+            });
 
-    const text = response.text;
-    if (!text) {
-        throw new Error("No text returned from AI");
+            const text = response.text;
+            if (!text) throw new Error("No text returned from AI");
+
+            successResponse = JSON.parse(text);
+            console.log(`Success with API Key #${index + 1}`);
+            break; // Stop loop on success
+
+        } catch (error: any) {
+            console.warn(`Failed with API Key #${index + 1}:`, error.message);
+            lastError = error;
+            // Continue to next key...
+        }
     }
 
-    // 4. Parse and Return
-    const jsonResponse = JSON.parse(text);
-    res.status(200).json(jsonResponse);
+    if (successResponse) {
+        return res.status(200).json(successResponse);
+    } else {
+        throw lastError || new Error("All API keys failed");
+    }
 
   } catch (error: any) {
     console.error("Error in Vercel function:", error);
