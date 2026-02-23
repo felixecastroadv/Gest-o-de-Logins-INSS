@@ -93,6 +93,13 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     const [isProcessing, setIsProcessing] = useState(false);
 
     // --- Helpers ---
+    // Helper to calculate days between two dates (inclusive)
+    const getDays = (s: Date, e: Date) => {
+        if (s > e) return 0;
+        const diff = Math.abs(e.getTime() - s.getTime());
+        return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+    };
+
     const calculateTime = (start: string, end: string, type: string, gender: string) => {
         if (!start || !end) return { years: 0, months: 0, days: 0, totalDays: 0 };
         
@@ -105,13 +112,6 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
 
         // EC 103/2019 Reform Date
         const REFORM_DATE = new Date('2019-11-13');
-
-        // Helper to calculate days between two dates (inclusive)
-        const getDays = (s: Date, e: Date) => {
-            if (s > e) return 0;
-            const diff = Math.abs(e.getTime() - s.getTime());
-            return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
-        };
 
         let totalAdjustedDays = 0;
 
@@ -155,17 +155,51 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         return { years, months, days, totalDays: totalAdjustedDays };
     };
     
-    const calculateTotalTime = () => {
-        let totalDays = 0;
+    // Unified Time Calculation (Merge Intervals) to handle concurrency correctly
+    const calculateUnifiedTime = () => {
+        const intervals: { start: number; end: number }[] = [];
+
         data.bonds.forEach(b => {
-            if (b.useInCalculation) {
-                const t = calculateTime(b.startDate, b.endDate, b.activityType, data.gender);
-                totalDays += t.totalDays;
+            if (b.useInCalculation && b.startDate && b.endDate) {
+                const start = new Date(b.startDate).getTime();
+                const end = new Date(b.endDate).getTime();
+                if (!isNaN(start) && !isNaN(end) && start <= end) {
+                    intervals.push({ start, end });
+                }
             }
         });
+
+        if (intervals.length === 0) return "0 anos, 0 meses e 0 dias";
+
+        // Sort by start date
+        intervals.sort((a, b) => a.start - b.start);
+
+        // Merge intervals
+        const merged: { start: number; end: number }[] = [];
+        let current = intervals[0];
+
+        for (let i = 1; i < intervals.length; i++) {
+            const next = intervals[i];
+            if (current.end >= next.start - (24 * 60 * 60 * 1000)) { // Overlap or adjacent
+                current.end = Math.max(current.end, next.end);
+            } else {
+                merged.push(current);
+                current = next;
+            }
+        }
+        merged.push(current);
+
+        // Sum days
+        let totalDays = 0;
+        merged.forEach(interval => {
+            const diff = Math.abs(interval.end - interval.start);
+            totalDays += Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+        });
+
         const years = Math.floor(totalDays / 365.25);
         const months = Math.floor((totalDays % 365.25) / 30.44);
         const days = Math.floor((totalDays % 365.25) % 30.44);
+        
         return `${years} anos, ${months} meses e ${days} dias`;
     };
 
@@ -325,7 +359,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         doc.setFontSize(14);
         doc.text("Resumo do Tempo de Contribuição", margin, 70);
         doc.setFontSize(12);
-        doc.text(`Tempo Total Calculado: ${calculateTotalTime()}`, margin, 80);
+        doc.text(`Tempo Total Calculado: ${calculateUnifiedTime()}`, margin, 80);
         
         // Bonds Table
         let y = 95;
@@ -515,8 +549,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 if (lastRemunLabelMatch) {
                      const lastRemun = lastRemunLabelMatch[1];
                      const [m, y] = lastRemun.split('/').map(Number);
-                     // User requested: "pode colocar sempre no primeiro dia do mês"
-                     const lastDay = 1; 
+                     // Fix: Use the LAST day of the month
+                     const lastDay = new Date(y, m, 0).getDate(); 
                      endDate = `${String(lastDay).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
                 } else {
                     // Fallback: Pega a primeira data MM/AAAA que encontrar após o início
@@ -526,8 +560,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     if (mmYyyyMatches.length > 0) {
                         const lastRemun = mmYyyyMatches[0][0];
                         const [m, y] = lastRemun.split('/').map(Number);
-                        // User requested: "pode colocar sempre no primeiro dia do mês"
-                        const lastDay = 1;
+                        // Fix: Use the LAST day of the month
+                        const lastDay = new Date(y, m, 0).getDate();
                         endDate = `${String(lastDay).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
                     }
                 }
@@ -579,8 +613,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             if (!endDate && sc.length > 0) {
                 const lastRemun = sc[sc.length - 1];
                 const [m, y] = lastRemun.month.split('/').map(Number);
-                // User requested: "pode colocar sempre no primeiro dia do mês"
-                const lastDay = 1;
+                // Fix: Use the LAST day of the month
+                const lastDay = new Date(y, m, 0).getDate();
                 endDate = `${String(lastDay).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
             }
 
@@ -1001,9 +1035,9 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                             </tbody>
                             <tfoot className="bg-slate-100 dark:bg-slate-900 font-bold text-xs text-slate-700 dark:text-slate-300">
                                 <tr>
-                                    <td colSpan={5} className="p-3 text-right uppercase">Soma Total (Bruta):</td>
-                                    <td className="p-3">
-                                        {calculateTotalTime()}
+                                    <td colSpan={5} className="p-3 text-right uppercase">Tempo Líquido (Unificado):</td>
+                                    <td className="p-3 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                                        {calculateUnifiedTime()}
                                     </td>
                                     <td colSpan={2}></td>
                                 </tr>
