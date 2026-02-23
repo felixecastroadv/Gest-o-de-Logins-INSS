@@ -211,6 +211,9 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             });
 
             if (!response.ok) {
+                const errorText = await response.text();
+                console.error("AI API Error:", response.status, errorText);
+                alert(`Erro na IA (Debug): Status ${response.status}\nDetalhes: ${errorText}`);
                 return null;
             }
 
