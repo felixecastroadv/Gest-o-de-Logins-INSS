@@ -79,11 +79,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'CNIS content is required' });
     }
 
-    // 1. Check API Key
-    const apiKey = process.env.API_KEY_2 || process.env.GEMINI_API_KEY;
+    // 1. Check API Key - Robust Strategy
+    // Try specific keys first, then fallbacks
+    let apiKey = process.env.API_KEY_2 || 
+                 process.env.GEMINI_API_KEY || 
+                 process.env.API_KEY_3 || 
+                 process.env.API_KEY_4 || 
+                 process.env.API_KEY_5 || 
+                 process.env.API_KEY_6 || 
+                 process.env.GOOGLE_API_KEY;
+
     if (!apiKey) {
-      console.error("API Key missing in environment variables");
-      return res.status(500).json({ error: 'Server misconfiguration: API Key not found' });
+      // Debug: Log available environment variable names (security: do NOT log values)
+      const availableKeys = Object.keys(process.env).filter(k => k.includes('KEY') || k.includes('SECRET') || k.includes('TOKEN'));
+      console.error("API Key missing. Available relevant env vars:", availableKeys);
+      
+      return res.status(500).json({ 
+        error: 'Server misconfiguration: API Key not found',
+        debug: {
+            message: 'Nenhuma chave de API válida encontrada nas variáveis de ambiente.',
+            availableVarNames: availableKeys // Helps user debug on Vercel
+        }
+      });
     }
 
     // 2. Initialize AI
