@@ -82,7 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 1. Define API Keys in Priority Order
     const apiKeys = [
-        process.env.API_KEY_1,
+        process.env.API_KEY_1, // New primary key
         process.env.API_KEY_2,
         process.env.API_KEY_3,
         process.env.API_KEY_4,
