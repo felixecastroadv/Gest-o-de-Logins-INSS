@@ -50,6 +50,7 @@ export interface SocialSecurityData {
     der: string;
     reaffirmationDer: string;
     smartPlanning: boolean;
+    analysis?: string; // Analysis from Dr. Michel Felix
 }
 
 export interface SocialSecurityCalcProps {
@@ -102,22 +103,56 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
              return { years: 0, months: 0, days: 0, totalDays: 0 };
         }
 
-        const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
-        let totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Inclusive
+        // EC 103/2019 Reform Date
+        const REFORM_DATE = new Date('2019-11-13');
 
-        // Apply Factor
+        // Helper to calculate days between two dates (inclusive)
+        const getDays = (s: Date, e: Date) => {
+            if (s > e) return 0;
+            const diff = Math.abs(e.getTime() - s.getTime());
+            return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+        };
+
+        let totalAdjustedDays = 0;
+
+        // Determine Factor
         let factor = 1.0;
         if (type === 'special_25') factor = gender === 'M' ? 1.4 : 1.2;
         if (type === 'special_20') factor = gender === 'M' ? 1.75 : 1.5;
         if (type === 'special_15') factor = gender === 'M' ? 2.33 : 2.0;
-        
-        const adjustedDays = Math.floor(totalDays * factor);
-        
-        const years = Math.floor(adjustedDays / 365.25);
-        const months = Math.floor((adjustedDays % 365.25) / 30.44);
-        const days = Math.floor((adjustedDays % 365.25) % 30.44);
 
-        return { years, months, days, totalDays: adjustedDays };
+        if (factor === 1.0) {
+            // Common time, no split needed
+            totalAdjustedDays = getDays(startDate, endDate);
+        } else {
+            // Special time, check split
+            if (startDate > REFORM_DATE) {
+                // Entire period is post-reform -> No conversion (Factor 1.0)
+                totalAdjustedDays = getDays(startDate, endDate);
+            } else if (endDate <= REFORM_DATE) {
+                // Entire period is pre-reform -> Apply Factor
+                const rawDays = getDays(startDate, endDate);
+                totalAdjustedDays = Math.floor(rawDays * factor);
+            } else {
+                // Split period
+                // Part 1: Start to Reform Date -> Apply Factor
+                const part1Days = getDays(startDate, REFORM_DATE);
+                const part1Adjusted = Math.floor(part1Days * factor);
+
+                // Part 2: Reform Date + 1 to End -> Factor 1.0
+                const postReformStart = new Date(REFORM_DATE);
+                postReformStart.setDate(postReformStart.getDate() + 1);
+                const part2Days = getDays(postReformStart, endDate);
+
+                totalAdjustedDays = part1Adjusted + part2Days;
+            }
+        }
+        
+        const years = Math.floor(totalAdjustedDays / 365.25);
+        const months = Math.floor((totalAdjustedDays % 365.25) / 30.44);
+        const days = Math.floor((totalAdjustedDays % 365.25) % 30.44);
+
+        return { years, months, days, totalDays: totalAdjustedDays };
     };
     
     const calculateTotalTime = () => {
@@ -167,6 +202,54 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         }
     };
 
+    const analyzeCNISWithAI = async (text: string): Promise<Partial<SocialSecurityData> | null> => {
+        try {
+            const response = await fetch('/api/analyze-cnis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cnisContent: text })
+            });
+
+            if (!response.ok) {
+                return null;
+            }
+
+            const aiData = await response.json();
+            
+            const mappedBonds: CNISBond[] = aiData.bonds.map((b: any) => ({
+                id: crypto.randomUUID(),
+                seq: b.seq,
+                nit: b.nit,
+                code: b.code,
+                origin: b.origin,
+                type: b.type,
+                startDate: b.startDate ? b.startDate.split('-').reverse().join('/') : '',
+                endDate: b.endDate ? b.endDate.split('-').reverse().join('/') : '',
+                indicators: b.indicators || [],
+                sc: (b.sc || []).map((s: any) => ({ 
+                    month: s.month, 
+                    value: s.value
+                })),
+                activityType: 'common',
+                isConcomitant: b.isConcomitant || false,
+                useInCalculation: true
+            }));
+
+            return {
+                clientName: aiData.client.name,
+                cpf: aiData.client.cpf,
+                birthDate: aiData.client.birthDate ? aiData.client.birthDate.split('-').reverse().join('/') : '',
+                motherName: aiData.client.motherName,
+                gender: aiData.client.gender,
+                bonds: mappedBonds,
+                analysis: aiData.analysis
+            };
+        } catch (error) {
+            console.error("AI Analysis failed", error);
+            return null;
+        }
+    };
+
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -190,8 +273,20 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             }
 
             setData(prev => ({ ...prev, cnisContent: fullText }));
-            // Small delay to allow state update before parsing
-            setTimeout(() => parseCNIS(fullText), 100);
+            
+            // Try AI first
+            const aiResult = await analyzeCNISWithAI(fullText);
+            if (aiResult) {
+                setData(prev => ({
+                    ...prev,
+                    ...aiResult,
+                    cnisContent: fullText
+                }));
+                alert("Análise com IA (Dr. Michel Felix) concluída!");
+            } else {
+                console.log("Falling back to local parser");
+                setTimeout(() => parseCNIS(fullText), 100);
+            }
 
         } catch (error) {
             console.error('Erro ao ler PDF:', error);
@@ -413,7 +508,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 if (lastRemunLabelMatch) {
                      const lastRemun = lastRemunLabelMatch[1];
                      const [m, y] = lastRemun.split('/').map(Number);
-                     const lastDay = new Date(y, m, 0).getDate();
+                     // User requested: "pode colocar sempre no primeiro dia do mês"
+                     const lastDay = 1; 
                      endDate = `${String(lastDay).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
                 } else {
                     // Fallback: Pega a primeira data MM/AAAA que encontrar após o início
@@ -423,7 +519,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     if (mmYyyyMatches.length > 0) {
                         const lastRemun = mmYyyyMatches[0][0];
                         const [m, y] = lastRemun.split('/').map(Number);
-                        const lastDay = new Date(y, m, 0).getDate();
+                        // User requested: "pode colocar sempre no primeiro dia do mês"
+                        const lastDay = 1;
                         endDate = `${String(lastDay).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
                     }
                 }
@@ -475,7 +572,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             if (!endDate && sc.length > 0) {
                 const lastRemun = sc[sc.length - 1];
                 const [m, y] = lastRemun.month.split('/').map(Number);
-                const lastDay = new Date(y, m, 0).getDate();
+                // User requested: "pode colocar sempre no primeiro dia do mês"
+                const lastDay = 1;
                 endDate = `${String(lastDay).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
             }
 
@@ -653,6 +751,19 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                         </div>
                     </div>
                 </div>
+
+                {/* STEP 2.5: ANÁLISE JURÍDICA (IA) */}
+                {data.analysis && (
+                    <div className={`${STYLES.CARD_SECTION} border-l-4 border-indigo-500`}>
+                        <div className={STYLES.CARD_HEADER}>
+                            <span className={`${STYLES.STEP_BADGE} bg-indigo-600`}>IA</span>
+                            <h3 className={STYLES.CARD_TITLE}>Análise Jurídica Preliminar (Dr. Michel Felix)</h3>
+                        </div>
+                        <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 text-sm whitespace-pre-wrap font-serif">
+                            {data.analysis}
+                        </div>
+                    </div>
+                )}
 
                 {/* STEP 3: PARÂMETROS */}
                 <div className={STYLES.CARD_SECTION}>
