@@ -278,12 +278,15 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             setData(prev => ({ ...prev, cnisContent: fullText }));
             
             // Try AI first
-            const aiResult = await analyzeCNISWithAI(fullText);
+            // Truncate text to ~100k characters to avoid payload limits and timeouts (approx 30-40 pages of dense text)
+            const truncatedText = fullText.length > 100000 ? fullText.substring(0, 100000) + "\n...[Texto truncado para análise]..." : fullText;
+            
+            const aiResult = await analyzeCNISWithAI(truncatedText);
             if (aiResult) {
                 setData(prev => ({
                     ...prev,
                     ...aiResult,
-                    cnisContent: fullText
+                    cnisContent: fullText // Keep full text in state
                 }));
                 alert("Análise com IA (Dr. Michel Felix) concluída!");
             } else {
