@@ -480,8 +480,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 }));
                 alert("Análise concluída! (Dados processados 100% via IA)");
             } else {
-                console.log("Falling back to local parser");
-                setTimeout(() => parseCNIS(fullText), 100);
+                console.error("AI Analysis failed and local fallback is disabled.");
+                alert("A análise da IA falhou. Por favor, tente novamente ou verifique o arquivo.");
             }
 
         } catch (error) {
