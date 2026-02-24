@@ -101,10 +101,13 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     };
 
     const calculateTime = (start: string, end: string, type: string, gender: string) => {
-        if (!start || !end) return { years: 0, months: 0, days: 0, totalDays: 0 };
+        // If start is missing, we can't calculate
+        if (!start) return { years: 0, months: 0, days: 0, totalDays: 0 };
         
         const startDate = new Date(start);
-        const endDate = new Date(end);
+        // If end is missing, assume it's up to the DER (or Today if DER is missing)
+        // But only if we consider it "Active". For now, let's use DER if provided, else Today.
+        let endDate = end ? new Date(end) : (data.der ? new Date(data.der) : new Date());
         
         if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
              return { years: 0, months: 0, days: 0, totalDays: 0 };
@@ -160,9 +163,12 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         const intervals: { start: number; end: number }[] = [];
 
         data.bonds.forEach(b => {
-            if (b.useInCalculation && b.startDate && b.endDate) {
+            if (b.useInCalculation && b.startDate) {
                 const start = new Date(b.startDate).getTime();
-                const end = new Date(b.endDate).getTime();
+                // Handle missing end date -> Use DER or Today
+                const endStr = b.endDate || data.der || new Date().toISOString().split('T')[0];
+                const end = new Date(endStr).getTime();
+                
                 if (!isNaN(start) && !isNaN(end) && start <= end) {
                     intervals.push({ start, end });
                 }
@@ -180,7 +186,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
 
         for (let i = 1; i < intervals.length; i++) {
             const next = intervals[i];
-            if (current.end >= next.start - (24 * 60 * 60 * 1000)) { // Overlap or adjacent
+            // Check for overlap or adjacency (within 1 day)
+            if (current.end >= next.start - (24 * 60 * 60 * 1000)) { 
                 current.end = Math.max(current.end, next.end);
             } else {
                 merged.push(current);
@@ -201,6 +208,115 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         const days = Math.floor((totalDays % 365.25) % 30.44);
         
         return `${years} anos, ${months} meses e ${days} dias`;
+    };
+
+    // Unified Carência Calculation (Merge Months)
+    const calculateUnifiedCarencia = () => {
+        const uniqueMonths = new Set<string>();
+
+        data.bonds.forEach(bond => {
+            if (!bond.useInCalculation) return;
+
+            // Priority: Date Range (since SCs might be missing from AI)
+            if (bond.startDate && bond.endDate) {
+                let current = new Date(bond.startDate);
+                // Normalize to start of month and noon to avoid timezone issues
+                current.setDate(1);
+                current.setHours(12, 0, 0, 0);
+                
+                const end = new Date(bond.endDate);
+                end.setDate(1);
+                end.setHours(12, 0, 0, 0);
+
+                // Safety break for infinite loops (e.g. bad dates)
+                let safety = 0;
+                while (current <= end && safety < 1200) { // 100 years max
+                    const m = String(current.getMonth() + 1).padStart(2, '0');
+                    const y = current.getFullYear();
+                    uniqueMonths.add(`${m}/${y}`);
+                    
+                    // Move to next month
+                    current.setMonth(current.getMonth() + 1);
+                    safety++;
+                }
+            } else if (bond.sc && bond.sc.length > 0) {
+                // Fallback to SCs if dates are missing
+                bond.sc.forEach(s => uniqueMonths.add(s.month));
+            }
+        });
+
+        return uniqueMonths.size;
+    };
+
+    // Helper to calculate carência for a single bond (for the table)
+    const calculateBondCarencia = (bond: CNISBond) => {
+        if (bond.startDate && bond.endDate) {
+            let current = new Date(bond.startDate);
+            current.setDate(1);
+            current.setHours(12, 0, 0, 0);
+            
+            const end = new Date(bond.endDate);
+            end.setDate(1);
+            end.setHours(12, 0, 0, 0);
+
+            let count = 0;
+            let safety = 0;
+            while (current <= end && safety < 1200) {
+                count++;
+                current.setMonth(current.getMonth() + 1);
+                safety++;
+            }
+            return count;
+        }
+        return bond.sc.length;
+    };
+
+    // Helper to generate full monthly history including gaps
+    const generateFullMonthlyHistory = (bond: CNISBond) => {
+        const history: { month: string, value: number | null, indicators: string[], isMissing: boolean }[] = [];
+        
+        // If no start date, we can only show what we have
+        if (!bond.startDate) {
+            return bond.sc.map(s => ({ month: s.month, value: s.value, indicators: s.indicators || [], isMissing: false }));
+        }
+
+        let current = new Date(bond.startDate);
+        // Normalize to start of month
+        current.setDate(1);
+        current.setHours(12, 0, 0, 0);
+
+        let end: Date;
+        if (bond.endDate) {
+            end = new Date(bond.endDate);
+        } else {
+            // If active, go up to today
+            end = new Date();
+        }
+        end.setDate(1);
+        end.setHours(12, 0, 0, 0);
+
+        // Create a map of existing SCs
+        const scMap = new Map();
+        bond.sc.forEach(s => scMap.set(s.month, s));
+
+        let safety = 0;
+        while (current <= end && safety < 1200) {
+            const m = String(current.getMonth() + 1).padStart(2, '0');
+            const y = current.getFullYear();
+            const monthStr = `${m}/${y}`;
+
+            if (scMap.has(monthStr)) {
+                const s = scMap.get(monthStr);
+                history.push({ month: monthStr, value: s.value, indicators: s.indicators || [], isMissing: false });
+            } else {
+                history.push({ month: monthStr, value: null, indicators: [], isMissing: true });
+            }
+            
+            current.setMonth(current.getMonth() + 1);
+            safety++;
+        }
+        
+        return history;
     };
 
     // --- Handlers ---
@@ -251,26 +367,61 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 return null;
             }
 
-            const aiData = await response.json();
+            let aiData;
+            try {
+                aiData = await response.json();
+            } catch (e) {
+                console.error("Failed to parse AI JSON:", e);
+                alert("Erro ao processar resposta da IA (JSON inválido). O servidor pode ter retornado um erro não tratado.");
+                return null;
+            }
             
-            const mappedBonds: CNISBond[] = aiData.bonds.map((b: any) => ({
-                id: crypto.randomUUID(),
-                seq: b.seq,
-                nit: b.nit,
-                code: b.code,
-                origin: b.origin,
-                type: b.type,
-                startDate: b.startDate ? b.startDate.split('-').reverse().join('/') : '',
-                endDate: b.endDate ? b.endDate.split('-').reverse().join('/') : '',
-                indicators: b.indicators || [],
-                sc: (b.sc || []).map((s: any) => ({ 
+            if (!aiData || !aiData.bonds) {
+                console.warn("AI returned no bonds:", aiData);
+            }
+
+            const mappedBonds: CNISBond[] = (aiData.bonds || []).map((b: any) => {
+                // AI returns YYYY-MM-DD. We MUST keep it as YYYY-MM-DD for <input type="date">
+                let startDate = b.startDate || '';
+                let endDate = b.endDate || '';
+                
+                const sc = (b.sc || []).map((s: any) => ({ 
                     month: s.month, 
-                    value: s.value
-                })),
-                activityType: 'common',
-                isConcomitant: b.isConcomitant || false,
-                useInCalculation: true
-            }));
+                    value: s.value,
+                    indicators: s.indicators || []
+                }));
+
+                // Post-Processing: Infer dates if missing
+                if (!startDate && sc.length > 0) {
+                    // Use first SC month as start date (01/MM/YYYY -> YYYY-MM-01)
+                    const [m, y] = sc[0].month.split('/');
+                    startDate = `${y}-${m}-01`;
+                }
+
+                if (!endDate && sc.length > 0) {
+                    // Use last SC month as end date (Last Day of Month)
+                    const lastSc = sc[sc.length - 1];
+                    const [m, y] = lastSc.month.split('/').map(Number);
+                    const lastDay = new Date(y, m, 0).getDate();
+                    endDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                }
+
+                return {
+                    id: crypto.randomUUID(),
+                    seq: b.seq,
+                    nit: b.nit,
+                    code: b.code,
+                    origin: b.origin,
+                    type: b.type,
+                    startDate,
+                    endDate,
+                    indicators: b.indicators || [],
+                    sc,
+                    activityType: 'common',
+                    isConcomitant: b.isConcomitant || false,
+                    useInCalculation: true
+                };
+            });
 
             return {
                 clientName: aiData.client.name,
@@ -312,18 +463,111 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             setData(prev => ({ ...prev, cnisContent: fullText }));
             
             // Try AI first
-            // Truncate text to ~50k characters to avoid Vercel function timeouts (approx 15-20 pages of dense text)
-            // The free tier has a 10s limit, Pro has 60s (or 300s if configured). 100k chars is too much for synchronous processing.
-            const truncatedText = fullText.length > 50000 ? fullText.substring(0, 50000) + "\n...[Texto truncado para análise]..." : fullText;
+            // Truncate text to ~300k characters to avoid Vercel function timeouts (approx 60-80 pages of dense text)
+            // The free tier has a 10s limit, Pro has 60s (or 300s if configured). 
+            // Gemini has a large context window, so we can send more.
+            const truncatedText = fullText.length > 300000 ? fullText.substring(0, 300000) + "\n...[Texto truncado para análise]..." : fullText;
             
             const aiResult = await analyzeCNISWithAI(truncatedText);
+            
             if (aiResult) {
+                // --- HYBRID APPROACH: ENHANCE AI DATA WITH LOCAL REGEX ---
+                // The AI is great for metadata, but might miss salaries in long lists.
+                // We will re-scan the full text to extract all salaries for each bond found by the AI.
+                
+                const enhancedBonds = aiResult.bonds?.map(bond => {
+                    if (!bond.seq) return bond;
+
+                    // 1. Define the scope for this bond in the full text
+                    // Find where this bond starts (Seq + Number)
+                    // We look for "Seq. X" or just "X" followed by NIT/CNPJ
+                    // The most reliable anchor is the Seq number provided by AI.
+                    
+                    // Regex to find the start of THIS bond.
+                    // Matches "Seq. 1" or "1 123..."
+                    // We use the sequence number from the AI bond.
+                    const bondStartRegex = new RegExp(`(?:Seq\\.|Seq|^|\\n)\\s*${bond.seq}\\s+(?:\\d{3}\\.\\d{5}\\.\\d{2}-\\d|\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2}|\\d{2}\\.\\d{3}\\.\\d{5}\\/\\d{2})`, 'g');
+                    const startMatch = bondStartRegex.exec(fullText);
+                    
+                    if (!startMatch) {
+                        console.log(`Bond ${bond.seq} not found in text with regex.`);
+                        return bond; 
+                    }
+                    
+                    const startIndex = startMatch.index;
+                    
+                    // Find the start of the NEXT bond to define the end of this block.
+                    // We look for ANY pattern that looks like "Seq. N" or "N NIT" that appears AFTER our start index.
+                    // We don't rely on N+1 because sequences might skip or be unordered in text (unlikely but possible).
+                    const allBondsRegex = /(?:Seq\.|Seq|^|\n)\s*(\d+)\s+(?:\d{3}\.\d{5}\.\d{2}-\d|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{2}\.\d{3}\.\d{5}\/\d{2})/g;
+                    
+                    let endIndex = fullText.length;
+                    let nextMatch;
+                    
+                    // Reset regex lastIndex to search from the beginning (or optimize to search from startIndex)
+                    allBondsRegex.lastIndex = startIndex + 1; // Start searching strictly after the current bond start
+                    
+                    if ((nextMatch = allBondsRegex.exec(fullText)) !== null) {
+                        endIndex = nextMatch.index;
+                    }
+                    
+                    // Extract the block of text for this bond
+                    const bondBlock = fullText.substring(startIndex, endIndex);
+                    
+                    console.log(`Processing Bond ${bond.seq} block (length: ${bondBlock.length})`);
+
+                    // 2. Extract Salaries from this block using Regex
+                    // Pattern: MM/YYYY followed by Value (e.g., 01/2000 1.234,56)
+                    // CRITICAL FIX: Indicators usually start with letters (IREM, AEXT). 
+                    // We restrict the indicator group to start with a letter to prevent capturing the "06" of "06/2007" as an indicator.
+                    // Pattern:
+                    // Group 1: MM/YYYY
+                    // Group 2: Value (1.234,56)
+                    // Group 3: Indicator (Optional, must start with A-Z)
+                    const salaryRegex = /(\d{2}\/\d{4})\s+([\d.]*,\d{2})(?:\s+([A-Z][A-Z0-9-]*))?/g;
+                    const extractedSc: { month: string; value: number, indicators: string[] }[] = [];
+                    
+                    let match;
+                    while ((match = salaryRegex.exec(bondBlock)) !== null) {
+                        const [_, m, v, ind] = match;
+                        
+                        const value = parseFloat(v.replace(/\./g, '').replace(',', '.'));
+                        extractedSc.push({ 
+                            month: m, 
+                            value, 
+                            indicators: ind ? [ind] : [] 
+                        });
+                    }
+                    
+                    // 3. Merge/Overwrite
+                    // If we found more salaries locally than the AI, or if we just trust the local regex more for numbers.
+                    // Let's trust the local regex for the LIST of salaries if it found a significant amount.
+                    if (extractedSc.length > (bond.sc?.length || 0)) {
+                        console.log(`Enhanced Bond ${bond.seq}: Replaced ${bond.sc?.length || 0} AI salaries with ${extractedSc.length} local salaries.`);
+                        
+                        // Sort by date
+                        extractedSc.sort((a, b) => {
+                            const [ma, ya] = a.month.split('/').map(Number);
+                            const [mb, yb] = b.month.split('/').map(Number);
+                            return (ya * 12 + ma) - (yb * 12 + mb);
+                        });
+
+                        return {
+                            ...bond,
+                            sc: extractedSc
+                        };
+                    }
+                    
+                    return bond;
+                });
+
                 setData(prev => ({
                     ...prev,
                     ...aiResult,
-                    cnisContent: fullText // Keep full text in state
+                    bonds: enhancedBonds || aiResult.bonds || [],
+                    cnisContent: fullText
                 }));
-                alert("Análise com IA (Dr. Michel Felix) concluída!");
+                alert("Análise concluída! (Dados processados com IA + Verificação Local)");
             } else {
                 console.log("Falling back to local parser");
                 setTimeout(() => parseCNIS(fullText), 100);
@@ -412,6 +656,43 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             console.log("Salvar cálculo não implementado (falta onSaveCalculation prop)");
             alert("Função de salvar não disponível neste contexto.");
         }
+    };
+
+    const handleSalaryChange = (bondId: string, month: string, newValue: string) => {
+        const valueFloat = parseFloat(newValue.replace(/\./g, '').replace(',', '.'));
+        
+        setData(prev => {
+            const newBonds = prev.bonds.map(bond => {
+                if (bond.id !== bondId) return bond;
+
+                const newSc = [...bond.sc];
+                const existingIndex = newSc.findIndex(s => s.month === month);
+
+                if (isNaN(valueFloat)) {
+                    // If invalid or empty, remove the entry if it exists (reset to missing)
+                    if (existingIndex !== -1) {
+                        newSc.splice(existingIndex, 1);
+                    }
+                } else {
+                    // Update or Add
+                    if (existingIndex !== -1) {
+                        newSc[existingIndex].value = valueFloat;
+                    } else {
+                        newSc.push({ month, value: valueFloat, indicators: [] });
+                    }
+                }
+                
+                // Sort SCs
+                newSc.sort((a, b) => {
+                    const [ma, ya] = a.month.split('/').map(Number);
+                    const [mb, yb] = b.month.split('/').map(Number);
+                    return (ya * 12 + ma) - (yb * 12 + mb);
+                });
+
+                return { ...bond, sc: newSc };
+            });
+            return { ...prev, bonds: newBonds };
+        });
     };
 
     // --- CNIS Parsing Logic (Refined) ---
@@ -644,6 +925,55 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             // alert(`${bonds.length} vínculos importados com sucesso!`);
         } else {
             alert("Não foi possível identificar vínculos. Verifique se o PDF é um CNIS válido.");
+        }
+    };
+
+    const handleAddBond = () => {
+        const newBond: CNISBond = {
+            id: crypto.randomUUID(),
+            seq: data.bonds.length + 1,
+            origin: 'Novo Período',
+            startDate: '',
+            endDate: '',
+            sc: [],
+            indicators: [],
+            type: 'Empregado',
+            activityType: 'common',
+            isConcomitant: false,
+            useInCalculation: true
+        };
+        setData(prev => ({ ...prev, bonds: [...prev.bonds, newBond] }));
+    };
+
+    const handleExpandAll = () => {
+        if (expandedBonds.length === data.bonds.length) {
+            setExpandedBonds([]);
+        } else {
+            setExpandedBonds(data.bonds.map(b => b.id));
+        }
+    };
+
+    const handleSortBonds = () => {
+        setData(prev => ({
+            ...prev,
+            bonds: [...prev.bonds].sort((a, b) => {
+                if (!a.startDate) return 1;
+                if (!b.startDate) return -1;
+                return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+            })
+        }));
+    };
+
+    const handleRemoveEmpty = () => {
+        setData(prev => ({
+            ...prev,
+            bonds: prev.bonds.filter(b => b.startDate || b.endDate || b.sc.length > 0)
+        }));
+    };
+
+    const handleRemoveAll = () => {
+        if (confirm('Tem certeza que deseja remover todos os períodos?')) {
+            setData(prev => ({ ...prev, bonds: [] }));
         }
     };
 
@@ -888,19 +1218,19 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 <div className={STYLES.CARD_SECTION}>
                     <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                         <div className="flex gap-2">
-                            <button className={STYLES.BTN_SUCCESS}>
+                            <button className={STYLES.BTN_SUCCESS} onClick={handleAddBond}>
                                 <PlusIcon className="h-4 w-4" />
                                 Adicionar novo período
                             </button>
-                            <button className="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 text-sm">
+                            <button className="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 text-sm" onClick={handleExpandAll}>
                                 <Cog6ToothIcon className="h-4 w-4" />
-                                Salários e detalhes
+                                {expandedBonds.length > 0 && expandedBonds.length === data.bonds.length ? 'Recolher Detalhes' : 'Salários e detalhes'}
                             </button>
                         </div>
                         <div className="flex gap-2">
-                            <button className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-2 rounded hover:bg-slate-200 transition">Ordenar períodos</button>
-                            <button className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-2 rounded hover:bg-slate-200 transition">Remover vazios</button>
-                            <button className="text-xs bg-red-50 dark:bg-red-900/20 text-red-600 px-3 py-2 rounded hover:bg-red-100 transition">Remover todos</button>
+                            <button className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-2 rounded hover:bg-slate-200 transition" onClick={handleSortBonds}>Ordenar períodos</button>
+                            <button className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-2 rounded hover:bg-slate-200 transition" onClick={handleRemoveEmpty}>Remover vazios</button>
+                            <button className="text-xs bg-red-50 dark:bg-red-900/20 text-red-600 px-3 py-2 rounded hover:bg-red-100 transition" onClick={handleRemoveAll}>Remover todos</button>
                         </div>
                     </div>
 
@@ -980,7 +1310,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                                         </div>
                                                     </td>
                                                     <td className={STYLES.TABLE_CELL}>
-                                                        <div className="text-xs text-center">{bond.sc.length}</div>
+                                                        <div className="text-xs text-center">{calculateBondCarencia(bond)}</div>
                                                     </td>
                                                     <td className={STYLES.TABLE_CELL}>
                                                         <div className="flex gap-1">
@@ -1001,29 +1331,120 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                                         </div>
                                                     </td>
                                                 </tr>
-                                                {/* Expanded Remunerations */}
                                                 {expandedBonds.includes(bond.id) && (
                                                     <tr>
                                                         <td colSpan={8} className="bg-slate-50 dark:bg-slate-900/50 p-4 border-b border-slate-200 dark:border-slate-700">
-                                                            <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800">
-                                                                <table className="w-full text-xs">
-                                                                    <thead className="bg-slate-100 dark:bg-slate-700 sticky top-0">
-                                                                        <tr>
-                                                                            <th className="p-2 text-left">Competência</th>
-                                                                            <th className="p-2 text-left">Salário de Contribuição</th>
-                                                                            <th className="p-2 text-left">Indicadores</th>
-                                                                        </tr>
-                                                                    </thead>
-                                                                    <tbody>
-                                                                        {bond.sc.map((rem, rIdx) => (
-                                                                            <tr key={rIdx} className="border-b border-slate-100 dark:border-slate-700">
-                                                                                <td className="p-2 font-mono">{rem.month}</td>
-                                                                                <td className="p-2 font-mono">{formatCurrency(rem.value)}</td>
-                                                                                <td className="p-2 text-slate-500">{rem.indicators?.join(', ') || '-'}</td>
-                                                                            </tr>
-                                                                        ))}
-                                                                    </tbody>
-                                                                </table>
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                <div>
+                                                                    <div className="flex justify-between items-center mb-2">
+                                                                        <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">
+                                                                            Salários de Contribuição ({bond.sc.length})
+                                                                        </h4>
+                                                                        {generateFullMonthlyHistory(bond).some(h => h.isMissing) && (
+                                                                            <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">
+                                                                                ⚠️ Lacunas Identificadas
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800">
+                                                                        <table className="w-full text-xs">
+                                                                            <thead className="bg-slate-100 dark:bg-slate-700 sticky top-0">
+                                                                                <tr>
+                                                                                    <th className="px-2 py-1 text-left text-slate-500 dark:text-slate-400">Competência</th>
+                                                                                    <th className="px-2 py-1 text-right text-slate-500 dark:text-slate-400">Valor</th>
+                                                                                    <th className="px-2 py-1 text-center text-slate-500 dark:text-slate-400">Ind.</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                                                                {generateFullMonthlyHistory(bond).length > 0 ? (
+                                                                                    generateFullMonthlyHistory(bond).map((s, i) => (
+                                                                                        <tr key={s.month} className={s.isMissing ? "bg-amber-50 dark:bg-amber-900/10" : ""}>
+                                                                                            <td className="px-2 py-1 text-slate-700 dark:text-slate-300 font-mono">{s.month}</td>
+                                                                                            <td className={`px-2 py-1 text-right font-mono ${s.isMissing ? "text-amber-600 italic" : "text-slate-700 dark:text-slate-300"}`}>
+                                                                                                <input 
+                                                                                                    type="text" 
+                                                                                                    className={`w-full bg-transparent text-right border-none focus:ring-1 focus:ring-indigo-500 rounded px-1 py-0.5 ${s.isMissing ? "placeholder-amber-400" : ""}`}
+                                                                                                    placeholder="Sem registro"
+                                                                                                    defaultValue={s.isMissing ? "" : formatCurrency(s.value!).replace('R$', '').trim()}
+                                                                                                    onBlur={(e) => handleSalaryChange(bond.id, s.month, e.target.value)}
+                                                                                                />
+                                                                                            </td>
+                                                                                            <td className="px-2 py-1 text-center text-slate-500 dark:text-slate-400 text-[10px]">
+                                                                                                {s.indicators?.join(', ')}
+                                                                                            </td>
+                                                                                        </tr>
+                                                                                    ))
+                                                                                ) : (
+                                                                                    <tr>
+                                                                                        <td colSpan={3} className="px-2 py-4 text-center text-slate-400 italic">
+                                                                                            <p className="mb-2">Nenhum salário registrado. Carência calculada por data ({calculateBondCarencia(bond)} meses).</p>
+                                                                                            <button 
+                                                                                                onClick={() => {
+                                                                                                    // Generate months between start and end date
+                                                                                                    if (!bond.startDate || !bond.endDate) {
+                                                                                                        alert("Defina as datas de Início e Fim do vínculo primeiro.");
+                                                                                                        return;
+                                                                                                    }
+                                                                                                    
+                                                                                                    // Parse dates correctly (DD/MM/YYYY)
+                                                                                                    const [d1, m1, y1] = bond.startDate.split('/').map(Number);
+                                                                                                    const [d2, m2, y2] = bond.endDate.split('/').map(Number);
+                                                                                                    
+                                                                                                    const start = new Date(y1, m1 - 1, 1); // Start of month
+                                                                                                    const end = new Date(y2, m2 - 1, 1);   // Start of month
+                                                                                                    
+                                                                                                    const newSc = [];
+                                                                                                    let current = new Date(start);
+                                                                                                    
+                                                                                                    while (current <= end) {
+                                                                                                        const m = String(current.getMonth() + 1).padStart(2, '0');
+                                                                                                        const y = current.getFullYear();
+                                                                                                        newSc.push({ month: `${m}/${y}`, value: 0, indicators: [] });
+                                                                                                        current.setMonth(current.getMonth() + 1);
+                                                                                                    }
+                                                                                                    
+                                                                                                    setData(prev => ({
+                                                                                                        ...prev,
+                                                                                                        bonds: prev.bonds.map(b => b.id === bond.id ? { ...b, sc: newSc } : b)
+                                                                                                    }));
+                                                                                                }}
+                                                                                                className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded hover:bg-indigo-100 transition border border-indigo-200"
+                                                                                            >
+                                                                                                Gerar Competências (Preencher Manualmente)
+                                                                                            </button>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                )}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                                <div>
+                                                                    <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Indicadores e Detalhes</h4>
+                                                                    <div className="flex flex-wrap gap-2 mb-4">
+                                                                        {bond.indicators.length > 0 ? (
+                                                                            bond.indicators.map((ind, i) => (
+                                                                                <span key={i} className="px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-[10px] font-bold rounded">
+                                                                                    {ind}
+                                                                                </span>
+                                                                            ))
+                                                                        ) : (
+                                                                            <span className="text-xs text-slate-400 italic">Nenhum indicador</span>
+                                                                        )}
+                                                                    </div>
+                                                                    
+                                                                    <div className="space-y-2">
+                                                                        <label className="flex items-center gap-2 cursor-pointer">
+                                                                            <input 
+                                                                                type="checkbox" 
+                                                                                checked={bond.isConcomitant} 
+                                                                                onChange={() => handleBondChange(bond.id, 'isConcomitant', !bond.isConcomitant)}
+                                                                                className="rounded text-indigo-600 focus:ring-indigo-500" 
+                                                                            />
+                                                                            <span className="text-xs text-slate-700 dark:text-slate-300">Marcar como concomitante (apenas informativo)</span>
+                                                                        </label>
+                                                                    </div>
+                                                                </div>
                                                             </div>
                                                         </td>
                                                     </tr>
@@ -1033,13 +1454,17 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                     })
                                 )}
                             </tbody>
-                            <tfoot className="bg-slate-100 dark:bg-slate-900 font-bold text-xs text-slate-700 dark:text-slate-300">
+                            <tfoot className="bg-slate-900 text-white sticky bottom-0 z-10">
                                 <tr>
-                                    <td colSpan={5} className="p-3 text-right uppercase">Tempo Líquido (Unificado):</td>
-                                    <td className="p-3 text-emerald-600 dark:text-emerald-400 font-bold text-sm">
+                                    <td colSpan={5} className="px-4 py-3 text-right font-bold text-sm uppercase tracking-wider">
+                                        Tempo Líquido (Unificado):
+                                    </td>
+                                    <td className="px-4 py-3 font-mono font-bold text-emerald-400 text-sm">
                                         {calculateUnifiedTime()}
                                     </td>
-                                    <td colSpan={2}></td>
+                                    <td colSpan={2} className="px-4 py-3 font-mono font-bold text-emerald-400 text-sm text-right">
+                                        Carência Total: {calculateUnifiedCarencia()} meses
+                                    </td>
                                 </tr>
                             </tfoot>
                         </table>
