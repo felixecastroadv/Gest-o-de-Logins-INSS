@@ -124,13 +124,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 try {
                     attempts++;
                     // Add timeout promise to race against AI call
-                    // User is on Vercel Pro (limit 300s), so we set internal timeout to 250s to be safe
+                    // User is on Vercel Pro (limit 300s), so we set internal timeout to 290s to be safe
                     const timeoutPromise = new Promise((_, reject) => 
-                        setTimeout(() => reject(new Error("AI Request Timeout (250s)")), 250000)
+                        setTimeout(() => reject(new Error("AI Request Timeout (290s)")), 290000)
                     );
         
                     const aiPromise = ai.models.generateContent({
-                        model: "gemini-3-flash-preview",
+                        model: "gemini-2.5-flash",
                         contents: {
                             role: "user",
                             parts: [{ text: cnisContent }]
