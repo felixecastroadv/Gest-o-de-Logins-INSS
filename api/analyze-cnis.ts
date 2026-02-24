@@ -19,15 +19,32 @@ Ler o texto do CNIS e retornar uma lista de vínculos (bonds) limpa e correta.
 2.  **DATAS (Início e Fim) - PRIORIDADE MÁXIMA:**
     *   **Data Início:** Extraia a data de admissão/início que aparece logo após o nome da empresa ou NIT.
     *   **Data Fim (CRUCIAL):**
-        *   Se a "Data Fim" estiver explícita (ex: 30/04/2003), USE-A.
+        *   Se a "Data Fim" estiver explícita (ex: 30/04/2003), USE-A e converta para AAAA-MM-DD.
         *   **SE A DATA FIM ESTIVER VAZIA:** Procure IMEDIATAMENTE pelo campo **"Últ. Remun."** (Última Remuneração) dentro do bloco daquele vínculo (geralmente ao lado da Data Fim vazia).
-        *   **REGRA DE PREENCHIMENTO:** Se usar a "Últ. Remun." (ex: 04/2023), a Data Fim DEVE ser o **ÚLTIMO DIA** daquele mês (ex: 30/04/2023).
+        *   **REGRA DE PREENCHIMENTO:** Se usar a "Últ. Remun." (ex: 04/2023), a Data Fim DEVE ser o **ÚLTIMO DIA** daquele mês (ex: 2023-04-30).
         *   **VÍNCULOS ATIVOS:** Se não houver Data Fim E não houver "Últ. Remun." no cabeçalho, verifique a lista de remunerações. Se houver remunerações recentes (ex: 2024, 2025, 2026), o vínculo está ATIVO. Nesse caso, deixe "endDate" como null.
         *   **NÃO DEIXE DATA FIM VAZIA SE HOUVER "ÚLT. REMUN."**.
 
-3.  **SALÁRIOS DE CONTRIBUIÇÃO (SC):**
-    *   Extraia todos os salários (Competência e Valor).
-    *   Mantenha a fidelidade aos valores.
+3.  **SALÁRIOS DE CONTRIBUIÇÃO (SC) - EXTRAÇÃO COMPLETA E EXAUSTIVA:**
+    *   **ESCOPO DO VÍNCULO (REGRA DE OURO):**
+        1.  Identifique onde começa a "Seq. X".
+        2.  Identifique onde começa a PRÓXIMA "Seq. X+1" (ou o fim do texto).
+        3.  **TUDO** o que estiver entre esses dois pontos pertence à "Seq. X".
+    *   **IGNORAR CABEÇALHOS DE PÁGINA:**
+        *   O documento tem quebras de página com textos como: "INSS", "CNIS", "Extrato Previdenciário", "Página X de Y", "Relações Previdenciárias", cabeçalhos de colunas repetidos ("Competência Remuneração Indicadores").
+        *   **VOCÊ DEVE IGNORAR ESSES TEXTOS E CONTINUAR LENDO OS SALÁRIOS COMO SE ELES NÃO EXISTISSEM.**
+        *   Não deixe que uma quebra de página faça você parar de ler os salários de um vínculo.
+    *   **EXEMPLO DE LEITURA CONTÍNUA:**
+        *   Texto:
+            "Seq. 1 ...
+            10/1995 270,00 | 11/1995 405,00
+            (Fim da página 1 - Cabeçalho Página 2 - Identificação...)
+            12/1995 270,00 | 01/1996 270,00"
+        *   Sua Extração:
+            Deve conter 10/1995, 11/1995, **E TAMBÉM** 12/1995, 01/1996. Não pare em 11/1995.
+    *   **LAYOUT EM COLUNAS:** Leia da esquerda para a direita, linha por linha.
+    *   **NÃO RESUMA:** Extraia TODOS os meses. Se houver 200 meses, extraia 200 objetos.
+    *   **FORMATO:** "month": "MM/AAAA", "value": número (float), "indicators": ["IND1"] (opcional).
 
 4.  **INDICADORES:**
     *   Capture todos os indicadores (ex: IREM-INDP, PEXT, AEXT-VT, IEAN).
@@ -111,33 +128,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             const ai = new GoogleGenAI({ apiKey: apiKey! });
             
-            // Add timeout promise to race against AI call
-            // User is on Vercel Pro (limit 300s), so we set internal timeout to 250s to be safe
-            const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("AI Request Timeout (250s)")), 250000)
-            );
-
-            const aiPromise = ai.models.generateContent({
-                model: "gemini-3-flash-preview",
-                contents: {
-                    role: "user",
-                    parts: [{ text: cnisContent }]
-                },
-                config: {
-                    systemInstruction: SYSTEM_PROMPT,
-                    responseMimeType: "application/json"
+            // Retry logic for 503 errors
+            let attempts = 0;
+            const maxAttempts = 3;
+            
+            while (attempts < maxAttempts) {
+                try {
+                    attempts++;
+                    // Add timeout promise to race against AI call
+                    // User is on Vercel Pro (limit 300s), so we set internal timeout to 250s to be safe
+                    const timeoutPromise = new Promise((_, reject) => 
+                        setTimeout(() => reject(new Error("AI Request Timeout (250s)")), 250000)
+                    );
+        
+                    const aiPromise = ai.models.generateContent({
+                        model: "gemini-3-flash-preview",
+                        contents: {
+                            role: "user",
+                            parts: [{ text: cnisContent }]
+                        },
+                        config: {
+                            systemInstruction: SYSTEM_PROMPT,
+                            responseMimeType: "application/json",
+                            maxOutputTokens: 8192
+                        }
+                    });
+        
+                    // Race the AI call against the timeout
+                    const response: any = await Promise.race([aiPromise, timeoutPromise]);
+        
+                    const text = response.text;
+                    if (!text) throw new Error("No text returned from AI");
+        
+                    successResponse = JSON.parse(text);
+                    console.log(`Success with API Key #${index + 1}`);
+                    break; // Stop retry loop on success
+                } catch (error: any) {
+                    const isOverloaded = error.message?.includes('503') || error.message?.includes('high demand');
+                    if (isOverloaded && attempts < maxAttempts) {
+                        console.warn(`Model overloaded (Attempt ${attempts}/${maxAttempts}). Retrying in ${attempts * 2}s...`);
+                        await new Promise(resolve => setTimeout(resolve, attempts * 2000)); // Exponential backoff: 2s, 4s
+                        continue;
+                    }
+                    throw error; // Rethrow if not 503 or max attempts reached
                 }
-            });
-
-            // Race the AI call against the timeout
-            const response: any = await Promise.race([aiPromise, timeoutPromise]);
-
-            const text = response.text;
-            if (!text) throw new Error("No text returned from AI");
-
-            successResponse = JSON.parse(text);
-            console.log(`Success with API Key #${index + 1}`);
-            break; // Stop loop on success
+            }
+            
+            if (successResponse) break; // Stop key rotation loop on success
 
         } catch (error: any) {
             console.warn(`Failed with API Key #${index + 1}:`, error.message);
