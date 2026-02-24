@@ -25,29 +25,17 @@ Ler o texto do CNIS e retornar uma lista de vínculos (bonds) limpa e correta.
         *   **VÍNCULOS ATIVOS:** Se não houver Data Fim E não houver "Últ. Remun." no cabeçalho, verifique a lista de remunerações. Se houver remunerações recentes (ex: 2024, 2025, 2026), o vínculo está ATIVO. Nesse caso, deixe "endDate" como null.
         *   **NÃO DEIXE DATA FIM VAZIA SE HOUVER "ÚLT. REMUN."**.
 
-3.  **SALÁRIOS DE CONTRIBUIÇÃO (SC) - EXTRAÇÃO COMPLETA E EXAUSTIVA:**
-    *   **ESCOPO DO VÍNCULO (REGRA DE OURO):**
-        1.  Identifique onde começa a "Seq. X".
-        2.  Identifique onde começa a PRÓXIMA "Seq. X+1" (ou o fim do texto).
-        3.  **TUDO** o que estiver entre esses dois pontos pertence à "Seq. X".
-    *   **IGNORAR CABEÇALHOS DE PÁGINA:**
-        *   O documento tem quebras de página com textos como: "INSS", "CNIS", "Extrato Previdenciário", "Página X de Y", "Relações Previdenciárias", cabeçalhos de colunas repetidos ("Competência Remuneração Indicadores").
-        *   **VOCÊ DEVE IGNORAR ESSES TEXTOS E CONTINUAR LENDO OS SALÁRIOS COMO SE ELES NÃO EXISTISSEM.**
-        *   Não deixe que uma quebra de página faça você parar de ler os salários de um vínculo.
-    *   **EXEMPLO DE LEITURA CONTÍNUA:**
-        *   Texto:
-            "Seq. 1 ...
-            10/1995 270,00 | 11/1995 405,00
-            (Fim da página 1 - Cabeçalho Página 2 - Identificação...)
-            12/1995 270,00 | 01/1996 270,00"
-        *   Sua Extração:
-            Deve conter 10/1995, 11/1995, **E TAMBÉM** 12/1995, 01/1996. Não pare em 11/1995.
-    *   **LAYOUT EM COLUNAS:** Leia da esquerda para a direita, linha por linha.
-    *   **NÃO RESUMA:** Extraia TODOS os meses. Se houver 200 meses, extraia 200 objetos.
+3.  **SALÁRIOS DE CONTRIBUIÇÃO (SC) - EXTRAÇÃO COMPLETA:**
+    *   **EXTRAIA TODOS OS SALÁRIOS** de cada vínculo.
     *   **FORMATO:** "month": "MM/AAAA", "value": número (float), "indicators": ["IND1"] (opcional).
+    *   **CASOS ESPECIAIS:**
+        *   **EMPRESA FLEURY (e similares):** Se encontrar uma lista de meses (ex: 05/2007, 06/2007...) com valores ao lado, capture TODOS.
+        *   **SEM REGISTRO:** Se o valor for "Sem registro", retorne 0 ou null.
+        *   **NÃO PULE MESES:** Se houver uma sequência 05/2007, 06/2007, 07/2007, capture TODOS.
+    *   **LAYOUT EM COLUNAS:** Leia da esquerda para a direita, linha por linha.
 
 4.  **INDICADORES:**
-    *   Capture todos os indicadores (ex: IREM-INDP, PEXT, AEXT-VT, IEAN).
+    *   Capture todos os indicadores (ex: IREM-INDP, PEXT, AEXT-VT, IEAN) que aparecem no cabeçalho do vínculo.
 
 **FORMATO DE SAÍDA (JSON):**
 {
