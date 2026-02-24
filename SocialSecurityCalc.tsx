@@ -378,6 +378,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             
             if (!aiData || !aiData.bonds) {
                 console.warn("AI returned no bonds:", aiData);
+                return null;
             }
 
             const mappedBonds: CNISBond[] = (aiData.bonds || []).map((b: any) => {
@@ -484,9 +485,9 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     // The most reliable anchor is the Seq number provided by AI.
                     
                     // Regex to find the start of THIS bond.
-                    // Matches "Seq. 1" or "1 123..."
-                    // We use the sequence number from the AI bond.
-                    const bondStartRegex = new RegExp(`(?:Seq\\.|Seq|^|\\n)\\s*${bond.seq}\\s+(?:\\d{3}\\.\\d{5}\\.\\d{2}-\\d|\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2}|\\d{2}\\.\\d{3}\\.\\d{5}\\/\\d{2})`, 'g');
+                    // Matches "Seq. 1", "Seq. 01", "1", "01" followed by NIT/CNPJ
+                    // We allow optional leading zeros for the sequence number.
+                    const bondStartRegex = new RegExp(`(?:Seq\\.|Seq|^|\\n)\\s*0*${bond.seq}\\s+(?:\\d{3}\\.\\d{5}\\.\\d{2}-\\d|\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2}|\\d{2}\\.\\d{3}\\.\\d{5}\\/\\d{2})`, 'g');
                     const startMatch = bondStartRegex.exec(fullText);
                     
                     if (!startMatch) {
@@ -521,10 +522,10 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     // CRITICAL FIX: Indicators usually start with letters (IREM, AEXT). 
                     // We restrict the indicator group to start with a letter to prevent capturing the "06" of "06/2007" as an indicator.
                     // Pattern:
-                    // Group 1: MM/YYYY
+                    // Group 1: MM/YYYY (Allow 1 or 2 digits for month)
                     // Group 2: Value (1.234,56)
                     // Group 3: Indicator (Optional, must start with A-Z)
-                    const salaryRegex = /(\d{2}\/\d{4})\s+([\d.]*,\d{2})(?:\s+([A-Z][A-Z0-9-]*))?/g;
+                    const salaryRegex = /(\d{1,2}\/\d{4})\s+([\d.]*,\d{2})(?:\s+([A-Z][A-Z0-9-]*))?/g;
                     const extractedSc: { month: string; value: number, indicators: string[] }[] = [];
                     
                     let match;
@@ -539,24 +540,33 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                         });
                     }
                     
-                    // 3. Merge/Overwrite
-                    // If we found more salaries locally than the AI, or if we just trust the local regex more for numbers.
-                    // Let's trust the local regex for the LIST of salaries if it found a significant amount.
-                    if (extractedSc.length > (bond.sc?.length || 0)) {
-                        console.log(`Enhanced Bond ${bond.seq}: Replaced ${bond.sc?.length || 0} AI salaries with ${extractedSc.length} local salaries.`);
-                        
-                        // Sort by date
-                        extractedSc.sort((a, b) => {
-                            const [ma, ya] = a.month.split('/').map(Number);
-                            const [mb, yb] = b.month.split('/').map(Number);
-                            return (ya * 12 + ma) - (yb * 12 + mb);
+                    // 3. Merge Strategy:
+                    // Prefer Regex for values (more precise parsing).
+                    // Use AI to fill gaps (missing months).
+                    
+                    const mergedSc = [...extractedSc];
+                    const existingMonths = new Set(extractedSc.map(s => s.month));
+                    
+                    if (bond.sc && bond.sc.length > 0) {
+                        bond.sc.forEach(aiSalary => {
+                            if (!existingMonths.has(aiSalary.month)) {
+                                mergedSc.push(aiSalary);
+                                existingMonths.add(aiSalary.month);
+                            }
                         });
-
-                        return {
-                            ...bond,
-                            sc: extractedSc
-                        };
                     }
+                    
+                    // Sort by date
+                    mergedSc.sort((a, b) => {
+                        const [ma, ya] = a.month.split('/').map(Number);
+                        const [mb, yb] = b.month.split('/').map(Number);
+                        return (ya * 12 + ma) - (yb * 12 + mb);
+                    });
+
+                    return {
+                        ...bond,
+                        sc: mergedSc
+                    };
                     
                     return bond;
                 });
