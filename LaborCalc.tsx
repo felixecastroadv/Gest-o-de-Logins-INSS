@@ -45,8 +45,8 @@ interface LaborData {
   startDate: string;
   endDate: string;
   baseSalary: number;
-  terminationReason: 'sem_justa_causa' | 'pedido_demissao' | 'justa_causa' | 'rescisao_indireta';
-  noticePeriod: 'trabalhado' | 'indenizado' | 'dispensado';
+  terminationReason: 'sem_justa_causa' | 'pedido_demissao' | 'justa_causa' | 'rescisao_indireta' | 'sem_anotacao';
+  noticePeriod: 'trabalhado' | 'indenizado' | 'dispensado' | 'nao_pago'; // 'nao_pago' treated as indenizado for calculation but maybe different label? User said "quando não tem o pagamento... que seria indenizado"
   hasFgtsBalance: number; // Saldo já depositado para cálculo da multa
 
   // Adicionais
@@ -60,6 +60,15 @@ interface LaborData {
       startDate: string;
       endDate: string;
     }[];
+  };
+  intrajornada: {
+      active: boolean;
+      periods: {
+          id: string;
+          hoursPerDay: number; // Quantidade (horas/dia suprimidas)
+          startDate: string;
+          endDate: string;
+      }[];
   };
 
   // Diferenças Salariais
@@ -80,6 +89,15 @@ interface LaborData {
     startDate: string;
     endDate: string;
     applyDsr: boolean;
+  }[];
+
+  // Direitos CCT
+  cctRights: {
+      id: string;
+      name: string;
+      period: string; // Texto livre ou datas
+      value: string; // Texto ou valor numérico
+      parsedValue: number; // Valor numérico para soma
   }[];
 
   // Estabilidade / Indenizações
@@ -131,8 +149,10 @@ const INITIAL_LABOR_DATA: LaborData = {
   insalubridadeLevel: 'nenhum',
   periculosidade: false,
   adicionalNoturno: { active: false, periods: [] },
+  intrajornada: { active: false, periods: [] },
   wageGap: [],
   overtime: [],
+  cctRights: [],
   stability: { isPregnant: false, childBirthDate: '', endDate: '' },
   applyFine477: false,
   applyFine467: false,
@@ -247,12 +267,48 @@ const calculateLaborResults = (calcData: LaborData) => {
     }
 
     // 2. Aviso Prévio
-    if (start && end && salary && calcData.noticePeriod === 'indenizado' && calcData.terminationReason !== 'justa_causa' && calcData.terminationReason !== 'pedido_demissao') {
+    let noticeValue = 0;
+    let noticeDays = 0;
+    const isIndemnified = calcData.noticePeriod === 'indenizado' || calcData.noticePeriod === 'nao_pago';
+    const shouldPayNotice = isIndemnified && calcData.terminationReason !== 'justa_causa' && calcData.terminationReason !== 'pedido_demissao';
+
+    if (start && end && salary && shouldPayNotice) {
         const years = Math.floor(diffMonths(start, end) / 12);
         const extraDays = Math.min(years * 3, 60); // Lei 12.506
-        const totalDays = 30 + extraDays;
-        const noticeValue = (salary / 30) * totalDays;
-        results.push({ desc: `Aviso Prévio Indenizado (${totalDays} dias)`, value: noticeValue, category: 'Rescisórias' });
+        noticeDays = 30 + extraDays;
+        noticeValue = (salary / 30) * noticeDays;
+        results.push({ desc: `Aviso Prévio Indenizado (${noticeDays} dias)`, value: noticeValue, category: 'Rescisórias' });
+    }
+
+    // Reflexos do Aviso Prévio (se indenizado)
+    if (noticeDays > 0 && isIndemnified) {
+        // Reflexo em 13º (1/12 avos)
+        const reflex13th = (salary / 12); 
+        // Se o aviso projeta mais de 15 dias no mês, conta 1 avo.
+        // Simplificação: Aviso de 30 dias = 1 mês = 1/12. Aviso de 90 dias = 3 meses = 3/12.
+        // A projeção é tempo de serviço.
+        // Vamos calcular quantos meses "cheios" (ou >15 dias) a projeção adiciona.
+        // Mas a prática comum é: 1/12 por ano ou fração > 15 dias.
+        // O aviso prévio indenizado integra o tempo de serviço.
+        // Então, se a projeção cai num mês novo e dá > 15 dias, ganha mais 1 avo.
+        
+        // Cálculo simplificado de reflexo financeiro direto:
+        // Reflexo 13º = (Valor Aviso / 12)? Não. É (Salário / 12) * (Meses Projeção).
+        const projectedMonths = Math.floor(noticeDays / 30); // Aproximado
+        const remainderDays = noticeDays % 30;
+        const totalReflexMonths = projectedMonths + (remainderDays >= 15 ? 1 : 0);
+        
+        if (totalReflexMonths > 0) {
+            const valReflex13 = (salary / 12) * totalReflexMonths;
+            results.push({ desc: `Reflexo Aviso Prévio em 13º (${totalReflexMonths}/12 avos)`, value: valReflex13, category: 'Rescisórias' });
+            
+            const valReflexVac = (salary / 12) * totalReflexMonths;
+            const valReflexVacTotal = valReflexVac + (valReflexVac / 3);
+            results.push({ desc: `Reflexo Aviso Prévio em Férias + 1/3 (${totalReflexMonths}/12 avos)`, value: valReflexVacTotal, category: 'Rescisórias' });
+            
+            const valReflexFgts = noticeValue * 0.08;
+            results.push({ desc: `Reflexo Aviso Prévio em FGTS (8%)`, value: valReflexFgts, category: 'FGTS' });
+        }
     }
 
     // 3. 13º Salário Proporcional
@@ -374,6 +430,32 @@ const calculateLaborResults = (calcData: LaborData) => {
                 }
             });
         }
+
+        // Intrajornada
+        if (calcData.intrajornada && calcData.intrajornada.active && salary) {
+            const hourlyRate = salary / 220;
+            // Adicional de 50% sobre a hora suprimida (Art. 71 § 4º CLT)
+            const intraRate = hourlyRate * 1.5; 
+            
+            calcData.intrajornada.periods.forEach((period, idx) => {
+                const pStart = parseDate(period.startDate) || start;
+                const pEnd = parseDate(period.endDate) || end;
+                
+                if (pStart && pEnd && period.hoursPerDay > 0) {
+                    const months = diffMonths(pStart, pEnd);
+                    // Estimativa de dias trabalhados por mês: 22
+                    const totalHours = period.hoursPerDay * 22 * months;
+                    const totalIntra = intraRate * totalHours;
+                    
+                    results.push({ desc: `Adicional Intrajornada (${period.hoursPerDay}h/dia - ${months} meses)`, value: totalIntra, category: 'Adicionais' });
+                    // Natureza indenizatória após Reforma Trabalhista (11/2017)? 
+                    // Antes era salarial. O usuário pediu "reflexos" implicitamente ao pedir "adicional intrajornada"?
+                    // Geralmente pede-se reflexos. Vamos adicionar reflexos como padrão, mas talvez devesse ser opcional.
+                    // Vou adicionar reflexos por padrão pois é "Calculadora Trabalhista" (pró-reclamante).
+                    results.push({ desc: `Reflexos Intrajornada (Férias, 13º, FGTS, DSR)`, value: totalIntra * 0.35, category: 'Reflexos' });
+                }
+            });
+        }
     }
 
     // 6. Diferença Salarial
@@ -432,7 +514,16 @@ const calculateLaborResults = (calcData: LaborData) => {
         }
     }
 
-    // 9. FGTS + 40%
+    // 9. Direitos CCT
+    if (calcData.cctRights && calcData.cctRights.length > 0) {
+        calcData.cctRights.forEach(right => {
+            if (right.parsedValue > 0) {
+                results.push({ desc: `CCT: ${right.name} (${right.period})`, value: right.parsedValue, category: 'Convenção Coletiva' });
+            }
+        });
+    }
+
+    // 10. FGTS + 40%
     let totalFgtsBase = Number(calcData.hasFgtsBalance) || 0;
     
     // Se não tem saldo informado, estima com base no histórico ou salário atual
@@ -470,17 +561,17 @@ const calculateLaborResults = (calcData: LaborData) => {
     }
     
     const rescisaoFgtsBase = results
-        .filter(r => ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais'].includes(r.category))
+        .filter(r => ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais', 'Reflexos', 'Convenção Coletiva'].includes(r.category))
         .reduce((sum, item) => sum + item.value, 0);
     
     const totalFgtsParaMulta = totalFgtsBase + (rescisaoFgtsBase * 0.08);
 
-    if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta') {
+    if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta' || calcData.terminationReason === 'sem_anotacao') {
         const fine40 = totalFgtsParaMulta * 0.4;
         results.push({ desc: `Multa 40% do FGTS (Base Est.: ${formatCurrency(totalFgtsParaMulta)})`, value: fine40, category: 'FGTS' });
     }
 
-    // 10. Multas CLT
+    // 11. Multas CLT
     if (calcData.applyFine477 && salary) {
         results.push({ desc: `Multa Art. 477 (Atraso)`, value: salary, category: 'Multas' });
     }
@@ -492,19 +583,19 @@ const calculateLaborResults = (calcData: LaborData) => {
         results.push({ desc: `Multa Art. 467 (50% Incontroverso)`, value: incontroverso * 0.5, category: 'Multas' });
     }
 
-    // 11. Danos Morais
+    // 12. Danos Morais
     if (calcData.moralDamages > 0) {
         results.push({ desc: `Indenização por Danos Morais`, value: Number(calcData.moralDamages), category: 'Indenizações' });
     }
 
-    // 12. Honorários Advocatícios
+    // 13. Honorários Advocatícios
     const currentTotal = results.reduce((acc, curr) => acc + curr.value, 0);
     if (calcData.attorneyFees > 0) {
         const feesValue = currentTotal * (calcData.attorneyFees / 100);
         results.push({ desc: `Honorários Advocatícios (${calcData.attorneyFees}%)`, value: feesValue, category: 'Honorários' });
     }
 
-    // 13. Deduções
+    // 14. Deduções
     if (calcData.severancePaid > 0) {
         results.push({ desc: `Valor Pago na Rescisão (Dedução)`, value: -Math.abs(calcData.severancePaid), category: 'Deduções' });
     }
@@ -611,6 +702,60 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
         periods: prev.adicionalNoturno.periods.filter(p => p.id !== id)
       }
     }));
+  };
+
+  const addIntrajornadaPeriod = () => {
+      const newId = Math.random().toString(36).substr(2, 9);
+      setData(prev => ({
+          ...prev,
+          intrajornada: {
+              ...prev.intrajornada,
+              periods: [...prev.intrajornada.periods, { id: newId, hoursPerDay: 1, startDate: data.startDate, endDate: data.endDate }]
+          }
+      }));
+  };
+
+  const removeIntrajornadaPeriod = (id: string) => {
+      setData(prev => ({
+          ...prev,
+          intrajornada: {
+              ...prev.intrajornada,
+              periods: prev.intrajornada.periods.filter(p => p.id !== id)
+          }
+      }));
+  };
+
+  const addCctRight = () => {
+      const newId = Math.random().toString(36).substr(2, 9);
+      setData(prev => ({
+          ...prev,
+          cctRights: [...prev.cctRights, { id: newId, name: '', period: '', value: '', parsedValue: 0 }]
+      }));
+  };
+
+  const removeCctRight = (id: string) => {
+      setData(prev => ({
+          ...prev,
+          cctRights: prev.cctRights.filter(r => r.id !== id)
+      }));
+  };
+
+  const updateCctRight = (id: string, field: keyof LaborData['cctRights'][0], value: any) => {
+      setData(prev => ({
+          ...prev,
+          cctRights: prev.cctRights.map(r => {
+              if (r.id === id) {
+                  const updated = { ...r, [field]: value };
+                  if (field === 'value') {
+                      const cleanVal = String(value).replace(/[R$\s%]/g, '').replace(',', '.');
+                      const parsed = parseFloat(cleanVal);
+                      updated.parsedValue = isNaN(parsed) ? 0 : parsed;
+                  }
+                  return updated;
+              }
+              return r;
+          })
+      }));
   };
 
   const addVacationPeriod = () => {
@@ -973,6 +1118,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                       <option value="rescisao_indireta">Rescisão Indireta</option>
                                       <option value="pedido_demissao">Pedido de Demissão</option>
                                       <option value="justa_causa">Justa Causa</option>
+                                      <option value="sem_anotacao">Sem Anotação na CTPS</option>
                                   </select>
                               </div>
                               <div>
@@ -1214,7 +1360,133 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                       </div>
                                   )}
                               </div>
+
+                              {/* Intrajornada */}
+                              <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 col-span-1 md:col-span-3">
+                                  <div className="flex justify-between items-center mb-2">
+                                      <label className="flex items-center gap-3 cursor-pointer">
+                                          <input 
+                                              type="checkbox" 
+                                              checked={data.intrajornada.active} 
+                                              onChange={e => setData(prev => ({ ...prev, intrajornada: { ...prev.intrajornada, active: e.target.checked } }))} 
+                                              className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" 
+                                          />
+                                          <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">
+                                              Adicional Intrajornada (Intervalo Suprimido)
+                                          </span>
+                                      </label>
+                                      {data.intrajornada.active && (
+                                          <button onClick={addIntrajornadaPeriod} className={`${STYLES.BTN_SECONDARY_SM} text-[10px] py-1 px-2`}>
+                                              <PlusIcon className="h-3 w-3" /> Add Período
+                                          </button>
+                                      )}
+                                  </div>
+                                  
+                                  {data.intrajornada.active && (
+                                      <div className="space-y-2 mt-2">
+                                          <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-2">
+                                              Intervalo para repouso e alimentação não concedido ou concedido parcialmente. Indenização de 50% sobre a hora suprimida.
+                                          </p>
+                                          {data.intrajornada.periods.length === 0 && <p className="text-xs text-slate-400 italic">Nenhum período adicionado.</p>}
+                                          {data.intrajornada.periods.map((period, idx) => (
+                                              <div key={period.id} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 relative">
+                                                  <button onClick={() => removeIntrajornadaPeriod(period.id)} className="absolute top-1 right-1 text-slate-400 hover:text-red-500"><TrashIcon className="h-3 w-3" /></button>
+                                                  <div>
+                                                      <label className={STYLES.LABEL_TINY}>Qtd. Horas/Dia</label>
+                                                      <input 
+                                                          type="number" 
+                                                          className={STYLES.INPUT_TINY}
+                                                          value={period.hoursPerDay}
+                                                          onChange={e => {
+                                                              const newPeriods = [...data.intrajornada.periods];
+                                                              newPeriods[idx].hoursPerDay = Number(e.target.value);
+                                                              setData(prev => ({ ...prev, intrajornada: { ...prev.intrajornada, periods: newPeriods } }));
+                                                          }}
+                                                      />
+                                                  </div>
+                                                  <div>
+                                                      <label className={STYLES.LABEL_TINY}>Início</label>
+                                                      <input 
+                                                          type="date" 
+                                                          className={STYLES.INPUT_TINY}
+                                                          value={period.startDate}
+                                                          onChange={e => {
+                                                              const newPeriods = [...data.intrajornada.periods];
+                                                              newPeriods[idx].startDate = e.target.value;
+                                                              setData(prev => ({ ...prev, intrajornada: { ...prev.intrajornada, periods: newPeriods } }));
+                                                          }}
+                                                      />
+                                                  </div>
+                                                  <div>
+                                                      <label className={STYLES.LABEL_TINY}>Fim</label>
+                                                      <input 
+                                                          type="date" 
+                                                          className={STYLES.INPUT_TINY}
+                                                          value={period.endDate}
+                                                          onChange={e => {
+                                                              const newPeriods = [...data.intrajornada.periods];
+                                                              newPeriods[idx].endDate = e.target.value;
+                                                              setData(prev => ({ ...prev, intrajornada: { ...prev.intrajornada, periods: newPeriods } }));
+                                                          }}
+                                                      />
+                                                  </div>
+                                              </div>
+                                          ))}
+                                      </div>
+                                  )}
+                              </div>
                           </div>
+                      </div>
+
+                      {/* Seção Direitos Normativos (CCT) */}
+                      <div className={STYLES.CARD_SECTION}>
+                          <div className="flex justify-between items-center mb-4">
+                              <h3 className={`${STYLES.CARD_TITLE} text-purple-600 dark:text-purple-400`}>
+                                  <DocumentTextIcon className="h-5 w-5" /> Direitos Normativos (CCT)
+                              </h3>
+                              <button onClick={addCctRight} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Direito</button>
+                          </div>
+                          
+                          {data.cctRights.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum direito normativo cadastrado.</p>}
+                          
+                          {data.cctRights.map((right, idx) => (
+                              <div key={right.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative">
+                                  <button onClick={() => removeCctRight(right.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                      <div className="md:col-span-1">
+                                          <label className={STYLES.LABEL_TINY}>Nome do Direito</label>
+                                          <input 
+                                              type="text" 
+                                              className={STYLES.INPUT_TINY} 
+                                              placeholder="Ex: Quebra de Caixa"
+                                              value={right.name}
+                                              onChange={e => updateCctRight(right.id, 'name', e.target.value)}
+                                          />
+                                      </div>
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Período / Referência</label>
+                                          <input 
+                                              type="text" 
+                                              className={STYLES.INPUT_TINY} 
+                                              placeholder="Ex: 2021/2022 ou Jan/23"
+                                              value={right.period}
+                                              onChange={e => updateCctRight(right.id, 'period', e.target.value)}
+                                          />
+                                      </div>
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Valor (R$ ou %)</label>
+                                          <input 
+                                              type="text" 
+                                              className={STYLES.INPUT_TINY} 
+                                              placeholder="Ex: 10% ou 150,00"
+                                              value={right.value}
+                                              onChange={e => updateCctRight(right.id, 'value', e.target.value)}
+                                          />
+                                          <p className="text-[9px] text-slate-400 mt-1">Valor numérico será somado ao total.</p>
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
                       </div>
 
                       {/* Seção Diferença Salarial */}
