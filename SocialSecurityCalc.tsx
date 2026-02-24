@@ -472,112 +472,13 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             const aiResult = await analyzeCNISWithAI(truncatedText);
             
             if (aiResult) {
-                // --- HYBRID APPROACH: ENHANCE AI DATA WITH LOCAL REGEX ---
-                // The AI is great for metadata, but might miss salaries in long lists.
-                // We will re-scan the full text to extract all salaries for each bond found by the AI.
-                
-                const enhancedBonds = aiResult.bonds?.map(bond => {
-                    if (!bond.seq) return bond;
-
-                    // 1. Define the scope for this bond in the full text
-                    // Find where this bond starts (Seq + Number)
-                    // We look for "Seq. X" or just "X" followed by NIT/CNPJ
-                    // The most reliable anchor is the Seq number provided by AI.
-                    
-                    // Regex to find the start of THIS bond.
-                    // Matches "Seq. 1", "Seq. 01", "1", "01" followed by a NIT/CNPJ-like pattern (at least 10 chars of digits/dots/dashes)
-                    // We allow optional leading zeros for the sequence number.
-                    // Relaxed ID pattern: [\d./-]{10,} to handle OCR errors in NIT/CNPJ
-                    const bondStartRegex = new RegExp(`(?:Seq\\.|Seq|^|\\n)\\s*0*${bond.seq}\\s+(?:[\\d./-]{10,})`, 'g');
-                    const startMatch = bondStartRegex.exec(fullText);
-                    
-                    if (!startMatch) {
-                        console.log(`Bond ${bond.seq} not found in text with regex.`);
-                        return bond; 
-                    }
-                    
-                    const startIndex = startMatch.index;
-                    
-                    // Find the start of the NEXT bond to define the end of this block.
-                    // We look for ANY pattern that looks like "Seq. N" followed by an ID
-                    const allBondsRegex = /(?:Seq\.|Seq|^|\n)\s*(\d+)\s+(?:[\d./-]{10,})/g;
-                    
-                    let endIndex = fullText.length;
-                    let nextMatch;
-                    
-                    // Reset regex lastIndex to search from the beginning (or optimize to search from startIndex)
-                    allBondsRegex.lastIndex = startIndex + 1; // Start searching strictly after the current bond start
-                    
-                    if ((nextMatch = allBondsRegex.exec(fullText)) !== null) {
-                        endIndex = nextMatch.index;
-                    }
-                    
-                    // Extract the block of text for this bond
-                    const bondBlock = fullText.substring(startIndex, endIndex);
-                    
-                    console.log(`Processing Bond ${bond.seq} block (length: ${bondBlock.length})`);
-
-                    // 2. Extract Salaries from this block using Regex
-                    // Pattern: MM/YYYY followed by Value (e.g., 01/2000 1.234,56)
-                    // CRITICAL FIX: Indicators usually start with letters (IREM, AEXT). 
-                    // We restrict the indicator group to start with a letter to prevent capturing the "06" of "06/2007" as an indicator.
-                    // Pattern:
-                    // Group 1: MM/YYYY (Allow 1 or 2 digits for month)
-                    // Group 2: Value (1.234,56)
-                    // Group 3: Indicator (Optional, must start with A-Z)
-                    const salaryRegex = /(\d{1,2}\/\d{4})\s+([\d.]*,\d{2})(?:\s+([A-Z][A-Z0-9-]*))?/g;
-                    const extractedSc: { month: string; value: number, indicators: string[] }[] = [];
-                    
-                    let match;
-                    while ((match = salaryRegex.exec(bondBlock)) !== null) {
-                        const [_, m, v, ind] = match;
-                        
-                        const value = parseFloat(v.replace(/\./g, '').replace(',', '.'));
-                        extractedSc.push({ 
-                            month: m, 
-                            value, 
-                            indicators: ind ? [ind] : [] 
-                        });
-                    }
-                    
-                    // 3. Merge Strategy:
-                    // Prefer Regex for values (more precise parsing).
-                    // Use AI to fill gaps (missing months).
-                    
-                    const mergedSc = [...extractedSc];
-                    const existingMonths = new Set(extractedSc.map(s => s.month));
-                    
-                    if (bond.sc && bond.sc.length > 0) {
-                        bond.sc.forEach(aiSalary => {
-                            if (!existingMonths.has(aiSalary.month)) {
-                                mergedSc.push(aiSalary);
-                                existingMonths.add(aiSalary.month);
-                            }
-                        });
-                    }
-                    
-                    // Sort by date
-                    mergedSc.sort((a, b) => {
-                        const [ma, ya] = a.month.split('/').map(Number);
-                        const [mb, yb] = b.month.split('/').map(Number);
-                        return (ya * 12 + ma) - (yb * 12 + mb);
-                    });
-
-                    return {
-                        ...bond,
-                        sc: mergedSc
-                    };
-                    
-                    return bond;
-                });
-
                 setData(prev => ({
                     ...prev,
                     ...aiResult,
-                    bonds: enhancedBonds || aiResult.bonds || [],
+                    bonds: aiResult.bonds || [],
                     cnisContent: fullText
                 }));
-                alert("Análise concluída! (Dados processados com IA + Verificação Local)");
+                alert("Análise concluída! (Dados processados 100% via IA)");
             } else {
                 console.log("Falling back to local parser");
                 setTimeout(() => parseCNIS(fullText), 100);
