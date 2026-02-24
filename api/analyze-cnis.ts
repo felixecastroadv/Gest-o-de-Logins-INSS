@@ -138,7 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                         config: {
                             systemInstruction: SYSTEM_PROMPT,
                             responseMimeType: "application/json",
-                            maxOutputTokens: 8192
+                            maxOutputTokens: 65536
                         }
                     });
         
