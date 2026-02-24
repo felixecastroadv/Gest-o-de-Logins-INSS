@@ -485,9 +485,10 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     // The most reliable anchor is the Seq number provided by AI.
                     
                     // Regex to find the start of THIS bond.
-                    // Matches "Seq. 1", "Seq. 01", "1", "01" followed by NIT/CNPJ
+                    // Matches "Seq. 1", "Seq. 01", "1", "01" followed by a NIT/CNPJ-like pattern (at least 10 chars of digits/dots/dashes)
                     // We allow optional leading zeros for the sequence number.
-                    const bondStartRegex = new RegExp(`(?:Seq\\.|Seq|^|\\n)\\s*0*${bond.seq}\\s+(?:\\d{3}\\.\\d{5}\\.\\d{2}-\\d|\\d{2}\\.\\d{3}\\.\\d{3}\\/\\d{4}-\\d{2}|\\d{2}\\.\\d{3}\\.\\d{5}\\/\\d{2})`, 'g');
+                    // Relaxed ID pattern: [\d./-]{10,} to handle OCR errors in NIT/CNPJ
+                    const bondStartRegex = new RegExp(`(?:Seq\\.|Seq|^|\\n)\\s*0*${bond.seq}\\s+(?:[\\d./-]{10,})`, 'g');
                     const startMatch = bondStartRegex.exec(fullText);
                     
                     if (!startMatch) {
@@ -498,9 +499,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     const startIndex = startMatch.index;
                     
                     // Find the start of the NEXT bond to define the end of this block.
-                    // We look for ANY pattern that looks like "Seq. N" or "N NIT" that appears AFTER our start index.
-                    // We don't rely on N+1 because sequences might skip or be unordered in text (unlikely but possible).
-                    const allBondsRegex = /(?:Seq\.|Seq|^|\n)\s*(\d+)\s+(?:\d{3}\.\d{5}\.\d{2}-\d|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{2}\.\d{3}\.\d{5}\/\d{2})/g;
+                    // We look for ANY pattern that looks like "Seq. N" followed by an ID
+                    const allBondsRegex = /(?:Seq\.|Seq|^|\n)\s*(\d+)\s+(?:[\d./-]{10,})/g;
                     
                     let endIndex = fullText.length;
                     let nextMatch;
