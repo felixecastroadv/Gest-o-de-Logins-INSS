@@ -25,14 +25,11 @@ Ler o texto do CNIS e retornar uma lista de vínculos (bonds) limpa e correta.
         *   **VÍNCULOS ATIVOS:** Se não houver Data Fim E não houver "Últ. Remun." no cabeçalho, verifique a lista de remunerações. Se houver remunerações recentes (ex: 2024, 2025, 2026), o vínculo está ATIVO. Nesse caso, deixe "endDate" como null.
         *   **NÃO DEIXE DATA FIM VAZIA SE HOUVER "ÚLT. REMUN."**.
 
-3.  **SALÁRIOS DE CONTRIBUIÇÃO (SC) - EXTRAÇÃO COMPLETA:**
-    *   **EXTRAIA TODOS OS SALÁRIOS** de cada vínculo.
-    *   **FORMATO:** "month": "MM/AAAA", "value": número (float), "indicators": ["IND1"] (opcional).
-    *   **CASOS ESPECIAIS:**
-        *   **EMPRESA FLEURY (e similares):** Se encontrar uma lista de meses (ex: 05/2007, 06/2007...) com valores ao lado, capture TODOS.
-        *   **SEM REGISTRO:** Se o valor for "Sem registro", retorne 0 ou null.
-        *   **NÃO PULE MESES:** Se houver uma sequência 05/2007, 06/2007, 07/2007, capture TODOS.
-    *   **LAYOUT EM COLUNAS:** Leia da esquerda para a direita, linha por linha.
+3.  **SALÁRIOS DE CONTRIBUIÇÃO (SC):**
+    *   **IMPORTANTE:** Para economizar tokens e evitar erros de corte (JSON inválido), **NÃO EXTRAIA A LISTA DE SALÁRIOS**.
+    *   Retorne SEMPRE uma lista vazia: `"sc": []`.
+    *   A extração dos valores será feita pelo sistema local (frontend) via Regex.
+    *   **FOQUE TOTALMENTE** em identificar corretamente os metadados do vínculo: Sequência (Seq.), Nome da Empresa, Data de Início e Data Fim.
 
 4.  **INDICADORES:**
     *   Capture todos os indicadores (ex: IREM-INDP, PEXT, AEXT-VT, IEAN) que aparecem no cabeçalho do vínculo.
