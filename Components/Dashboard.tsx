@@ -351,9 +351,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           });
       } else {
           return contracts.filter(c => 
-            (c.firstName.toLowerCase().includes(lowerSearch)) ||
-            (c.lastName.toLowerCase().includes(lowerSearch)) ||
-            (c.cpf.includes(lowerSearch))
+            ((c.firstName || '').toLowerCase().includes(lowerSearch)) ||
+            ((c.lastName || '').toLowerCase().includes(lowerSearch)) ||
+            ((c.cpf || '').includes(lowerSearch))
           ).sort((a, b) => {
              // Contracts sort logic
              if (sortConfig) {
@@ -362,7 +362,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                   if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
                   if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
              }
-             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(); // Default new first
+             const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+             const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+             return dateB - dateA; // Default new first
           });
       }
   }
