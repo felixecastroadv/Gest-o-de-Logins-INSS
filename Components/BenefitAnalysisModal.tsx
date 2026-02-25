@@ -7,6 +7,7 @@ interface BenefitAnalysisModalProps {
     isOpen: boolean;
     onClose: () => void;
     data: SocialSecurityData;
+    inpcIndices?: Map<string, number>;
 }
 
 interface BenefitCardProps {
@@ -69,13 +70,13 @@ const BenefitCard: React.FC<BenefitCardProps> = ({ benefit }) => {
     );
 };
 
-const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onClose, data }) => {
+const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onClose, data, inpcIndices }) => {
     if (!isOpen) return null;
 
     const [selectedCategory, setSelectedCategory] = useState<'aposentadorias' | 'auxilios' | 'dependentes'>('aposentadorias');
     
     // Run analysis
-    const result = useMemo(() => analyzeBenefits(data), [data]);
+    const result = useMemo(() => analyzeBenefits(data, inpcIndices), [data, inpcIndices]);
 
     // Filter benefits by category
     const filteredBenefits = useMemo(() => {
