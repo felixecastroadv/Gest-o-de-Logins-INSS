@@ -219,6 +219,70 @@ export const calculateRMI = (
     }
 };
 
+// Helper to check Quality of Insured (Qualidade de Segurado)
+export const checkInsuredQuality = (bonds: CNISBond[], der: string): { hasQuality: boolean, gracePeriodEnd: Date } => {
+    // 1. Find the latest bond end date
+    let lastBondEnd = new Date(0);
+    let hasActiveBond = false;
+
+    bonds.forEach(b => {
+        if (!b.useInCalculation) return;
+        if (!b.endDate) {
+            hasActiveBond = true; // Active bond means insured
+        } else {
+            const end = new Date(b.endDate);
+            if (end > lastBondEnd) lastBondEnd = end;
+        }
+    });
+
+    if (hasActiveBond) return { hasQuality: true, gracePeriodEnd: new Date() };
+
+    // 2. Calculate Grace Period (Período de Graça)
+    // Rule: 12 months + 12 months (if > 120 contributions) + 12 months (unemployment)
+    // Simplified: 12 months base.
+    // TODO: Advanced logic for 120 contributions and unemployment check.
+    
+    // Check total contributions for 120+ rule
+    let totalContributionMonths = 0;
+    const uniqueMonths = new Set<string>();
+    bonds.forEach(b => {
+        if (!b.useInCalculation) return;
+        if (b.sc.length > 0) {
+             b.sc.forEach(s => uniqueMonths.add(s.month));
+        } else if (b.startDate && b.endDate) {
+             let start = new Date(b.startDate);
+             let end = new Date(b.endDate);
+             let safety = 0;
+             while(start <= end && safety < 1200) {
+                 uniqueMonths.add(`${start.getMonth()+1}/${start.getFullYear()}`);
+                 start.setMonth(start.getMonth() + 1);
+                 safety++;
+             }
+        }
+    });
+    totalContributionMonths = uniqueMonths.size;
+
+    let graceMonths = 12;
+    if (totalContributionMonths >= 120) {
+        graceMonths += 12; // Extension for > 120 contributions without loss of quality
+    }
+    
+    // Unemployment extension (requires proof, defaulting to false for safety unless we add a UI toggle)
+    // graceMonths += 12; 
+
+    // Add grace months to last bond end
+    const gracePeriodEnd = new Date(lastBondEnd);
+    gracePeriodEnd.setMonth(gracePeriodEnd.getMonth() + graceMonths);
+    // Add 45 days (approx 1.5 months) for payment deadline? No, usually just the month.
+    // The law says "up to 15th of the month following the end of grace period".
+    gracePeriodEnd.setDate(15);
+    gracePeriodEnd.setMonth(gracePeriodEnd.getMonth() + 2); // +2 to be safe on "following month" logic? 
+    // Let's stick to standard: End Date + Grace Months + 1.5 months (payment window)
+    
+    const derDate = new Date(der);
+    return { hasQuality: derDate <= gracePeriodEnd, gracePeriodEnd };
+};
+
 export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
     const der = data.der || new Date().toISOString().split('T')[0];
     const timeTotal = calculateTimeForPeriod(data.bonds, der, data.gender);
@@ -245,6 +309,9 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
     const totalCarencia = uniqueMonths.size;
 
     const points = age.years + timeTotal.years + (timeTotal.months / 12);
+    
+    // Check Insured Quality
+    const { hasQuality, gracePeriodEnd } = checkInsuredQuality(data.bonds, der);
 
     const benefits: BenefitResult[] = [];
 
@@ -563,7 +630,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
     }
 
     // 1.13 Aposentadoria por Incapacidade Permanente
-    if (totalCarencia >= 12) {
+    if (totalCarencia >= 12 && hasQuality) {
          benefits.push({
             benefitName: "1.13) Aposentadoria por Incapacidade Permanente",
             isEligible: true,
@@ -578,15 +645,16 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: false,
             ruleType: 'Disability',
             category: 'aposentadorias',
-            missingDetails: `Carência: ${totalCarencia}/12 meses.`
+            missingDetails: !hasQuality 
+                ? "Segurado sem qualidade (período de graça expirado)." 
+                : `Carência: ${totalCarencia}/12 meses.`
         });
     }
 
     // --- 2. AUXÍLIOS E SALÁRIOS ---
 
     // 2.1 Incapacidade Temporária
-    // 12 meses carência.
-    if (totalCarencia >= 12) {
+    if (totalCarencia >= 12 && hasQuality) {
         benefits.push({
             benefitName: "Auxílio por Incapacidade Temporária",
             isEligible: true,
@@ -600,23 +668,13 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'auxilios',
-            missingDetails: `Carência: ${totalCarencia}/12 meses.`
+            missingDetails: !hasQuality 
+                ? "Segurado sem qualidade (período de graça expirado)." 
+                : `Carência: ${totalCarencia}/12 meses.`
         });
     }
 
     // 2.2 Auxílio-Acidente
-    // Isento carência. Qualidade de segurado (simplified check: has recent bond).
-    // Assuming quality of insured if last bond end date is recent (< 12 months)
-    // This is a rough approx.
-    const lastBond = data.bonds.reduce((latest, b) => {
-        if (!b.endDate) return new Date(); // Active
-        const end = new Date(b.endDate);
-        return end > latest ? end : latest;
-    }, new Date(0));
-    
-    const monthsSinceLastBond = (new Date(der).getTime() - lastBond.getTime()) / (1000 * 60 * 60 * 24 * 30);
-    const hasQuality = monthsSinceLastBond <= 12; // Basic rule (ignoring grace period extensions)
-
     if (hasQuality) {
         benefits.push({
             benefitName: "Auxílio-Acidente",
@@ -631,14 +689,12 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'auxilios',
-            missingDetails: "Requer qualidade de segurado (vínculo recente)."
+            missingDetails: "Segurado sem qualidade (período de graça expirado)."
         });
     }
 
     // 2.3 Salário-Maternidade
-    // 10 meses carência (Individual/Facultativo). Empregado isento.
-    // We don't know category perfectly, assuming 10 months safe check.
-    if (totalCarencia >= 10) {
+    if (totalCarencia >= 10 && hasQuality) {
         benefits.push({
             benefitName: "Salário-Maternidade",
             isEligible: true,
@@ -652,14 +708,15 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'auxilios',
-            missingDetails: `Carência: ${totalCarencia}/10 meses.`
+            missingDetails: !hasQuality 
+                ? "Segurado sem qualidade (período de graça expirado)." 
+                : `Carência: ${totalCarencia}/10 meses.`
         });
     }
 
     // --- 3. BENEFÍCIOS AOS DEPENDENTES ---
 
     // 3.1 Pensão por Morte
-    // Isento carência. Requer qualidade de segurado.
     if (hasQuality) {
         benefits.push({
             benefitName: "Pensão por Morte",
@@ -674,17 +731,15 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'dependentes',
-            missingDetails: "Instituidor deve ter qualidade de segurado."
+            missingDetails: "Instituidor sem qualidade de segurado na data do óbito (estimada)."
         });
     }
 
     // 3.2 Auxílio-Reclusão
-    // 24 meses carência. Baixa renda (check RMI < limit).
-    // Limit 2024: R$ 1.819,26.
     const rmiEst = calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years);
     const lowIncomeLimit = 1819.26;
     
-    if (totalCarencia >= 24 && rmiEst <= lowIncomeLimit) {
+    if (totalCarencia >= 24 && hasQuality && rmiEst <= lowIncomeLimit) {
         benefits.push({
             benefitName: "Auxílio-Reclusão",
             isEligible: true,
@@ -698,7 +753,9 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'dependentes',
-            missingDetails: `Carência: ${totalCarencia}/24. Renda: ${rmiEst > lowIncomeLimit ? 'Acima do limite' : 'Ok'}.`
+            missingDetails: !hasQuality 
+                ? "Segurado sem qualidade (período de graça expirado)." 
+                : `Carência: ${totalCarencia}/24. Renda: ${rmiEst > lowIncomeLimit ? 'Acima do limite' : 'Ok'}.`
         });
     }
 
