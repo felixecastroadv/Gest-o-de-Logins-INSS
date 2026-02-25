@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { XCircleIcon, TrashIcon, ArrowPathIcon, FolderOpenIcon } from '@heroicons/react/24/outline';
+import { XCircleIcon, TrashIcon, FolderOpenIcon, PencilSquareIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { SocialSecurityData } from '../SocialSecurityCalc';
 
 interface SavedCalculationsModalProps {
@@ -17,6 +17,8 @@ interface SavedCalculation {
 
 const SavedCalculationsModal: React.FC<SavedCalculationsModalProps> = ({ isOpen, onClose, onLoad }) => {
     const [calculations, setCalculations] = useState<SavedCalculation[]>([]);
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editName, setEditName] = useState('');
 
     useEffect(() => {
         if (isOpen) {
@@ -48,6 +50,29 @@ const SavedCalculationsModal: React.FC<SavedCalculationsModalProps> = ({ isOpen,
             onLoad(calc.data);
             onClose();
         }
+    };
+
+    const startEditing = (calc: SavedCalculation) => {
+        setEditingId(calc.id);
+        setEditName(calc.clientName);
+    };
+
+    const cancelEditing = () => {
+        setEditingId(null);
+        setEditName('');
+    };
+
+    const saveEditing = (id: string) => {
+        const newCalculations = calculations.map(c => {
+            if (c.id === id) {
+                return { ...c, clientName: editName, data: { ...c.data, clientName: editName } };
+            }
+            return c;
+        });
+        setCalculations(newCalculations);
+        localStorage.setItem('social_security_calculations', JSON.stringify(newCalculations));
+        setEditingId(null);
+        setEditName('');
     };
 
     if (!isOpen) return null;
@@ -82,33 +107,63 @@ const SavedCalculationsModal: React.FC<SavedCalculationsModalProps> = ({ isOpen,
                         <div className="space-y-3">
                             {calculations.map((calc) => (
                                 <div key={calc.id} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-md transition flex justify-between items-center group">
-                                    <div>
-                                        <h3 className="font-bold text-slate-800 dark:text-white text-sm">
-                                            {calc.clientName || "Cliente Sem Nome"}
-                                        </h3>
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                                            Salvo em: {new Date(calc.date).toLocaleString()}
-                                        </p>
-                                        <p className="text-[10px] text-slate-400 mt-0.5">
-                                            Vínculos: {calc.data.bonds.length} | DER: {calc.data.der}
-                                        </p>
+                                    <div className="flex-1 mr-4">
+                                        {editingId === calc.id ? (
+                                            <div className="flex items-center gap-2">
+                                                <input 
+                                                    type="text" 
+                                                    value={editName}
+                                                    onChange={(e) => setEditName(e.target.value)}
+                                                    className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-sm focus:ring-2 focus:ring-indigo-500 outline-none dark:text-white"
+                                                    autoFocus
+                                                />
+                                                <button onClick={() => saveEditing(calc.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded">
+                                                    <CheckIcon className="h-5 w-5" />
+                                                </button>
+                                                <button onClick={cancelEditing} className="p-1 text-red-500 hover:bg-red-50 rounded">
+                                                    <XMarkIcon className="h-5 w-5" />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <>
+                                                <h3 className="font-bold text-slate-800 dark:text-white text-sm">
+                                                    {calc.clientName || "Cliente Sem Nome"}
+                                                </h3>
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                                    Salvo em: {new Date(calc.date).toLocaleString()}
+                                                </p>
+                                                <p className="text-[10px] text-slate-400 mt-0.5">
+                                                    Vínculos: {calc.data.bonds.length} | DER: {calc.data.der}
+                                                </p>
+                                            </>
+                                        )}
                                     </div>
-                                    <div className="flex gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button 
-                                            onClick={() => handleLoad(calc)}
-                                            className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition"
-                                            title="Carregar"
-                                        >
-                                            <ArrowPathIcon className="h-4 w-4" />
-                                        </button>
-                                        <button 
-                                            onClick={() => handleDelete(calc.id)}
-                                            className="p-2 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition"
-                                            title="Excluir"
-                                        >
-                                            <TrashIcon className="h-4 w-4" />
-                                        </button>
-                                    </div>
+                                    
+                                    {editingId !== calc.id && (
+                                        <div className="flex gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                                onClick={() => handleLoad(calc)}
+                                                className="p-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-lg hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition"
+                                                title="Abrir"
+                                            >
+                                                <FolderOpenIcon className="h-4 w-4" />
+                                            </button>
+                                            <button 
+                                                onClick={() => startEditing(calc)}
+                                                className="p-2 bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 rounded-lg hover:bg-amber-100 dark:hover:bg-amber-900/50 transition"
+                                                title="Editar Nome"
+                                            >
+                                                <PencilSquareIcon className="h-4 w-4" />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDelete(calc.id)}
+                                                className="p-2 bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/50 transition"
+                                                title="Excluir"
+                                            >
+                                                <TrashIcon className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
