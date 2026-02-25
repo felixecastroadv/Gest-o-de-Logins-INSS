@@ -6,10 +6,12 @@ import {
   ArrowDownTrayIcon, TrashIcon, PlusIcon, 
   CheckCircleIcon, ExclamationTriangleIcon,
   CalendarDaysIcon, CurrencyDollarIcon, CloudArrowUpIcon,
-  MagnifyingGlassIcon, Cog6ToothIcon, TableCellsIcon
+  MagnifyingGlassIcon, Cog6ToothIcon, TableCellsIcon,
+  ChartBarIcon
 } from '@heroicons/react/24/outline';
 import { ClientRecord } from './types';
 import { formatCurrency } from './utils';
+import BenefitAnalysisModal from './Components/BenefitAnalysisModal';
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -91,6 +93,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     const [data, setData] = useState<SocialSecurityData>(INITIAL_SS_DATA);
     const [expandedBonds, setExpandedBonds] = useState<string[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
 
     // --- Helpers ---
     // Helper to calculate days between two dates (inclusive)
@@ -1411,7 +1414,35 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     </div>
                 </div>
 
+                {/* Footer Actions */}
+                <div className="flex justify-between items-center mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                        * O cálculo é uma estimativa e não substitui a análise oficial do INSS.
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setIsAnalysisModalOpen(true)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md shadow-indigo-500/20 transition-all flex items-center gap-2 text-sm"
+                        >
+                            <ChartBarIcon className="h-5 w-5" />
+                            Analisar Requisitos e RMI
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg shadow-md shadow-emerald-500/20 transition-all flex items-center gap-2 text-sm"
+                        >
+                            <CloudArrowUpIcon className="h-5 w-5" />
+                            Salvar Cálculo
+                        </button>
+                    </div>
+                </div>
             </div>
+
+            <BenefitAnalysisModal 
+                isOpen={isAnalysisModalOpen}
+                onClose={() => setIsAnalysisModalOpen(false)}
+                data={data}
+            />
         </div>
     );
 };
