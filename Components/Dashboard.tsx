@@ -10,7 +10,7 @@ import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { DashboardProps, ClientRecord, ContractRecord, NotificationItem } from '../types';
 import { INITIAL_DATA, INITIAL_CONTRACTS_LIST } from '../data';
 import LaborCalc, { CalculationRecord } from '../LaborCalc';
-import SocialSecurityCalc from '../SocialSecurityCalc';
+import SocialSecurityCalc, { SocialSecurityData } from '../SocialSecurityCalc';
 import { initSupabase } from '../supabaseClient';
 import { isUrgentDate, formatCurrency } from '../utils';
 import StatsCards from './StatsCards';
@@ -39,6 +39,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [records, setRecords] = useState<ClientRecord[]>([]);
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [savedCalculations, setSavedCalculations] = useState<CalculationRecord[]>([]);
+  const [savedSocialCalculations, setSavedSocialCalculations] = useState<SocialSecurityData[]>([]);
   
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -70,6 +71,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         let fetchedClients = INITIAL_DATA;
         let fetchedContracts = INITIAL_CONTRACTS_LIST;
         let fetchedCalculations: CalculationRecord[] = [];
+        let fetchedSocialCalculations: SocialSecurityData[] = [];
 
         if (supabase) {
             // Cloud Fetch - Clients (ID 1)
@@ -112,6 +114,20 @@ const Dashboard: React.FC<DashboardProps> = ({
                  await supabase.from('clients').upsert({ id: 3, data: [] });
             }
 
+            // Cloud Fetch - Social Security Calculations (ID 4)
+            const { data: socialCalcData, error: socialCalcError } = await supabase
+                .from('clients')
+                .select('data')
+                .eq('id', 4)
+                .single();
+
+            if (socialCalcData && socialCalcData.data) {
+                fetchedSocialCalculations = socialCalcData.data;
+                localStorage.setItem('inss_social_calculations', JSON.stringify(socialCalcData.data));
+            } else if (socialCalcError && socialCalcError.code === 'PGRST116') {
+                 await supabase.from('clients').upsert({ id: 4, data: [] });
+            }
+
         } else {
              // Local Fallback
              const localClients = localStorage.getItem('inss_records');
@@ -122,11 +138,15 @@ const Dashboard: React.FC<DashboardProps> = ({
 
              const localCalculations = localStorage.getItem('inss_calculations');
              if (localCalculations) fetchedCalculations = JSON.parse(localCalculations);
+
+             const localSocialCalculations = localStorage.getItem('inss_social_calculations');
+             if (localSocialCalculations) fetchedSocialCalculations = JSON.parse(localSocialCalculations);
         }
 
         setRecords(fetchedClients);
         setContracts(fetchedContracts);
         setSavedCalculations(fetchedCalculations);
+        setSavedSocialCalculations(fetchedSocialCalculations);
 
     } catch (e) {
         console.error("Erro geral", e);
@@ -199,7 +219,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [records]);
 
   // Save Logic (Generic)
-  const saveData = async (type: 'clients' | 'contracts' | 'calculations', newData: any[]) => {
+  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations', newData: any[]) => {
       setIsSyncing(true);
       setSaveError(null);
       const supabase = initSupabase();
@@ -224,6 +244,13 @@ const Dashboard: React.FC<DashboardProps> = ({
               localStorage.setItem('inss_calculations', JSON.stringify(newData));
               if (supabase) {
                   const { error } = await supabase.from('clients').upsert({ id: 3, data: newData });
+                  if (error) throw error;
+              }
+          } else if (type === 'social_calculations') {
+              setSavedSocialCalculations(newData);
+              localStorage.setItem('inss_social_calculations', JSON.stringify(newData));
+              if (supabase) {
+                  const { error } = await supabase.from('clients').upsert({ id: 4, data: newData });
                   if (error) throw error;
               }
           }
@@ -332,6 +359,12 @@ const Dashboard: React.FC<DashboardProps> = ({
       if (confirm('Excluir este cálculo salvo?')) {
           saveData('calculations', savedCalculations.filter(c => c.id !== id));
       }
+  };
+
+  const handleSaveSocialCalculation = (data: SocialSecurityData) => {
+      const updated = [data, ...savedSocialCalculations];
+      saveData('social_calculations', updated);
+      alert('Cálculo Previdenciário salvo com sucesso!');
   };
 
   // Sorting and Filtering Logic
@@ -575,6 +608,7 @@ const Dashboard: React.FC<DashboardProps> = ({
              ) : currentView === 'social_calc' ? (
                  <SocialSecurityCalc 
                     clients={records}
+                    onSaveCalculation={handleSaveSocialCalculation}
                  />
              ) : currentView === 'clients' ? (
                  <>
