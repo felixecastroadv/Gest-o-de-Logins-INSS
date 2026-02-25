@@ -274,7 +274,19 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const toggleDailyAttention = (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      const updated = records.map(r => r.id === id ? { ...r, isDailyAttention: !r.isDailyAttention } : r);
+      const updated = records.map(r => {
+          if (r.id === id) {
+              // Cycle: None -> Yellow (Daily) -> Red (Urgent) -> None
+              if (!r.isDailyAttention && !r.isUrgentAttention) {
+                  return { ...r, isDailyAttention: true, isUrgentAttention: false };
+              } else if (r.isDailyAttention) {
+                  return { ...r, isDailyAttention: false, isUrgentAttention: true };
+              } else {
+                  return { ...r, isDailyAttention: false, isUrgentAttention: false };
+              }
+          }
+          return r;
+      });
       saveData('clients', updated);
   }
 
@@ -340,7 +352,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             (r.cpf && r.cpf.includes(lowerSearch))) &&
             (showArchived ? r.isArchived : !r.isArchived)
           ).sort((a, b) => {
-              if (a.isDailyAttention !== b.isDailyAttention) return a.isDailyAttention ? -1 : 1;
+              // Priority: Red (Urgent) > Yellow (Daily) > None
+              const aScore = (a.isUrgentAttention ? 2 : 0) + (a.isDailyAttention ? 1 : 0);
+              const bScore = (b.isUrgentAttention ? 2 : 0) + (b.isDailyAttention ? 1 : 0);
+              
+              if (aScore !== bScore) return bScore - aScore; // Higher score first
+
               if (sortConfig) {
                   const aVal = (a as any)[sortConfig.key] || '';
                   const bVal = (b as any)[sortConfig.key] || '';
@@ -642,15 +659,24 @@ const Dashboard: React.FC<DashboardProps> = ({
                                             </td>
                                         </tr>
                                     ) : paginatedList.map((record: any) => {
-                                        const isPriority = record.isDailyAttention;
-                                        const rowClass = isPriority 
-                                            ? 'bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20' 
-                                            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50';
+                                        const isYellow = record.isDailyAttention;
+                                        const isRed = record.isUrgentAttention;
+                                        
+                                        let rowClass = 'hover:bg-slate-50 dark:hover:bg-slate-800/50';
+                                        if (isYellow) rowClass = 'bg-yellow-50/50 dark:bg-yellow-900/10 hover:bg-yellow-100/50 dark:hover:bg-yellow-900/20';
+                                        if (isRed) rowClass = 'bg-red-50/50 dark:bg-red-900/10 hover:bg-red-100/50 dark:hover:bg-red-900/20';
+
                                         return (
                                             <tr key={record.id} className={`${rowClass} transition-colors`}>
                                                 <td className="px-4 py-3 text-center">
-                                                    <button onClick={(e) => toggleDailyAttention(record.id, e)}>
-                                                        {isPriority ? <StarIconSolid className="h-5 w-5 text-yellow-400" /> : <StarIcon className="h-5 w-5 text-slate-300 hover:text-yellow-400" />}
+                                                    <button onClick={(e) => toggleDailyAttention(record.id, e)} title="Alternar Prioridade: Normal -> Atenção -> Urgente">
+                                                        {isRed ? (
+                                                            <StarIconSolid className="h-5 w-5 text-red-500 animate-pulse" />
+                                                        ) : isYellow ? (
+                                                            <StarIconSolid className="h-5 w-5 text-yellow-400" />
+                                                        ) : (
+                                                            <StarIcon className="h-5 w-5 text-slate-300 hover:text-yellow-400" />
+                                                        )}
                                                     </button>
                                                 </td>
                                                 <td className="px-4 py-3 font-semibold dark:text-slate-200">{record.name}</td>
