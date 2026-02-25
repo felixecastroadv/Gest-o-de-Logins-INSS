@@ -250,12 +250,11 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
 
     // --- 1. APOSENTADORIAS ---
 
-    // 1.1 Aposentadoria por Idade (Filiados até 13/11/2019)
-    // H: 65, M: 62. Tempo: 15 anos. Carência: 180.
+    // 1.1 Aposentadoria por idade (Filiados até 13/11/2019)
     const ageReqOld = data.gender === 'M' ? 65 : 62;
     if (age.years >= ageReqOld && timeTotal.years >= 15 && totalCarencia >= 180) {
         benefits.push({
-            benefitName: "Aposentadoria por Idade (Regra Geral - Filiados até 2019)",
+            benefitName: "1.1) Aposentadoria por idade (Filiados até 13/11/2019)",
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -263,7 +262,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     } else {
         benefits.push({
-            benefitName: "Aposentadoria por Idade (Regra Geral - Filiados até 2019)",
+            benefitName: "1.1) Aposentadoria por idade (Filiados até 13/11/2019)",
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -271,12 +270,11 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     }
 
-    // 1.2 Aposentadoria por Idade (Filiados após 13/11/2019)
-    // H: 65 + 20 anos contrib. M: 62 + 15 anos contrib.
+    // 1.2 Aposentadoria por idade (Filiados após 13/11/2019)
     const timeReqNew = data.gender === 'M' ? 20 : 15;
     if (age.years >= 65 && timeTotal.years >= timeReqNew && totalCarencia >= 180) {
         benefits.push({
-            benefitName: "Aposentadoria por Idade (Novos Filiados)",
+            benefitName: "1.2) Aposentadoria por idade (Filiados após 13/11/2019)",
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -284,7 +282,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     } else {
         benefits.push({
-            benefitName: "Aposentadoria por Idade (Novos Filiados)",
+            benefitName: "1.2) Aposentadoria por idade (Filiados após 13/11/2019)",
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -292,8 +290,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     }
 
-    // 1.3 Pedágio 50%
-    // Faltava < 2 anos em 13/11/2019.
+    // 1.3 Aposentadoria por tempo de contribuição (Regra de Transição - Pedágio 50%)
     const timeAtReform = calculateTimeForPeriod(data.bonds, '2019-11-13', data.gender);
     const timeNeededAtReform = data.gender === 'M' ? 35 : 30;
     const missingAtReform = Math.max(0, timeNeededAtReform - timeAtReform.years);
@@ -303,7 +300,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         const totalNeeded50 = timeNeededAtReform + toll50;
         if (timeTotal.years >= totalNeeded50 && totalCarencia >= 180) {
             benefits.push({
-                benefitName: "Aposentadoria Pedágio 50%",
+                benefitName: "1.3) Aposentadoria por tempo de contribuição (Regra de Transição - Pedágio 50%)",
                 isEligible: true,
                 ruleType: 'Transition_50',
                 category: 'aposentadorias',
@@ -311,24 +308,33 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             });
         } else {
             benefits.push({
-                benefitName: "Aposentadoria Pedágio 50%",
+                benefitName: "1.3) Aposentadoria por tempo de contribuição (Regra de Transição - Pedágio 50%)",
                 isEligible: false,
                 ruleType: 'Transition_50',
                 category: 'aposentadorias',
                 missingDetails: `Tempo Total Necessário: ${totalNeeded50.toFixed(1)}. Atual: ${timeTotal.years}.`
             });
         }
+    } else {
+        benefits.push({
+            benefitName: "1.3) Aposentadoria por tempo de contribuição (Regra de Transição - Pedágio 50%)",
+            isEligible: false,
+            ruleType: 'Transition_50',
+            category: 'aposentadorias',
+            missingDetails: missingAtReform <= 0 
+                ? "Direito adquirido antes da reforma (não se aplica regra de transição)." 
+                : "Faltava mais de 2 anos em 13/11/2019 (Regra inaplicável)."
+        });
     }
 
-    // 1.4 Pedágio 100%
-    // H: 60 anos, 35 contrib. M: 57 anos, 30 contrib. + 100% pedágio.
+    // 1.4 Aposentadoria por tempo de contribuição (Regra de Transição - Pedágio 100%)
     const toll100 = missingAtReform; 
     const totalNeeded100 = timeNeededAtReform + toll100;
     const ageReq100 = data.gender === 'M' ? 60 : 57;
     
     if (age.years >= ageReq100 && timeTotal.years >= totalNeeded100 && totalCarencia >= 180) {
         benefits.push({
-            benefitName: "Aposentadoria Pedágio 100%",
+            benefitName: "1.4) Aposentadoria por tempo de contribuição (Regra de Transição - Pedágio 100%)",
             isEligible: true,
             ruleType: 'Transition_100',
             category: 'aposentadorias',
@@ -336,7 +342,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     } else {
         benefits.push({
-            benefitName: "Aposentadoria Pedágio 100%",
+            benefitName: "1.4) Aposentadoria por tempo de contribuição (Regra de Transição - Pedágio 100%)",
             isEligible: false,
             ruleType: 'Transition_100',
             category: 'aposentadorias',
@@ -344,11 +350,9 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     }
 
-    // 1.5 Idade Progressiva
-    // 2026: H 64.5, M 59.5. Tempo: 35/30.
+    // 1.5 Aposentadoria por tempo de contribuição (Regra de Transição - Idade Progressiva)
     const currentYear = new Date().getFullYear();
     const yearsSince2019 = currentYear - 2019;
-    // Base 2019: H 61, M 56. +0.5 per year.
     let progAgeReqM = 61 + (yearsSince2019 * 0.5);
     let progAgeReqF = 56 + (yearsSince2019 * 0.5);
     if (progAgeReqM > 65) progAgeReqM = 65;
@@ -359,7 +363,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
 
     if (age.years >= progAgeReq && timeTotal.years >= progTimeReq && totalCarencia >= 180) {
         benefits.push({
-            benefitName: "Aposentadoria Idade Progressiva",
+            benefitName: "1.5) Aposentadoria por tempo de contribuição (Regra de Transição - Idade Progressiva)",
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -367,7 +371,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     } else {
         benefits.push({
-            benefitName: "Aposentadoria Idade Progressiva",
+            benefitName: "1.5) Aposentadoria por tempo de contribuição (Regra de Transição - Idade Progressiva)",
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -375,9 +379,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     }
 
-    // 1.6 Pontos
-    // 2026: H 103, M 93.
-    // Base 2019: H 96, M 86. +1 per year.
+    // 1.6 Aposentadoria por tempo de contribuição (Regra de Transição - Pontos)
     let pointsReqM = 96 + yearsSince2019;
     let pointsReqF = 86 + yearsSince2019;
     if (pointsReqM > 105) pointsReqM = 105;
@@ -387,7 +389,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
     
     if (points >= pointsReq && timeTotal.years >= progTimeReq && totalCarencia >= 180) {
         benefits.push({
-            benefitName: "Aposentadoria por Pontos",
+            benefitName: "1.6) Aposentadoria por tempo de contribuição (Regra de Transição - Pontos)",
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -395,7 +397,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     } else {
         benefits.push({
-            benefitName: "Aposentadoria por Pontos",
+            benefitName: "1.6) Aposentadoria por tempo de contribuição (Regra de Transição - Pontos)",
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -404,14 +406,12 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
     }
 
     // --- 1.7 & 1.8 Aposentadoria Especial ---
-    // Need raw special time.
     let specialTime15 = 0;
     let specialTime20 = 0;
     let specialTime25 = 0;
     
     data.bonds.forEach(b => {
         if (!b.useInCalculation || !b.startDate) return;
-        // Calculate duration
         const start = new Date(b.startDate);
         const end = b.endDate ? new Date(b.endDate) : new Date();
         const diff = end.getTime() - start.getTime();
@@ -424,21 +424,19 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
     });
 
     // 1.7 Aposentadoria Especial (Regra de Transição - Pontos)
-    // 15 anos: 66 pontos. 20 anos: 76 pontos. 25 anos: 86 pontos.
     const specialPointsReq25 = 86;
 
-    // Check for 25 years (most common)
     if (specialTime25 >= 25 && points >= specialPointsReq25 && totalCarencia >= 180) {
          benefits.push({
-            benefitName: "Aposentadoria Especial (Transição - Pontos)",
+            benefitName: "1.7) Aposentadoria Especial (Regra de Transição - Pontos)",
             isEligible: true,
             ruleType: 'Transition',
             category: 'aposentadorias',
-            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years) // 60% + 2%
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
         });
     } else {
          benefits.push({
-            benefitName: "Aposentadoria Especial (Transição - Pontos)",
+            benefitName: "1.7) Aposentadoria Especial (Regra de Transição - Pontos)",
             isEligible: false,
             ruleType: 'Transition',
             category: 'aposentadorias',
@@ -447,11 +445,10 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
     }
 
     // 1.8 Aposentadoria Especial (Filiados após 13/11/2019)
-    // 15 anos: 55 idade. 20 anos: 58 idade. 25 anos: 60 idade.
     const specialAgeReq25 = 60;
     if (specialTime25 >= 25 && age.years >= specialAgeReq25 && totalCarencia >= 180) {
         benefits.push({
-            benefitName: "Aposentadoria Especial (Novas Regras)",
+            benefitName: "1.8) Aposentadoria Especial (Filiados após 13/11/2019)",
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -459,7 +456,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     } else {
         benefits.push({
-            benefitName: "Aposentadoria Especial (Novas Regras)",
+            benefitName: "1.8) Aposentadoria Especial (Filiados após 13/11/2019)",
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -467,13 +464,10 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     }
 
-    // --- 1.9 & 1.10 Aposentadoria do Professor ---
-    // 1.9 Professor (Pedágio 100%)
-    // H: 55 anos, 30 contrib. M: 52 anos, 25 contrib.
-    
+    // 1.9 Aposentadoria do Professor (Regra de Transição - Pedágio 100%)
     if (data.isTeacher) {
          benefits.push({
-            benefitName: "Aposentadoria Professor (Pedágio 100%)",
+            benefitName: "1.9) Aposentadoria do Professor (Regra de Transição - Pedágio 100%)",
             isEligible: false,
             ruleType: 'Transition_100',
             category: 'aposentadorias',
@@ -481,7 +475,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     } else {
         benefits.push({
-            benefitName: "Aposentadoria Professor (Pedágio 100%)",
+            benefitName: "1.9) Aposentadoria do Professor (Regra de Transição - Pedágio 100%)",
             isEligible: false,
             ruleType: 'Transition_100',
             category: 'aposentadorias',
@@ -489,11 +483,10 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     }
 
-    // 1.10 Professor (Pontos)
-    // 2026: H 98, M 88. Tempo: 30/25.
+    // 1.10 Aposentadoria do Professor (Regra de Transição - Pontos)
     if (data.isTeacher) {
          benefits.push({
-            benefitName: "Aposentadoria Professor (Pontos)",
+            benefitName: "1.10) Aposentadoria do Professor (Regra de Transição - Pontos)",
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -501,7 +494,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     } else {
          benefits.push({
-            benefitName: "Aposentadoria Professor (Pontos)",
+            benefitName: "1.10) Aposentadoria do Professor (Regra de Transição - Pontos)",
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -509,23 +502,20 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     }
 
-    // --- 1.11 & 1.12 Aposentadoria PCD ---
-    
-    // 1.11 PCD (Por Idade)
-    // H: 60, M: 55. Tempo: 15. Carência: 180.
+    // 1.11 Aposentadoria da Pessoa com Deficiência (Por Idade)
     const pcdAgeReq = data.gender === 'M' ? 60 : 55;
     if (data.isPcd) {
         if (age.years >= pcdAgeReq && timeTotal.years >= 15 && totalCarencia >= 180) {
              benefits.push({
-                benefitName: "Aposentadoria PCD (Por Idade)",
+                benefitName: "1.11) Aposentadoria da Pessoa com Deficiência (Por Idade)",
                 isEligible: true,
                 ruleType: 'Post-Reform',
                 category: 'aposentadorias',
-                rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years) // 70% + 1%
+                rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
             });
         } else {
              benefits.push({
-                benefitName: "Aposentadoria PCD (Por Idade)",
+                benefitName: "1.11) Aposentadoria da Pessoa com Deficiência (Por Idade)",
                 isEligible: false,
                 ruleType: 'Post-Reform',
                 category: 'aposentadorias',
@@ -534,7 +524,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         }
     } else {
          benefits.push({
-            benefitName: "Aposentadoria PCD (Por Idade)",
+            benefitName: "1.11) Aposentadoria da Pessoa com Deficiência (Por Idade)",
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -542,22 +532,20 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     }
 
-    // 1.12 PCD (Por Tempo)
-    // Leve: H 33, M 28. Moderada: H 29, M 24. Grave: H 25, M 20.
-    // Placeholder assuming Leve for calculation if PCD
+    // 1.12 Aposentadoria da Pessoa com Deficiência (Por Tempo de Contribuição)
     const pcdTimeReqLeve = data.gender === 'M' ? 33 : 28;
     if (data.isPcd) {
          if (timeTotal.years >= pcdTimeReqLeve && totalCarencia >= 180) {
             benefits.push({
-                benefitName: "Aposentadoria PCD (Por Tempo - Leve)",
+                benefitName: "1.12) Aposentadoria da Pessoa com Deficiência (Por Tempo de Contribuição)",
                 isEligible: true,
                 ruleType: 'Post-Reform',
                 category: 'aposentadorias',
-                rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years) // 100%
+                rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
             });
          } else {
             benefits.push({
-                benefitName: "Aposentadoria PCD (Por Tempo)",
+                benefitName: "1.12) Aposentadoria da Pessoa com Deficiência (Por Tempo de Contribuição)",
                 isEligible: false,
                 ruleType: 'Post-Reform',
                 category: 'aposentadorias',
@@ -566,7 +554,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
          }
     } else {
          benefits.push({
-            benefitName: "Aposentadoria PCD (Por Tempo)",
+            benefitName: "1.12) Aposentadoria da Pessoa com Deficiência (Por Tempo de Contribuição)",
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
@@ -575,11 +563,10 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
     }
 
     // 1.13 Aposentadoria por Incapacidade Permanente
-    // 12 meses carência.
     if (totalCarencia >= 12) {
          benefits.push({
-            benefitName: "Aposentadoria por Incapacidade Permanente",
-            isEligible: true, // Conditionally eligible based on medical exam
+            benefitName: "1.13) Aposentadoria por Incapacidade Permanente",
+            isEligible: true,
             ruleType: 'Disability',
             category: 'aposentadorias',
             rmi: calculateRMI(data.bonds, 'Disability', data.gender, timeTotal.years),
@@ -587,7 +574,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     } else {
         benefits.push({
-            benefitName: "Aposentadoria por Incapacidade Permanente",
+            benefitName: "1.13) Aposentadoria por Incapacidade Permanente",
             isEligible: false,
             ruleType: 'Disability',
             category: 'aposentadorias',
