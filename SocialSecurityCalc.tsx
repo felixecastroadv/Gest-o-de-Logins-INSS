@@ -1106,6 +1106,27 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                 onChange={e => handleInputChange('motherName', e.target.value)}
                             />
                         </div>
+                        
+                        <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
+                            <label className="flex items-center space-x-2 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={data.isTeacher || false}
+                                    onChange={e => setData(prev => ({ ...prev, isTeacher: e.target.checked }))}
+                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                />
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Professor(a) (Magistério Exclusivo)</span>
+                            </label>
+                            <label className="flex items-center space-x-2 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={data.isPcd || false}
+                                    onChange={e => setData(prev => ({ ...prev, isPcd: e.target.checked }))}
+                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                />
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Pessoa com Deficiência (PCD)</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
 
