@@ -160,7 +160,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     
     // Unified Time Calculation (Day-by-Day Simulation)
     // Handles concurrency (counts only once) and Special Time multipliers (pre-Reform)
-    const calculateUnifiedTime = () => {
+    const unifiedTime = useMemo(() => {
         const activeBonds = data.bonds.filter(b => b.useInCalculation && b.startDate);
         
         if (activeBonds.length === 0) return "0 anos, 0 meses e 0 dias";
@@ -171,7 +171,6 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
 
         const processedBonds = activeBonds.map(b => {
             const start = new Date(b.startDate);
-            // Normalize to noon to avoid DST issues
             start.setHours(12, 0, 0, 0);
             
             let endStr = b.endDate || data.der || new Date().toISOString().split('T')[0];
@@ -193,22 +192,21 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         if (processedBonds.length === 0) return "0 anos, 0 meses e 0 dias";
 
         // EC 103/2019 Reform Date (13/11/2019)
-        // Multipliers only apply UP TO 12/11/2019 (inclusive) or 13/11/2019?
-        // EC 103 was published on 13/11/2019. The new rules apply from that date.
-        // So conversion applies to time worked UNTIL 12/11/2019? Or 13/11/2019?
-        // Usually, "until the entry into force".
-        // Let's use 13/11/2019 as the boundary. Time < 13/11/2019 gets factor.
         const REFORM_DATE_MS = new Date('2019-11-13').setHours(12, 0, 0, 0);
 
         let totalAdjustedDays = 0;
-        let currentMs = minDateMs;
-
-        // 2. Iterate Day by Day
-        // Limit to 100 years to prevent infinite loops in case of bad data
+        
+        // 2. Iterate Day by Day using Date object to avoid DST drift
+        let current = new Date(minDateMs);
+        const maxDate = new Date(maxDateMs);
+        
+        // Limit to 100 years to prevent infinite loops
         const MAX_LOOPS = 100 * 366; 
         let loops = 0;
 
-        while (currentMs <= maxDateMs && loops < MAX_LOOPS) {
+        while (current <= maxDate && loops < MAX_LOOPS) {
+            const currentMs = current.getTime();
+            
             // Find max factor for this day
             let maxFactorForDay = 0;
             let isActive = false;
@@ -229,7 +227,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             }
 
             // Next day
-            currentMs += 24 * 60 * 60 * 1000;
+            current.setDate(current.getDate() + 1);
+            current.setHours(12, 0, 0, 0); // Maintain noon to be safe
             loops++;
         }
 
@@ -238,7 +237,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         const days = Math.floor((totalAdjustedDays % 365.25) % 30.44);
         
         return `${years} anos, ${months} meses e ${days} dias`;
-    };
+    }, [data.bonds, data.gender, data.der]);
 
     // Unified Carência Calculation (Merge Months)
     const calculateUnifiedCarencia = () => {
@@ -1401,7 +1400,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                         Tempo Líquido (Unificado):
                                     </td>
                                     <td className="px-4 py-3 font-mono font-bold text-emerald-400 text-sm">
-                                        {calculateUnifiedTime()}
+                                        {unifiedTime}
                                     </td>
                                     <td colSpan={2} className="px-4 py-3 font-mono font-bold text-emerald-400 text-sm text-right">
                                         Carência Total: {calculateUnifiedCarencia()} meses
