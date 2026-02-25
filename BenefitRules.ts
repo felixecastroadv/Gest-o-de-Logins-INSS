@@ -151,10 +151,19 @@ export const calculateRMI = (
     bonds: CNISBond[], 
     ruleType: 'Pre-Reform' | 'Post-Reform' | 'Transition_50' | 'Transition_100' | 'Disability' | 'Death',
     gender: 'M' | 'F',
-    totalYears: number
+    totalYears: number,
+    inpcIndices?: Map<string, number>,
+    der?: string
 ) => {
     // 1. Flatten Salaries
-    let allSalaries: { date: Date, value: number }[] = [];
+    let allSalaries: { date: Date, value: number, originalValue: number }[] = [];
+    
+    let derMonthStr = "";
+    if (der) {
+        const [y, m, d] = der.split('-').map(Number);
+        derMonthStr = `${m}/${y}`;
+    }
+
     bonds.forEach(b => {
         if (!b.useInCalculation) return;
         b.sc.forEach(s => {
@@ -164,7 +173,33 @@ export const calculateRMI = (
             
             // Filter >= July 1994
             if (date >= new Date(1994, 6, 1)) {
-                allSalaries.push({ date, value: s.value });
+                let correctedValue = s.value;
+
+                if (inpcIndices && derMonthStr) {
+                    const contributionMonthStr = `${mes}/${ano}`;
+                    const startFactor = inpcIndices.get(contributionMonthStr);
+                    
+                    // Find End Factor (Month prior to DER)
+                    const [derY, derM, derD] = der!.split('-').map(Number);
+                    let currentDerDate = new Date(derY, derM - 1, 1);
+                    currentDerDate.setMonth(currentDerDate.getMonth() - 1);
+                    
+                    let endFactor = 0;
+                    for (let i = 0; i < 3; i++) {
+                         const searchStr = `${currentDerDate.getMonth() + 1}/${currentDerDate.getFullYear()}`;
+                         if (inpcIndices.has(searchStr)) {
+                             endFactor = inpcIndices.get(searchStr)!;
+                             break;
+                         }
+                         currentDerDate.setMonth(currentDerDate.getMonth() - 1);
+                    }
+
+                    if (startFactor && endFactor) {
+                        correctedValue = s.value * (endFactor / startFactor);
+                    }
+                }
+
+                allSalaries.push({ date, value: correctedValue, originalValue: s.value });
             }
         });
     });
@@ -283,7 +318,7 @@ export const checkInsuredQuality = (bonds: CNISBond[], der: string): { hasQualit
     return { hasQuality: derDate <= gracePeriodEnd, gracePeriodEnd };
 };
 
-export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
+export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<string, number>): SimulationResult => {
     const der = data.der || new Date().toISOString().split('T')[0];
     const timeTotal = calculateTimeForPeriod(data.bonds, der, data.gender);
     const age = calculateAge(data.birthDate, der);
@@ -325,7 +360,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
-            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der)
         });
     } else {
         benefits.push({
@@ -345,7 +380,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
-            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der)
         });
     } else {
         benefits.push({
@@ -371,7 +406,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
                 isEligible: true,
                 ruleType: 'Transition_50',
                 category: 'aposentadorias',
-                rmi: calculateRMI(data.bonds, 'Transition_50', data.gender, timeTotal.years)
+                rmi: calculateRMI(data.bonds, 'Transition_50', data.gender, timeTotal.years, inpcIndices, der)
             });
         } else {
             benefits.push({
@@ -405,7 +440,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Transition_100',
             category: 'aposentadorias',
-            rmi: calculateRMI(data.bonds, 'Transition_100', data.gender, timeTotal.years)
+            rmi: calculateRMI(data.bonds, 'Transition_100', data.gender, timeTotal.years, inpcIndices, der)
         });
     } else {
         benefits.push({
@@ -434,7 +469,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
-            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der)
         });
     } else {
         benefits.push({
@@ -460,7 +495,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
-            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der)
         });
     } else {
         benefits.push({
@@ -499,7 +534,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Transition',
             category: 'aposentadorias',
-            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der)
         });
     } else {
          benefits.push({
@@ -519,7 +554,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
-            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der)
         });
     } else {
         benefits.push({
@@ -578,7 +613,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
                 isEligible: true,
                 ruleType: 'Post-Reform',
                 category: 'aposentadorias',
-                rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+                rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der)
             });
         } else {
              benefits.push({
@@ -608,7 +643,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
                 isEligible: true,
                 ruleType: 'Post-Reform',
                 category: 'aposentadorias',
-                rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+                rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der)
             });
          } else {
             benefits.push({
@@ -636,7 +671,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Disability',
             category: 'aposentadorias',
-            rmi: calculateRMI(data.bonds, 'Disability', data.gender, timeTotal.years),
+            rmi: calculateRMI(data.bonds, 'Disability', data.gender, timeTotal.years, inpcIndices, der),
             missingDetails: "Requer perícia médica confirmando incapacidade permanente."
         });
     } else {
@@ -660,7 +695,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'auxilios',
-            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years) * 0.91 // 91%
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der) * 0.91 // 91%
         });
     } else {
         benefits.push({
@@ -681,7 +716,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'auxilios',
-            rmi: calculateRMI(data.bonds, 'Disability', data.gender, timeTotal.years) * 0.5 // 50% of Disability Retirement
+            rmi: calculateRMI(data.bonds, 'Disability', data.gender, timeTotal.years, inpcIndices, der) * 0.5 // 50% of Disability Retirement
         });
     } else {
         benefits.push({
@@ -700,7 +735,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'auxilios',
-            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years) // Approx
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der) // Approx
         });
     } else {
         benefits.push({
@@ -723,7 +758,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
             isEligible: true,
             ruleType: 'Post-Reform',
             category: 'dependentes',
-            rmi: calculateRMI(data.bonds, 'Death', data.gender, timeTotal.years)
+            rmi: calculateRMI(data.bonds, 'Death', data.gender, timeTotal.years, inpcIndices, der)
         });
     } else {
         benefits.push({
@@ -736,7 +771,7 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
     }
 
     // 3.2 Auxílio-Reclusão
-    const rmiEst = calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years);
+    const rmiEst = calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der);
     const lowIncomeLimit = 1819.26;
     
     if (totalCarencia >= 24 && hasQuality && rmiEst <= lowIncomeLimit) {
