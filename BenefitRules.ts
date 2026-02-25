@@ -403,6 +403,198 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
         });
     }
 
+    // --- 1.7 & 1.8 Aposentadoria Especial ---
+    // Need raw special time.
+    let specialTime15 = 0;
+    let specialTime20 = 0;
+    let specialTime25 = 0;
+    
+    data.bonds.forEach(b => {
+        if (!b.useInCalculation || !b.startDate) return;
+        // Calculate duration
+        const start = new Date(b.startDate);
+        const end = b.endDate ? new Date(b.endDate) : new Date();
+        const diff = end.getTime() - start.getTime();
+        const days = diff / (1000 * 60 * 60 * 24);
+        const years = days / 365.25;
+        
+        if (b.activityType === 'special_15') specialTime15 += years;
+        if (b.activityType === 'special_20') specialTime20 += years;
+        if (b.activityType === 'special_25') specialTime25 += years;
+    });
+
+    // 1.7 Aposentadoria Especial (Regra de Transição - Pontos)
+    // 15 anos: 66 pontos. 20 anos: 76 pontos. 25 anos: 86 pontos.
+    const specialPointsReq25 = 86;
+
+    // Check for 25 years (most common)
+    if (specialTime25 >= 25 && points >= specialPointsReq25 && totalCarencia >= 180) {
+         benefits.push({
+            benefitName: "Aposentadoria Especial (Transição - Pontos)",
+            isEligible: true,
+            ruleType: 'Transition',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years) // 60% + 2%
+        });
+    } else {
+         benefits.push({
+            benefitName: "Aposentadoria Especial (Transição - Pontos)",
+            isEligible: false,
+            ruleType: 'Transition',
+            category: 'aposentadorias',
+            missingDetails: `Tempo Especial (25): ${specialTime25.toFixed(1)}/25. Pontos: ${points.toFixed(1)}/${specialPointsReq25}.`
+        });
+    }
+
+    // 1.8 Aposentadoria Especial (Filiados após 13/11/2019)
+    // 15 anos: 55 idade. 20 anos: 58 idade. 25 anos: 60 idade.
+    const specialAgeReq25 = 60;
+    if (specialTime25 >= 25 && age.years >= specialAgeReq25 && totalCarencia >= 180) {
+        benefits.push({
+            benefitName: "Aposentadoria Especial (Novas Regras)",
+            isEligible: true,
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+        });
+    } else {
+        benefits.push({
+            benefitName: "Aposentadoria Especial (Novas Regras)",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            missingDetails: `Tempo Especial (25): ${specialTime25.toFixed(1)}/25. Idade: ${age.years}/${specialAgeReq25}.`
+        });
+    }
+
+    // --- 1.9 & 1.10 Aposentadoria do Professor ---
+    // 1.9 Professor (Pedágio 100%)
+    // H: 55 anos, 30 contrib. M: 52 anos, 25 contrib.
+    
+    if (data.isTeacher) {
+         benefits.push({
+            benefitName: "Aposentadoria Professor (Pedágio 100%)",
+            isEligible: false,
+            ruleType: 'Transition_100',
+            category: 'aposentadorias',
+            missingDetails: "Requer comprovação de tempo exclusivo em magistério."
+        });
+    } else {
+        benefits.push({
+            benefitName: "Aposentadoria Professor (Pedágio 100%)",
+            isEligible: false,
+            ruleType: 'Transition_100',
+            category: 'aposentadorias',
+            missingDetails: "Não identificado como professor."
+        });
+    }
+
+    // 1.10 Professor (Pontos)
+    // 2026: H 98, M 88. Tempo: 30/25.
+    if (data.isTeacher) {
+         benefits.push({
+            benefitName: "Aposentadoria Professor (Pontos)",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            missingDetails: "Requer comprovação de tempo exclusivo em magistério."
+        });
+    } else {
+         benefits.push({
+            benefitName: "Aposentadoria Professor (Pontos)",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            missingDetails: "Não identificado como professor."
+        });
+    }
+
+    // --- 1.11 & 1.12 Aposentadoria PCD ---
+    
+    // 1.11 PCD (Por Idade)
+    // H: 60, M: 55. Tempo: 15. Carência: 180.
+    const pcdAgeReq = data.gender === 'M' ? 60 : 55;
+    if (data.isPcd) {
+        if (age.years >= pcdAgeReq && timeTotal.years >= 15 && totalCarencia >= 180) {
+             benefits.push({
+                benefitName: "Aposentadoria PCD (Por Idade)",
+                isEligible: true,
+                ruleType: 'Post-Reform',
+                category: 'aposentadorias',
+                rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years) // 70% + 1%
+            });
+        } else {
+             benefits.push({
+                benefitName: "Aposentadoria PCD (Por Idade)",
+                isEligible: false,
+                ruleType: 'Post-Reform',
+                category: 'aposentadorias',
+                missingDetails: `Idade: ${age.years}/${pcdAgeReq}. Tempo PCD: ${timeTotal.years}/15.`
+            });
+        }
+    } else {
+         benefits.push({
+            benefitName: "Aposentadoria PCD (Por Idade)",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            missingDetails: "Não identificado como PCD."
+        });
+    }
+
+    // 1.12 PCD (Por Tempo)
+    // Leve: H 33, M 28. Moderada: H 29, M 24. Grave: H 25, M 20.
+    // Placeholder assuming Leve for calculation if PCD
+    const pcdTimeReqLeve = data.gender === 'M' ? 33 : 28;
+    if (data.isPcd) {
+         if (timeTotal.years >= pcdTimeReqLeve && totalCarencia >= 180) {
+            benefits.push({
+                benefitName: "Aposentadoria PCD (Por Tempo - Leve)",
+                isEligible: true,
+                ruleType: 'Post-Reform',
+                category: 'aposentadorias',
+                rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years) // 100%
+            });
+         } else {
+            benefits.push({
+                benefitName: "Aposentadoria PCD (Por Tempo)",
+                isEligible: false,
+                ruleType: 'Post-Reform',
+                category: 'aposentadorias',
+                missingDetails: `Tempo PCD (Leve): ${timeTotal.years}/${pcdTimeReqLeve}.`
+            });
+         }
+    } else {
+         benefits.push({
+            benefitName: "Aposentadoria PCD (Por Tempo)",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            missingDetails: "Não identificado como PCD."
+        });
+    }
+
+    // 1.13 Aposentadoria por Incapacidade Permanente
+    // 12 meses carência.
+    if (totalCarencia >= 12) {
+         benefits.push({
+            benefitName: "Aposentadoria por Incapacidade Permanente",
+            isEligible: true, // Conditionally eligible based on medical exam
+            ruleType: 'Disability',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Disability', data.gender, timeTotal.years),
+            missingDetails: "Requer perícia médica confirmando incapacidade permanente."
+        });
+    } else {
+        benefits.push({
+            benefitName: "Aposentadoria por Incapacidade Permanente",
+            isEligible: false,
+            ruleType: 'Disability',
+            category: 'aposentadorias',
+            missingDetails: `Carência: ${totalCarencia}/12 meses.`
+        });
+    }
+
     // --- 2. AUXÍLIOS E SALÁRIOS ---
 
     // 2.1 Incapacidade Temporária
