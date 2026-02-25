@@ -13,6 +13,7 @@ import { ClientRecord } from './types';
 import { formatCurrency } from './utils';
 import BenefitAnalysisModal from './Components/BenefitAnalysisModal';
 import SavedCalculationsModal from './Components/SavedCalculationsModal';
+import { fetchINPCData, processINPCIndices } from './services/bcbService';
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -100,6 +101,33 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     const [isProcessing, setIsProcessing] = useState(false);
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
     const [isSavedCalculationsModalOpen, setIsSavedCalculationsModalOpen] = useState(false);
+    const [inpcIndices, setInpcIndices] = useState<Map<string, number> | undefined>(undefined);
+
+    useEffect(() => {
+        const loadIndices = async () => {
+            try {
+                // Check local storage first
+                const cached = localStorage.getItem('inpc_indices_cache');
+                const cachedDate = localStorage.getItem('inpc_indices_date');
+                const now = new Date().getTime();
+                
+                // Cache for 24 hours
+                if (cached && cachedDate && (now - parseInt(cachedDate) < 24 * 60 * 60 * 1000)) {
+                    const parsed = JSON.parse(cached);
+                    setInpcIndices(processINPCIndices(parsed));
+                } else {
+                    const data = await fetchINPCData();
+                    setInpcIndices(processINPCIndices(data));
+                    localStorage.setItem('inpc_indices_cache', JSON.stringify(data));
+                    localStorage.setItem('inpc_indices_date', now.toString());
+                }
+            } catch (e) {
+                console.error("Failed to load INPC indices", e);
+                // Fallback or just ignore (calculation will proceed without correction)
+            }
+        };
+        loadIndices();
+    }, []);
 
     // --- Helpers ---
     // Helper to calculate days between two dates (inclusive)
@@ -1506,6 +1534,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 isOpen={isAnalysisModalOpen}
                 onClose={() => setIsAnalysisModalOpen(false)}
                 data={data}
+                inpcIndices={inpcIndices}
             />
 
             <SavedCalculationsModal
