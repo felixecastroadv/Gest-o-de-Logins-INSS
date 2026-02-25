@@ -77,6 +77,11 @@ const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onC
     // Run analysis
     const result = useMemo(() => analyzeBenefits(data), [data]);
 
+    // Filter benefits by category
+    const filteredBenefits = useMemo(() => {
+        return result.benefits.filter(b => b.category === selectedCategory);
+    }, [result, selectedCategory]);
+
     return (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
@@ -111,7 +116,7 @@ const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onC
                         <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Idade</span>
                             <div className="text-sm font-bold text-slate-800 dark:text-white mt-0.5">
-                                {result.age.years} anos
+                                {isNaN(result.age.years) ? 'N/A' : `${result.age.years} anos`}
                             </div>
                         </div>
                         <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
@@ -123,28 +128,28 @@ const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onC
                         <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pontos</span>
                             <div className="text-sm font-bold text-amber-600 dark:text-amber-400 mt-0.5">
-                                {result.points.toFixed(1)}
+                                {isNaN(result.points) ? 'N/A' : result.points.toFixed(1)}
                             </div>
                         </div>
                     </div>
 
                     {/* Tabs */}
-                    <div className="flex gap-1 mb-4 border-b border-slate-200 dark:border-slate-700">
+                    <div className="flex gap-1 mb-4 border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
                         <button 
                             onClick={() => setSelectedCategory('aposentadorias')}
-                            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition ${selectedCategory === 'aposentadorias' ? 'bg-white dark:bg-slate-800 text-indigo-600 border-x border-t border-slate-200 dark:border-slate-700 relative -mb-px' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
+                            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition whitespace-nowrap ${selectedCategory === 'aposentadorias' ? 'bg-white dark:bg-slate-800 text-indigo-600 border-x border-t border-slate-200 dark:border-slate-700 relative -mb-px' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
                         >
                             Aposentadorias
                         </button>
                         <button 
                             onClick={() => setSelectedCategory('auxilios')}
-                            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition ${selectedCategory === 'auxilios' ? 'bg-white dark:bg-slate-800 text-indigo-600 border-x border-t border-slate-200 dark:border-slate-700 relative -mb-px' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
+                            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition whitespace-nowrap ${selectedCategory === 'auxilios' ? 'bg-white dark:bg-slate-800 text-indigo-600 border-x border-t border-slate-200 dark:border-slate-700 relative -mb-px' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
                         >
                             Auxílios e Salários
                         </button>
                         <button 
                             onClick={() => setSelectedCategory('dependentes')}
-                            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition ${selectedCategory === 'dependentes' ? 'bg-white dark:bg-slate-800 text-indigo-600 border-x border-t border-slate-200 dark:border-slate-700 relative -mb-px' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
+                            className={`px-4 py-2 text-xs font-bold rounded-t-lg transition whitespace-nowrap ${selectedCategory === 'dependentes' ? 'bg-white dark:bg-slate-800 text-indigo-600 border-x border-t border-slate-200 dark:border-slate-700 relative -mb-px' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800/50'}`}
                         >
                             Benefícios aos Dependentes
                         </button>
@@ -152,24 +157,13 @@ const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onC
 
                     {/* Results List */}
                     <div className="space-y-2">
-                        {selectedCategory === 'aposentadorias' && (
-                            <>
-                                {result.benefits.map((benefit, idx) => (
-                                    <BenefitCard key={idx} benefit={benefit} />
-                                ))}
-                                {result.benefits.length === 0 && (
-                                    <div className="text-center py-8 text-slate-500 italic text-sm">Nenhuma regra de aposentadoria analisada ainda.</div>
-                                )}
-                            </>
-                        )}
-                        {selectedCategory === 'auxilios' && (
+                        {filteredBenefits.length > 0 ? (
+                            filteredBenefits.map((benefit, idx) => (
+                                <BenefitCard key={idx} benefit={benefit} />
+                            ))
+                        ) : (
                             <div className="text-center py-12 text-slate-500 italic border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                                <p className="text-sm">Análise de Auxílios em desenvolvimento.</p>
-                            </div>
-                        )}
-                        {selectedCategory === 'dependentes' && (
-                            <div className="text-center py-12 text-slate-500 italic border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50">
-                                <p className="text-sm">Análise de Dependentes em desenvolvimento.</p>
+                                <p className="text-sm">Nenhum benefício encontrado para esta categoria.</p>
                             </div>
                         )}
                     </div>
