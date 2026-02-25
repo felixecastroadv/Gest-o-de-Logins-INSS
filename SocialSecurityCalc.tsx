@@ -53,6 +53,10 @@ export interface SocialSecurityData {
     reaffirmationDer: string;
     smartPlanning: boolean;
     analysis?: string; // Analysis from Dr. Michel Felix
+    
+    // New flags for benefit analysis
+    isTeacher?: boolean;
+    isPcd?: boolean;
 }
 
 export interface SocialSecurityCalcProps {
