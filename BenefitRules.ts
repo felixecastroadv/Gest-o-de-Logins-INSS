@@ -6,6 +6,7 @@ export interface BenefitResult {
     missingDetails?: string;
     rmi?: number;
     ruleType: 'Pre-Reform' | 'Transition' | 'Post-Reform';
+    category: 'aposentadorias' | 'auxilios' | 'dependentes';
 }
 
 export interface SimulationResult {
@@ -122,9 +123,13 @@ export const calculateTimeForPeriod = (
 };
 
 export const calculateAge = (birthDateStr: string, targetDateStr: string) => {
+    if (!birthDateStr) return { years: 0, months: 0, days: 0 };
+    
     const birth = new Date(birthDateStr);
     const target = new Date(targetDateStr);
     
+    if (isNaN(birth.getTime())) return { years: 0, months: 0, days: 0 };
+
     let years = target.getFullYear() - birth.getFullYear();
     let months = target.getMonth() - birth.getMonth();
     let days = target.getDate() - birth.getDate();
@@ -144,7 +149,7 @@ export const calculateAge = (birthDateStr: string, targetDateStr: string) => {
 // --- RMI Calculation Logic ---
 export const calculateRMI = (
     bonds: CNISBond[], 
-    ruleType: 'Pre-Reform' | 'Post-Reform' | 'Transition_50' | 'Transition_100',
+    ruleType: 'Pre-Reform' | 'Post-Reform' | 'Transition_50' | 'Transition_100' | 'Disability' | 'Death',
     gender: 'M' | 'F',
     totalYears: number
 ) => {
@@ -178,8 +183,7 @@ export const calculateRMI = (
         const sum = top80.reduce((acc, curr) => acc + curr.value, 0);
         average = sum / (top80.length || 1);
         
-        // Apply Fator Previdenciário (Simplified placeholder - would need complex calculation)
-        // For now, return Average * 1.0 (assuming optimal or no factor for simplicity in this MVP)
+        // Apply Fator Previdenciário (Simplified placeholder)
         return average; 
     } else {
         // Average of 100% (Post-Reform)
@@ -190,8 +194,19 @@ export const calculateRMI = (
         if (ruleType === 'Transition_100') {
             return average; // 100%
         } else if (ruleType === 'Transition_50') {
-            // Apply Fator Previdenciário
-            return average * 0.7; // Placeholder for Fator
+            // Apply Fator Previdenciário (Placeholder)
+            return average * 0.7; 
+        } else if (ruleType === 'Disability') {
+            // 60% + 2% > 20 (M) / 15 (F)
+            let base = 0.60;
+            const threshold = gender === 'M' ? 20 : 15;
+            if (totalYears > threshold) {
+                base += (totalYears - threshold) * 0.02;
+            }
+            return average * base;
+        } else if (ruleType === 'Death') {
+            // 50% + 10% (Assuming 1 dependent for base calc)
+            return average * 0.60 * 0.60; // 60% of Retirement (which is ~60% of avg) -> Very rough approx
         } else {
             // General Rule (60% + 2% per year > 15/20)
             let base = 0.60;
@@ -213,17 +228,17 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
     const uniqueMonths = new Set<string>();
     data.bonds.forEach(b => {
         if (!b.useInCalculation) return;
-        // Ideally iterate months between start/end, but for now use SC count or approx
-        // Using SC count as proxy for carência if available, else date range
         if (b.sc.length > 0) {
             b.sc.forEach(s => uniqueMonths.add(s.month));
         } else if (b.startDate && b.endDate) {
-            // Add range logic here if needed, simplified for now
             let start = new Date(b.startDate);
             let end = new Date(b.endDate);
-            while(start <= end) {
+            // Limit loop to avoid crash on bad dates
+            let safety = 0;
+            while(start <= end && safety < 1200) { // 100 years
                 uniqueMonths.add(`${start.getMonth()+1}/${start.getFullYear()}`);
                 start.setMonth(start.getMonth() + 1);
+                safety++;
             }
         }
     });
@@ -233,87 +248,278 @@ export const analyzeBenefits = (data: SocialSecurityData): SimulationResult => {
 
     const benefits: BenefitResult[] = [];
 
-    // --- 1. Aposentadoria por Idade (Regra Geral) ---
-    // Homem: 65 anos + 15 anos (se filiado antes) ou 20 (se depois). 
-    // Simplificação: Assumindo filiado antes (maioria dos casos atuais) -> 15 anos.
-    // Mulher: 62 anos + 15 anos.
-    const ageReq = data.gender === 'M' ? 65 : 62;
-    const timeReq = 15;
-    
-    if (age.years >= ageReq && timeTotal.years >= timeReq && totalCarencia >= 180) {
+    // --- 1. APOSENTADORIAS ---
+
+    // 1.1 Aposentadoria por Idade (Filiados até 13/11/2019)
+    // H: 65, M: 62. Tempo: 15 anos. Carência: 180.
+    const ageReqOld = data.gender === 'M' ? 65 : 62;
+    if (age.years >= ageReqOld && timeTotal.years >= 15 && totalCarencia >= 180) {
         benefits.push({
-            benefitName: "Aposentadoria por Idade (Regra Geral)",
+            benefitName: "Aposentadoria por Idade (Regra Geral - Filiados até 2019)",
             isEligible: true,
             ruleType: 'Post-Reform',
+            category: 'aposentadorias',
             rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
         });
     } else {
         benefits.push({
-            benefitName: "Aposentadoria por Idade (Regra Geral)",
+            benefitName: "Aposentadoria por Idade (Regra Geral - Filiados até 2019)",
             isEligible: false,
-            missingDetails: `Faltam: ${Math.max(0, ageReq - age.years)} anos de idade, ${Math.max(0, timeReq - timeTotal.years)} anos de contribuição.`,
-            ruleType: 'Post-Reform'
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            missingDetails: `Idade: ${age.years}/${ageReqOld}. Tempo: ${timeTotal.years}/15. Carência: ${totalCarencia}/180.`
         });
     }
 
-    // --- 2. Aposentadoria por Tempo de Contribuição (Pontos) ---
-    // 2024: H 101, M 91. Aumenta 1 ponto por ano.
-    // 2025: H 102, M 92.
-    // 2026: H 103, M 93.
-    // Using 2026 rules as per prompt context (current date 2026)
-    const pointsReq = data.gender === 'M' ? 103 : 93;
-    const timeReqPoints = data.gender === 'M' ? 35 : 30;
-
-    if (points >= pointsReq && timeTotal.years >= timeReqPoints) {
+    // 1.2 Aposentadoria por Idade (Filiados após 13/11/2019)
+    // H: 65 + 20 anos contrib. M: 62 + 15 anos contrib.
+    const timeReqNew = data.gender === 'M' ? 20 : 15;
+    if (age.years >= 65 && timeTotal.years >= timeReqNew && totalCarencia >= 180) {
         benefits.push({
-            benefitName: "Aposentadoria por Pontos (Transição)",
+            benefitName: "Aposentadoria por Idade (Novos Filiados)",
             isEligible: true,
-            ruleType: 'Post-Reform', // Uses 60% + 2% rule
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
             rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
         });
     } else {
         benefits.push({
-            benefitName: "Aposentadoria por Pontos (Transição)",
+            benefitName: "Aposentadoria por Idade (Novos Filiados)",
             isEligible: false,
-            missingDetails: `Pontos atuais: ${points.toFixed(1)}. Necessário: ${pointsReq}. Tempo: ${timeTotal.years}/${timeReqPoints}.`,
-            ruleType: 'Post-Reform'
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            missingDetails: `Idade: ${age.years}/${data.gender === 'M' ? 65 : 62}. Tempo: ${timeTotal.years}/${timeReqNew}.`
         });
     }
 
-    // --- 3. Pedágio 100% ---
-    // H: 60 anos, 35 contrib. M: 57 anos, 30 contrib.
-    // + 100% do que faltava em 13/11/2019.
+    // 1.3 Pedágio 50%
+    // Faltava < 2 anos em 13/11/2019.
     const timeAtReform = calculateTimeForPeriod(data.bonds, '2019-11-13', data.gender);
     const timeNeededAtReform = data.gender === 'M' ? 35 : 30;
     const missingAtReform = Math.max(0, timeNeededAtReform - timeAtReform.years);
-    const toll = missingAtReform; // 100%
-    const totalTimeNeededToll100 = timeNeededAtReform + toll;
-    const ageReqToll100 = data.gender === 'M' ? 60 : 57;
+    
+    if (missingAtReform > 0 && missingAtReform <= 2) {
+        const toll50 = missingAtReform * 0.5;
+        const totalNeeded50 = timeNeededAtReform + toll50;
+        if (timeTotal.years >= totalNeeded50 && totalCarencia >= 180) {
+            benefits.push({
+                benefitName: "Aposentadoria Pedágio 50%",
+                isEligible: true,
+                ruleType: 'Transition_50',
+                category: 'aposentadorias',
+                rmi: calculateRMI(data.bonds, 'Transition_50', data.gender, timeTotal.years)
+            });
+        } else {
+            benefits.push({
+                benefitName: "Aposentadoria Pedágio 50%",
+                isEligible: false,
+                ruleType: 'Transition_50',
+                category: 'aposentadorias',
+                missingDetails: `Tempo Total Necessário: ${totalNeeded50.toFixed(1)}. Atual: ${timeTotal.years}.`
+            });
+        }
+    }
 
-    if (age.years >= ageReqToll100 && timeTotal.years >= totalTimeNeededToll100) {
+    // 1.4 Pedágio 100%
+    // H: 60 anos, 35 contrib. M: 57 anos, 30 contrib. + 100% pedágio.
+    const toll100 = missingAtReform; 
+    const totalNeeded100 = timeNeededAtReform + toll100;
+    const ageReq100 = data.gender === 'M' ? 60 : 57;
+    
+    if (age.years >= ageReq100 && timeTotal.years >= totalNeeded100 && totalCarencia >= 180) {
         benefits.push({
             benefitName: "Aposentadoria Pedágio 100%",
             isEligible: true,
-            ruleType: 'Transition_100', // 100% average
+            ruleType: 'Transition_100',
+            category: 'aposentadorias',
             rmi: calculateRMI(data.bonds, 'Transition_100', data.gender, timeTotal.years)
         });
     } else {
         benefits.push({
             benefitName: "Aposentadoria Pedágio 100%",
             isEligible: false,
-            missingDetails: `Idade: ${age.years}/${ageReqToll100}. Tempo Total Necessário (com pedágio): ${totalTimeNeededToll100.toFixed(1)} anos. Atual: ${timeTotal.years}.`,
-            ruleType: 'Transition_100'
+            ruleType: 'Transition_100',
+            category: 'aposentadorias',
+            missingDetails: `Idade: ${age.years}/${ageReq100}. Tempo: ${timeTotal.years}/${totalNeeded100.toFixed(1)}.`
         });
     }
 
-    // --- 4. Direito Adquirido (Pre-Reform) ---
-    // H: 35, M: 30 até 13/11/2019
-    if (timeAtReform.years >= timeNeededAtReform) {
+    // 1.5 Idade Progressiva
+    // 2026: H 64.5, M 59.5. Tempo: 35/30.
+    const currentYear = new Date().getFullYear();
+    const yearsSince2019 = currentYear - 2019;
+    // Base 2019: H 61, M 56. +0.5 per year.
+    let progAgeReqM = 61 + (yearsSince2019 * 0.5);
+    let progAgeReqF = 56 + (yearsSince2019 * 0.5);
+    if (progAgeReqM > 65) progAgeReqM = 65;
+    if (progAgeReqF > 62) progAgeReqF = 62;
+    
+    const progAgeReq = data.gender === 'M' ? progAgeReqM : progAgeReqF;
+    const progTimeReq = data.gender === 'M' ? 35 : 30;
+
+    if (age.years >= progAgeReq && timeTotal.years >= progTimeReq && totalCarencia >= 180) {
         benefits.push({
-            benefitName: "Direito Adquirido (Regras Pré-Reforma)",
+            benefitName: "Aposentadoria Idade Progressiva",
             isEligible: true,
-            ruleType: 'Pre-Reform',
-            rmi: calculateRMI(data.bonds, 'Pre-Reform', data.gender, timeTotal.years)
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+        });
+    } else {
+        benefits.push({
+            benefitName: "Aposentadoria Idade Progressiva",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            missingDetails: `Idade Exigida (${currentYear}): ${progAgeReq}. Atual: ${age.years}. Tempo: ${timeTotal.years}/${progTimeReq}.`
+        });
+    }
+
+    // 1.6 Pontos
+    // 2026: H 103, M 93.
+    // Base 2019: H 96, M 86. +1 per year.
+    let pointsReqM = 96 + yearsSince2019;
+    let pointsReqF = 86 + yearsSince2019;
+    if (pointsReqM > 105) pointsReqM = 105;
+    if (pointsReqF > 100) pointsReqF = 100;
+    
+    const pointsReq = data.gender === 'M' ? pointsReqM : pointsReqF;
+    
+    if (points >= pointsReq && timeTotal.years >= progTimeReq && totalCarencia >= 180) {
+        benefits.push({
+            benefitName: "Aposentadoria por Pontos",
+            isEligible: true,
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years)
+        });
+    } else {
+        benefits.push({
+            benefitName: "Aposentadoria por Pontos",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'aposentadorias',
+            missingDetails: `Pontos: ${points.toFixed(1)}/${pointsReq}. Tempo: ${timeTotal.years}/${progTimeReq}.`
+        });
+    }
+
+    // --- 2. AUXÍLIOS E SALÁRIOS ---
+
+    // 2.1 Incapacidade Temporária
+    // 12 meses carência.
+    if (totalCarencia >= 12) {
+        benefits.push({
+            benefitName: "Auxílio por Incapacidade Temporária",
+            isEligible: true,
+            ruleType: 'Post-Reform',
+            category: 'auxilios',
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years) * 0.91 // 91%
+        });
+    } else {
+        benefits.push({
+            benefitName: "Auxílio por Incapacidade Temporária",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'auxilios',
+            missingDetails: `Carência: ${totalCarencia}/12 meses.`
+        });
+    }
+
+    // 2.2 Auxílio-Acidente
+    // Isento carência. Qualidade de segurado (simplified check: has recent bond).
+    // Assuming quality of insured if last bond end date is recent (< 12 months)
+    // This is a rough approx.
+    const lastBond = data.bonds.reduce((latest, b) => {
+        if (!b.endDate) return new Date(); // Active
+        const end = new Date(b.endDate);
+        return end > latest ? end : latest;
+    }, new Date(0));
+    
+    const monthsSinceLastBond = (new Date(der).getTime() - lastBond.getTime()) / (1000 * 60 * 60 * 24 * 30);
+    const hasQuality = monthsSinceLastBond <= 12; // Basic rule (ignoring grace period extensions)
+
+    if (hasQuality) {
+        benefits.push({
+            benefitName: "Auxílio-Acidente",
+            isEligible: true,
+            ruleType: 'Post-Reform',
+            category: 'auxilios',
+            rmi: calculateRMI(data.bonds, 'Disability', data.gender, timeTotal.years) * 0.5 // 50% of Disability Retirement
+        });
+    } else {
+        benefits.push({
+            benefitName: "Auxílio-Acidente",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'auxilios',
+            missingDetails: "Requer qualidade de segurado (vínculo recente)."
+        });
+    }
+
+    // 2.3 Salário-Maternidade
+    // 10 meses carência (Individual/Facultativo). Empregado isento.
+    // We don't know category perfectly, assuming 10 months safe check.
+    if (totalCarencia >= 10) {
+        benefits.push({
+            benefitName: "Salário-Maternidade",
+            isEligible: true,
+            ruleType: 'Post-Reform',
+            category: 'auxilios',
+            rmi: calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years) // Approx
+        });
+    } else {
+        benefits.push({
+            benefitName: "Salário-Maternidade",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'auxilios',
+            missingDetails: `Carência: ${totalCarencia}/10 meses.`
+        });
+    }
+
+    // --- 3. BENEFÍCIOS AOS DEPENDENTES ---
+
+    // 3.1 Pensão por Morte
+    // Isento carência. Requer qualidade de segurado.
+    if (hasQuality) {
+        benefits.push({
+            benefitName: "Pensão por Morte",
+            isEligible: true,
+            ruleType: 'Post-Reform',
+            category: 'dependentes',
+            rmi: calculateRMI(data.bonds, 'Death', data.gender, timeTotal.years)
+        });
+    } else {
+        benefits.push({
+            benefitName: "Pensão por Morte",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'dependentes',
+            missingDetails: "Instituidor deve ter qualidade de segurado."
+        });
+    }
+
+    // 3.2 Auxílio-Reclusão
+    // 24 meses carência. Baixa renda (check RMI < limit).
+    // Limit 2024: R$ 1.819,26.
+    const rmiEst = calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years);
+    const lowIncomeLimit = 1819.26;
+    
+    if (totalCarencia >= 24 && rmiEst <= lowIncomeLimit) {
+        benefits.push({
+            benefitName: "Auxílio-Reclusão",
+            isEligible: true,
+            ruleType: 'Post-Reform',
+            category: 'dependentes',
+            rmi: 1412.00 // Salário Mínimo
+        });
+    } else {
+        benefits.push({
+            benefitName: "Auxílio-Reclusão",
+            isEligible: false,
+            ruleType: 'Post-Reform',
+            category: 'dependentes',
+            missingDetails: `Carência: ${totalCarencia}/24. Renda: ${rmiEst > lowIncomeLimit ? 'Acima do limite' : 'Ok'}.`
         });
     }
 
