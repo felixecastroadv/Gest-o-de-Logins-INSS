@@ -7,11 +7,12 @@ import {
   CheckCircleIcon, ExclamationTriangleIcon,
   CalendarDaysIcon, CurrencyDollarIcon, CloudArrowUpIcon,
   MagnifyingGlassIcon, Cog6ToothIcon, TableCellsIcon,
-  ChartBarIcon
+  ChartBarIcon, FolderOpenIcon
 } from '@heroicons/react/24/outline';
 import { ClientRecord } from './types';
 import { formatCurrency } from './utils';
 import BenefitAnalysisModal from './Components/BenefitAnalysisModal';
+import SavedCalculationsModal from './Components/SavedCalculationsModal';
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -98,6 +99,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     const [expandedBonds, setExpandedBonds] = useState<string[]>([]);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+    const [isSavedCalculationsModalOpen, setIsSavedCalculationsModalOpen] = useState(false);
 
     // --- Helpers ---
     // Helper to calculate days between two dates (inclusive)
@@ -598,11 +600,44 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     const handleSave = () => {
         if (onSaveCalculation) {
             onSaveCalculation(data);
+            // Also save locally for the modal
+            try {
+                const saved = localStorage.getItem('social_security_calculations');
+                const calculations = saved ? JSON.parse(saved) : [];
+                const newCalc = {
+                    id: new Date().getTime().toString(),
+                    date: new Date().toISOString(),
+                    clientName: data.clientName,
+                    data: data
+                };
+                localStorage.setItem('social_security_calculations', JSON.stringify([newCalc, ...calculations]));
+            } catch (e) {
+                console.error("Error saving locally", e);
+            }
             alert("Cálculo salvo com sucesso!");
         } else {
-            console.log("Salvar cálculo não implementado (falta onSaveCalculation prop)");
-            alert("Função de salvar não disponível neste contexto.");
+            // Fallback local save if no prop provided
+             try {
+                const saved = localStorage.getItem('social_security_calculations');
+                const calculations = saved ? JSON.parse(saved) : [];
+                const newCalc = {
+                    id: new Date().getTime().toString(),
+                    date: new Date().toISOString(),
+                    clientName: data.clientName,
+                    data: data
+                };
+                localStorage.setItem('social_security_calculations', JSON.stringify([newCalc, ...calculations]));
+                alert("Cálculo salvo localmente com sucesso!");
+            } catch (e) {
+                console.error("Error saving locally", e);
+                alert("Erro ao salvar localmente.");
+            }
         }
+    };
+
+    const handleLoadCalculation = (loadedData: SocialSecurityData) => {
+        setData(loadedData);
+        alert("Cálculo carregado com sucesso!");
     };
 
     const handleSalaryChange = (bondId: string, month: string, newValue: string) => {
@@ -936,6 +971,10 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     <p className="text-xs text-slate-500 dark:text-slate-400">Análise de Tempo de Contribuição e RMI</p>
                 </div>
                 <div className="flex gap-2">
+                    <button className={STYLES.BTN_SECONDARY} onClick={() => setIsSavedCalculationsModalOpen(true)}>
+                        <FolderOpenIcon className="h-4 w-4" />
+                        Abrir Salvos
+                    </button>
                     <button className={STYLES.BTN_SECONDARY} onClick={generateReport}>
                         <ArrowDownTrayIcon className="h-4 w-4" />
                         Exportar Relatório
@@ -1446,6 +1485,12 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 isOpen={isAnalysisModalOpen}
                 onClose={() => setIsAnalysisModalOpen(false)}
                 data={data}
+            />
+
+            <SavedCalculationsModal
+                isOpen={isSavedCalculationsModalOpen}
+                onClose={() => setIsSavedCalculationsModalOpen(false)}
+                onLoad={handleLoadCalculation}
             />
         </div>
     );
