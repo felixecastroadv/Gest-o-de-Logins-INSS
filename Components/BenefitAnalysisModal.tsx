@@ -103,7 +103,7 @@ const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onC
                 </div>
 
                 {/* Content */}
-                <div className="flex-1 overflow-y-auto p-5 bg-slate-50/50 dark:bg-slate-900/50">
+                <div className="flex-1 overflow-y-auto p-5 bg-slate-50/50 dark:bg-slate-900/50 min-h-0">
                     
                     {/* Summary Cards */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
