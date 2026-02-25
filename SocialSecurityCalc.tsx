@@ -158,54 +158,84 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         return { years, months, days, totalDays: totalAdjustedDays };
     };
     
-    // Unified Time Calculation (Merge Intervals) to handle concurrency correctly
+    // Unified Time Calculation (Day-by-Day Simulation)
+    // Handles concurrency (counts only once) and Special Time multipliers (pre-Reform)
     const calculateUnifiedTime = () => {
-        const intervals: { start: number; end: number }[] = [];
+        const activeBonds = data.bonds.filter(b => b.useInCalculation && b.startDate);
+        
+        if (activeBonds.length === 0) return "0 anos, 0 meses e 0 dias";
 
-        data.bonds.forEach(b => {
-            if (b.useInCalculation && b.startDate) {
-                const start = new Date(b.startDate).getTime();
-                // Handle missing end date -> Use DER or Today
-                const endStr = b.endDate || data.der || new Date().toISOString().split('T')[0];
-                const end = new Date(endStr).getTime();
-                
-                if (!isNaN(start) && !isNaN(end) && start <= end) {
-                    intervals.push({ start, end });
+        // 1. Determine Global Range
+        let minDateMs = Infinity;
+        let maxDateMs = -Infinity;
+
+        const processedBonds = activeBonds.map(b => {
+            const start = new Date(b.startDate);
+            // Normalize to noon to avoid DST issues
+            start.setHours(12, 0, 0, 0);
+            
+            let endStr = b.endDate || data.der || new Date().toISOString().split('T')[0];
+            const end = new Date(endStr);
+            end.setHours(12, 0, 0, 0);
+
+            if (start.getTime() < minDateMs) minDateMs = start.getTime();
+            if (end.getTime() > maxDateMs) maxDateMs = end.getTime();
+
+            // Determine Factor
+            let factor = 1.0;
+            if (b.activityType === 'special_25') factor = data.gender === 'M' ? 1.4 : 1.2;
+            if (b.activityType === 'special_20') factor = data.gender === 'M' ? 1.75 : 1.5;
+            if (b.activityType === 'special_15') factor = data.gender === 'M' ? 2.33 : 2.0;
+
+            return { startMs: start.getTime(), endMs: end.getTime(), factor };
+        }).filter(b => !isNaN(b.startMs) && !isNaN(b.endMs) && b.startMs <= b.endMs);
+
+        if (processedBonds.length === 0) return "0 anos, 0 meses e 0 dias";
+
+        // EC 103/2019 Reform Date (13/11/2019)
+        // Multipliers only apply UP TO 12/11/2019 (inclusive) or 13/11/2019?
+        // EC 103 was published on 13/11/2019. The new rules apply from that date.
+        // So conversion applies to time worked UNTIL 12/11/2019? Or 13/11/2019?
+        // Usually, "until the entry into force".
+        // Let's use 13/11/2019 as the boundary. Time < 13/11/2019 gets factor.
+        const REFORM_DATE_MS = new Date('2019-11-13').setHours(12, 0, 0, 0);
+
+        let totalAdjustedDays = 0;
+        let currentMs = minDateMs;
+
+        // 2. Iterate Day by Day
+        // Limit to 100 years to prevent infinite loops in case of bad data
+        const MAX_LOOPS = 100 * 366; 
+        let loops = 0;
+
+        while (currentMs <= maxDateMs && loops < MAX_LOOPS) {
+            // Find max factor for this day
+            let maxFactorForDay = 0;
+            let isActive = false;
+
+            for (const bond of processedBonds) {
+                if (currentMs >= bond.startMs && currentMs <= bond.endMs) {
+                    isActive = true;
+                    // Apply factor only if Pre-Reform
+                    const applicableFactor = (currentMs < REFORM_DATE_MS) ? bond.factor : 1.0;
+                    if (applicableFactor > maxFactorForDay) {
+                        maxFactorForDay = applicableFactor;
+                    }
                 }
             }
-        });
 
-        if (intervals.length === 0) return "0 anos, 0 meses e 0 dias";
-
-        // Sort by start date
-        intervals.sort((a, b) => a.start - b.start);
-
-        // Merge intervals
-        const merged: { start: number; end: number }[] = [];
-        let current = intervals[0];
-
-        for (let i = 1; i < intervals.length; i++) {
-            const next = intervals[i];
-            // Check for overlap or adjacency (within 1 day)
-            if (current.end >= next.start - (24 * 60 * 60 * 1000)) { 
-                current.end = Math.max(current.end, next.end);
-            } else {
-                merged.push(current);
-                current = next;
+            if (isActive) {
+                totalAdjustedDays += maxFactorForDay;
             }
+
+            // Next day
+            currentMs += 24 * 60 * 60 * 1000;
+            loops++;
         }
-        merged.push(current);
 
-        // Sum days
-        let totalDays = 0;
-        merged.forEach(interval => {
-            const diff = Math.abs(interval.end - interval.start);
-            totalDays += Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
-        });
-
-        const years = Math.floor(totalDays / 365.25);
-        const months = Math.floor((totalDays % 365.25) / 30.44);
-        const days = Math.floor((totalDays % 365.25) % 30.44);
+        const years = Math.floor(totalAdjustedDays / 365.25);
+        const months = Math.floor((totalAdjustedDays % 365.25) / 30.44);
+        const days = Math.floor((totalAdjustedDays % 365.25) % 30.44);
         
         return `${years} anos, ${months} meses e ${days} dias`;
     };
