@@ -1026,6 +1026,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             category: 'auxilios',
             ...(() => {
                 const r = calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der);
+                if (typeof r === 'number') return { rmi: 0, rmiDetails: undefined };
                 return {
                     rmi: r.rmi * 0.91,
                     rmiDetails: { ...r.rmiDetails, finalRMI: r.rmi * 0.91, calculationFormula: r.rmiDetails.calculationFormula + ' x 0.91 (Auxílio)' }
@@ -1053,6 +1054,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             category: 'auxilios',
             ...(() => {
                 const r = calculateRMI(data.bonds, 'Disability', data.gender, timeTotal.years, inpcIndices, der);
+                if (typeof r === 'number') return { rmi: 0, rmiDetails: undefined };
                 return {
                     rmi: r.rmi * 0.5,
                     rmiDetails: { ...r.rmiDetails, finalRMI: r.rmi * 0.5, calculationFormula: r.rmiDetails.calculationFormula + ' x 0.5 (Acidente)' }
@@ -1112,7 +1114,8 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
     }
 
     // 3.2 Auxílio-Reclusão
-    const rmiEst = calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der).rmi;
+    const rmiResult = calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der);
+    const rmiEst = typeof rmiResult === 'number' ? 0 : rmiResult.rmi;
     const lowIncomeLimit = 1819.26;
     
     if (totalCarencia >= 24 && hasQuality && rmiEst <= lowIncomeLimit) {
