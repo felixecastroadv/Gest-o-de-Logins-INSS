@@ -12,9 +12,10 @@ interface BenefitAnalysisModalProps {
 
 interface BenefitCardProps {
     benefit: BenefitResult;
+    onDetail: (benefit: BenefitResult) => void;
 }
 
-const BenefitCard: React.FC<BenefitCardProps> = ({ benefit }) => {
+const BenefitCard: React.FC<BenefitCardProps> = ({ benefit, onDetail }) => {
     return (
         <div className={`p-4 mb-3 rounded-xl border ${benefit.isEligible ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700'} shadow-sm transition hover:shadow-md`}>
             <div className="flex justify-between items-start">
@@ -60,7 +61,10 @@ const BenefitCard: React.FC<BenefitCardProps> = ({ benefit }) => {
                             *Valor estimado (média simples). Requer correção monetária oficial.
                         </p>
                     </div>
-                    <button className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-lg shadow-indigo-500/20 transition">
+                    <button 
+                        onClick={() => onDetail(benefit)}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-lg shadow-indigo-500/20 transition"
+                    >
                         <CalculatorIcon className="h-3.5 w-3.5" />
                         Detalhar RMI
                     </button>
@@ -70,10 +74,87 @@ const BenefitCard: React.FC<BenefitCardProps> = ({ benefit }) => {
     );
 };
 
+const RMIDetailView = ({ details, onClose }: { details: NonNullable<BenefitResult['rmiDetails']>, onClose: () => void }) => {
+    return (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60] p-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in duration-200">
+                <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-950">
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-white">Memória de Cálculo RMI</h3>
+                    <button onClick={onClose} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full transition">
+                        <XCircleIcon className="h-6 w-6 text-slate-400" />
+                    </button>
+                </div>
+                <div className="p-6 overflow-y-auto">
+                    <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <span className="text-xs uppercase font-bold text-slate-500">Média Salarial</span>
+                            <div className="text-xl font-bold text-slate-800 dark:text-white">
+                                {details.average.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </div>
+                        </div>
+                        <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
+                            <span className="text-xs uppercase font-bold text-slate-500">Fator/Coeficiente</span>
+                            <div className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+                                {details.appliedFactor.toFixed(4)}
+                            </div>
+                        </div>
+                        <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                            <span className="text-xs uppercase font-bold text-emerald-600 dark:text-emerald-400">RMI Final</span>
+                            <div className="text-xl font-bold text-emerald-700 dark:text-emerald-300">
+                                {details.finalRMI.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="mb-6">
+                        <h4 className="font-bold text-sm mb-2 text-slate-700 dark:text-slate-300">Fórmula Aplicada</h4>
+                        <p className="text-sm text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                            {details.calculationFormula}
+                        </p>
+                    </div>
+
+                    <div>
+                        <h4 className="font-bold text-sm mb-2 text-slate-700 dark:text-slate-300">Salários Considerados ({details.salaries.length})</h4>
+                        <div className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-slate-50 dark:bg-slate-800 text-xs uppercase font-bold text-slate-500">
+                                    <tr>
+                                        <th className="px-4 py-2">Competência</th>
+                                        <th className="px-4 py-2 text-right">Valor Original</th>
+                                        <th className="px-4 py-2 text-right">Fator</th>
+                                        <th className="px-4 py-2 text-right">Valor Corrigido</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                                    {details.salaries.map((s, i) => (
+                                        <tr key={i} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                                            <td className="px-4 py-2 font-mono text-xs text-slate-600 dark:text-slate-400">{s.month}</td>
+                                            <td className="px-4 py-2 text-right text-slate-500">
+                                                {s.originalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="px-4 py-2 text-right text-slate-500">
+                                                {s.correctionFactor.toFixed(4)}
+                                            </td>
+                                            <td className="px-4 py-2 text-right font-bold text-slate-700 dark:text-slate-300">
+                                                {s.correctedValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onClose, data, inpcIndices }) => {
     if (!isOpen) return null;
 
     const [selectedCategory, setSelectedCategory] = useState<'aposentadorias' | 'auxilios' | 'dependentes'>('aposentadorias');
+    const [selectedBenefitForDetail, setSelectedBenefitForDetail] = useState<BenefitResult | null>(null);
     
     // Run analysis
     const result = useMemo(() => analyzeBenefits(data, inpcIndices), [data, inpcIndices]);
@@ -160,7 +241,11 @@ const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onC
                     <div className="space-y-2">
                         {filteredBenefits.length > 0 ? (
                             filteredBenefits.map((benefit, idx) => (
-                                <BenefitCard key={idx} benefit={benefit} />
+                                <BenefitCard 
+                                    key={idx} 
+                                    benefit={benefit} 
+                                    onDetail={(b) => setSelectedBenefitForDetail(b)}
+                                />
                             ))
                         ) : (
                             <div className="text-center py-12 text-slate-500 italic border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50">
@@ -178,6 +263,14 @@ const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onC
                     </button>
                 </div>
             </div>
+
+            {/* RMI Detail Modal */}
+            {selectedBenefitForDetail && selectedBenefitForDetail.rmiDetails && (
+                <RMIDetailView 
+                    details={selectedBenefitForDetail.rmiDetails} 
+                    onClose={() => setSelectedBenefitForDetail(null)} 
+                />
+            )}
         </div>
     );
 };
