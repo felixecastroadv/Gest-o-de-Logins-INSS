@@ -7,7 +7,7 @@ import {
   CheckCircleIcon, ExclamationTriangleIcon,
   CalendarDaysIcon, CurrencyDollarIcon, CloudArrowUpIcon,
   MagnifyingGlassIcon, Cog6ToothIcon, TableCellsIcon,
-  ChartBarIcon, FolderOpenIcon
+  ChartBarIcon, FolderOpenIcon, PencilSquareIcon
 } from '@heroicons/react/24/outline';
 import { ClientRecord } from './types';
 import { formatCurrency } from './utils';
@@ -98,6 +98,111 @@ const INITIAL_SS_DATA: SocialSecurityData = {
 const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSaveCalculation }) => {
     const [data, setData] = useState<SocialSecurityData>(INITIAL_SS_DATA);
     const [expandedBonds, setExpandedBonds] = useState<string[]>([]);
+    
+    // Batch Edit State
+    const [batchEditBondId, setBatchEditBondId] = useState<string | null>(null);
+    const [batchStart, setBatchStart] = useState('');
+    const [batchEnd, setBatchEnd] = useState('');
+    const [batchValue, setBatchValue] = useState('');
+    const [batchMode, setBatchMode] = useState<'fill_gaps' | 'overwrite'>('fill_gaps');
+
+    const handleBatchEdit = () => {
+        if (!batchEditBondId || !batchStart || !batchEnd || !batchValue) {
+            alert("Preencha todos os campos para aplicar a edição em lote.");
+            return;
+        }
+
+        const [m1, y1] = batchStart.split('/').map(Number);
+        const [m2, y2] = batchEnd.split('/').map(Number);
+        
+        if (isNaN(m1) || isNaN(y1) || isNaN(m2) || isNaN(y2)) {
+            alert("Datas inválidas. Use o formato MM/AAAA.");
+            return;
+        }
+
+        const start = new Date(y1, m1 - 1, 1);
+        const end = new Date(y2, m2 - 1, 1);
+        
+        if (start > end) {
+            alert("Data final deve ser maior ou igual à data inicial.");
+            return;
+        }
+
+        // Parse currency (R$ 1.000,00 -> 1000.00)
+        let numericValue = 0;
+        const cleanValue = batchValue.replace('R$', '').trim();
+        if (cleanValue.includes(',')) {
+            numericValue = parseFloat(cleanValue.replace(/\./g, '').replace(',', '.'));
+        } else {
+            numericValue = parseFloat(cleanValue);
+        }
+
+        if (isNaN(numericValue)) {
+            alert("Valor inválido.");
+            return;
+        }
+
+        setData(prev => ({
+            ...prev,
+            bonds: prev.bonds.map(b => {
+                if (b.id !== batchEditBondId) return b;
+
+                // Create a map of existing salaries for quick lookup
+                const salaryMap = new Map(b.sc.map(s => [s.month, s]));
+                const newSc = [...b.sc];
+
+                let current = new Date(start);
+                // Limit loop to avoid infinite loops
+                let safety = 0;
+                while (current <= end && safety < 1200) {
+                    const m = String(current.getMonth() + 1).padStart(2, '0');
+                    const y = current.getFullYear();
+                    const monthStr = `${m}/${y}`;
+                    
+                    const existing = salaryMap.get(monthStr);
+                    
+                    if (batchMode === 'overwrite') {
+                        // Update or Add
+                        if (existing) {
+                            // Update in place in newSc array
+                            const index = newSc.findIndex(s => s.month === monthStr);
+                            if (index !== -1) newSc[index] = { ...newSc[index], value: numericValue, isMissing: false };
+                        } else {
+                            newSc.push({ month: monthStr, value: numericValue, indicators: [], isMissing: false });
+                        }
+                    } else {
+                        // Fill gaps only (if missing or value is 0)
+                        if (!existing || existing.value === 0 || existing.value === null) {
+                             if (existing) {
+                                const index = newSc.findIndex(s => s.month === monthStr);
+                                if (index !== -1) newSc[index] = { ...newSc[index], value: numericValue, isMissing: false };
+                             } else {
+                                newSc.push({ month: monthStr, value: numericValue, indicators: [], isMissing: false });
+                             }
+                        }
+                    }
+                    
+                    current.setMonth(current.getMonth() + 1);
+                    safety++;
+                }
+                
+                // Sort by date
+                newSc.sort((a, b) => {
+                    const [ma, ya] = a.month.split('/').map(Number);
+                    const [mb, yb] = b.month.split('/').map(Number);
+                    if (ya !== yb) return ya - yb;
+                    return ma - mb;
+                });
+
+                return { ...b, sc: newSc };
+            })
+        }));
+
+        setBatchEditBondId(null);
+        setBatchStart('');
+        setBatchEnd('');
+        setBatchValue('');
+    };
     const [isProcessing, setIsProcessing] = useState(false);
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
     const [isSavedCalculationsModalOpen, setIsSavedCalculationsModalOpen] = useState(false);
@@ -1375,12 +1480,99 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                                                         <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">
                                                                             Salários de Contribuição ({bond.sc.length})
                                                                         </h4>
-                                                                        {generateFullMonthlyHistory(bond).some(h => h.isMissing) && (
-                                                                            <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold">
-                                                                                ⚠️ Lacunas Identificadas
-                                                                            </span>
-                                                                        )}
+                                                                        <div className="flex gap-2 items-center">
+                                                                            {generateFullMonthlyHistory(bond).some(h => h.isMissing) && (
+                                                                                <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold flex items-center gap-1">
+                                                                                    <ExclamationTriangleIcon className="h-3 w-3" />
+                                                                                    Lacunas
+                                                                                </span>
+                                                                            )}
+                                                                            <button 
+                                                                                onClick={() => {
+                                                                                    if (batchEditBondId === bond.id) {
+                                                                                        setBatchEditBondId(null);
+                                                                                    } else {
+                                                                                        setBatchEditBondId(bond.id);
+                                                                                        // Pre-fill dates if available
+                                                                                        if (bond.startDate && bond.startDate.length === 10) setBatchStart(bond.startDate.substring(3)); // DD/MM/YYYY -> MM/YYYY
+                                                                                        if (bond.endDate && bond.endDate.length === 10) setBatchEnd(bond.endDate.substring(3));
+                                                                                    }
+                                                                                }}
+                                                                                className={`text-xs px-2 py-1 rounded flex items-center gap-1 transition ${batchEditBondId === bond.id ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                                                                title="Edição em Lote"
+                                                                            >
+                                                                                <PencilSquareIcon className="h-3.5 w-3.5" />
+                                                                                <span className="hidden sm:inline">Edição em Lote</span>
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
+                                                                    
+                                                                    {batchEditBondId === bond.id && (
+                                                                        <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 mb-3 animate-in slide-in-from-top-2 duration-200">
+                                                                            <h5 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2 uppercase tracking-wide flex items-center gap-1">
+                                                                                <PencilSquareIcon className="h-3 w-3" />
+                                                                                Ferramenta de Edição em Lote
+                                                                            </h5>
+                                                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                                                                                <div>
+                                                                                    <label className="text-[10px] text-slate-500 font-bold block mb-0.5">Início (MM/AAAA)</label>
+                                                                                    <input 
+                                                                                        type="text" 
+                                                                                        value={batchStart} 
+                                                                                        onChange={(e) => setBatchStart(e.target.value)}
+                                                                                        className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                                                        placeholder="MM/AAAA"
+                                                                                    />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="text-[10px] text-slate-500 font-bold block mb-0.5">Fim (MM/AAAA)</label>
+                                                                                    <input 
+                                                                                        type="text" 
+                                                                                        value={batchEnd} 
+                                                                                        onChange={(e) => setBatchEnd(e.target.value)}
+                                                                                        className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                                                        placeholder="MM/AAAA"
+                                                                                    />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="text-[10px] text-slate-500 font-bold block mb-0.5">Valor (R$)</label>
+                                                                                    <input 
+                                                                                        type="text" 
+                                                                                        value={batchValue} 
+                                                                                        onChange={(e) => setBatchValue(e.target.value)}
+                                                                                        className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                                                        placeholder="R$ 0,00"
+                                                                                    />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="text-[10px] text-slate-500 font-bold block mb-0.5">Modo</label>
+                                                                                    <select 
+                                                                                        value={batchMode} 
+                                                                                        onChange={(e) => setBatchMode(e.target.value as any)}
+                                                                                        className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                                                    >
+                                                                                        <option value="fill_gaps">Preencher Lacunas</option>
+                                                                                        <option value="overwrite">Sobrescrever Tudo</option>
+                                                                                    </select>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex justify-end gap-2">
+                                                                                <button 
+                                                                                    onClick={() => setBatchEditBondId(null)}
+                                                                                    className="px-3 py-1 text-xs text-slate-500 hover:text-slate-700 font-medium"
+                                                                                >
+                                                                                    Cancelar
+                                                                                </button>
+                                                                                <button 
+                                                                                    onClick={handleBatchEdit}
+                                                                                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded flex items-center gap-1 shadow-sm"
+                                                                                >
+                                                                                    <CheckCircleIcon className="h-3 w-3" />
+                                                                                    Aplicar Alterações
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
                                                                     <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800">
                                                                         <table className="w-full text-xs">
                                                                             <thead className="bg-slate-100 dark:bg-slate-700 sticky top-0">
