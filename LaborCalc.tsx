@@ -312,12 +312,51 @@ const calculateLaborResults = (calcData: LaborData) => {
     }
 
     // 3. 13º Salário Proporcional
-    if (end && salary) {
+    if (end && salary && start) {
         if (calcData.claim13thProportional) {
-            const monthsWorkedYear = end.getMonth() + 1; // Simplificado
-            const effectiveMonths = end.getDate() > 14 ? monthsWorkedYear : monthsWorkedYear - 1;
-            const thirteenth = (salary / 12) * effectiveMonths;
-            results.push({ desc: `13º Salário Proporcional (${effectiveMonths}/12)`, value: thirteenth, category: 'Rescisórias' });
+            // 1. Proporcional do Ano de Saída
+            const endYear = end.getFullYear();
+            const startYear = start.getFullYear();
+
+            // Se entrou e saiu no mesmo ano, o cálculo é único (meses trabalhados no ano)
+            if (startYear === endYear) {
+                const months = countMonths15DayRule(start, end);
+                const thirteenth = (salary / 12) * months;
+                results.push({ desc: `13º Salário Proporcional (${endYear}) - ${months}/12 avos`, value: thirteenth, category: 'Rescisórias' });
+            } else {
+                // Proporcional do Ano de Saída (Janeiro até Data Saída)
+                const startOfEndYear = new Date(endYear, 0, 1);
+                const monthsExitYear = countMonths15DayRule(startOfEndYear, end);
+                if (monthsExitYear > 0) {
+                    const thirteenthExit = (salary / 12) * monthsExitYear;
+                    results.push({ desc: `13º Salário Proporcional (${endYear}) - ${monthsExitYear}/12 avos`, value: thirteenthExit, category: 'Rescisórias' });
+                }
+
+                // Proporcional do Ano de Admissão (Data Admissão até Dezembro)
+                // Verifica se o ano de admissão não está na lista de "Vencidos" (unpaid13thPeriods) para não duplicar
+                // Se o usuário marcou "Calcular Proporcional", entende-se que quer os que não foram pagos integralmente.
+                // Mas geralmente "Proporcional" na rescisão refere-se ao ano corrente.
+                // O usuário pediu explicitamente: "TEM PELO MENOS DOIS PERÍODOS PROPORCIONAIS... AO MARCAR A CAIXINHA... DEVE APARECER OS VALORES DE AMBOS"
+                
+                // Vamos verificar se o ano de admissão já foi pago (está nos vencidos? ou assume-se não pago?)
+                // Se o usuário pediu para calcular proporcional, vamos adicionar o do ano de admissão também se for diferente do ano de saída.
+                
+                const isAdmissionYearPaid = calcData.unpaid13thPeriods.some(p => p.year === startYear);
+                
+                if (!isAdmissionYearPaid) {
+                    const endOfStartYear = new Date(startYear, 11, 31);
+                    const monthsAdmissionYear = countMonths15DayRule(start, endOfStartYear);
+                    
+                    if (monthsAdmissionYear > 0 && monthsAdmissionYear < 12) {
+                        // Busca salário da época (Dezembro do ano de admissão)
+                        const refDate = new Date(startYear, 11, 20);
+                        const historicalSalary = getSalaryAtDate(refDate, calcData.salaryHistory, salary);
+                        
+                        const thirteenthAdmission = (historicalSalary / 12) * monthsAdmissionYear;
+                        results.push({ desc: `13º Salário Proporcional (${startYear}) - ${monthsAdmissionYear}/12 avos`, value: thirteenthAdmission, category: 'Rescisórias' });
+                    }
+                }
+            }
         }
         
         if (calcData.unpaid13thPeriods.length > 0) {
@@ -379,12 +418,23 @@ const calculateLaborResults = (calcData: LaborData) => {
             }
         });
         
-        if (end && calcData.claimVacationProportional) {
-            const monthsWorkedYear = end.getMonth() + 1;
-            const effectiveMonths = end.getDate() > 14 ? monthsWorkedYear : monthsWorkedYear - 1;
-            const vacProp = (salary / 12) * effectiveMonths;
-            const vacPropTotal = vacProp + (vacProp / 3);
-            results.push({ desc: `Férias Proporcionais + 1/3 (${effectiveMonths}/12)`, value: vacPropTotal, category: 'Rescisórias' });
+        if (end && calcData.claimVacationProportional && start) {
+            // Determine start of current vesting period (anniversary of start date)
+            let vestingStart = new Date(start);
+            vestingStart.setFullYear(end.getFullYear());
+            
+            // If anniversary in current year is after end date, then the vesting period started last year
+            if (vestingStart > end) {
+                vestingStart.setFullYear(end.getFullYear() - 1);
+            }
+
+            const effectiveMonths = countMonths15DayRule(vestingStart, end);
+            
+            if (effectiveMonths > 0) {
+                const vacProp = (salary / 12) * effectiveMonths;
+                const vacPropTotal = vacProp + (vacProp / 3);
+                results.push({ desc: `Férias Proporcionais + 1/3 (${effectiveMonths}/12)`, value: vacPropTotal, category: 'Rescisórias' });
+            }
         }
     }
 
