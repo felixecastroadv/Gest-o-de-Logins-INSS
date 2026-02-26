@@ -1,1909 +1,1741 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  CalculatorIcon, 
-  BanknotesIcon, 
-  ClockIcon, 
-  ExclamationTriangleIcon, 
-  DocumentTextIcon, 
-  ArrowPathIcon,
-  TrashIcon,
-  PlusIcon,
-  ArchiveBoxIcon,
-  PencilSquareIcon,
-  UserIcon
-} from '@heroicons/react/24/outline';
+import React, { useState, useEffect, useMemo } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
 import { jsPDF } from "jspdf";
-import { ClientRecord, ContractRecord } from './types';
+import { 
+  UserIcon, DocumentTextIcon, CalculatorIcon, 
+  ArrowDownTrayIcon, TrashIcon, PlusIcon, 
+  CheckCircleIcon, ExclamationTriangleIcon,
+  CalendarDaysIcon, CurrencyDollarIcon, CloudArrowUpIcon,
+  MagnifyingGlassIcon, Cog6ToothIcon, TableCellsIcon,
+  ChartBarIcon, FolderOpenIcon, PencilSquareIcon
+} from '@heroicons/react/24/outline';
+import { ClientRecord } from './types';
+import { formatCurrency } from './utils';
+import BenefitAnalysisModal from './Components/BenefitAnalysisModal';
+import SavedCalculationsModal from './Components/SavedCalculationsModal';
+import { fetchINPCData, processINPCIndices } from './services/bcbService';
 
-// --- Estilos CSS (Tailwind) ---
+// Configure PDF.js worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+// --- Types ---
+
+export interface CNISBond {
+    id: string;
+    seq: number;
+    nit: string;
+    code: string;
+    origin: string;
+    type: string;
+    startDate: string;
+    endDate: string;
+    indicators: string[];
+    sc: { month: string; value: number, indicators?: string[] }[];
+    
+    // New fields for the calculator
+    activityType: string; // 'common', 'special_25', etc.
+    isConcomitant: boolean;
+    useInCalculation: boolean;
+}
+
+export interface SocialSecurityData {
+    clientName: string;
+    clientId?: string;
+    birthDate: string;
+    gender: 'M' | 'F';
+    motherName: string;
+    cpf: string;
+    
+    cnisContent: string;
+    bonds: CNISBond[];
+    
+    // Step 3 Parameters
+    calculationType: 'concession' | 'revision';
+    der: string;
+    reaffirmationDer: string;
+    smartPlanning: boolean;
+    analysis?: string; // Analysis from Dr. Michel Felix
+    
+    // New flags for benefit analysis
+    isTeacher?: boolean;
+    isPcd?: boolean;
+}
+
+export interface SocialSecurityCalcProps {
+    clients: ClientRecord[];
+    onSaveCalculation?: (data: any) => void;
+}
+
+// --- Constants ---
 const STYLES = {
-  LABEL_TEXT: "block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5",
-  LABEL_TINY: "block text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1",
-  INPUT_FIELD: "w-full px-4 py-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition text-sm font-medium shadow-sm",
-  INPUT_TINY: "w-full px-3 py-2 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-lg text-xs font-semibold outline-none focus:ring-1 focus:ring-indigo-500/50 focus:border-indigo-500",
-  BTN_PRIMARY: "px-5 py-2.5 text-white font-medium bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-lg shadow-indigo-500/30 transition flex items-center gap-2 transform active:scale-95",
-  BTN_SECONDARY: "px-5 py-2.5 text-slate-600 dark:text-slate-300 font-medium bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-xl transition shadow-sm transform active:scale-95",
-  BTN_SECONDARY_SM: "px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition",
-  CARD_SECTION: "bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-md border border-slate-200 dark:border-slate-800",
-  CARD_TITLE: "font-bold text-slate-800 dark:text-white mb-4 flex items-center gap-2 text-lg",
-  EMPTY_MSG: "text-center text-sm text-slate-500 dark:text-slate-400 italic py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/20"
+    INPUT_FIELD: "w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:text-white transition-all",
+    LABEL_TEXT: "block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1",
+    CARD_SECTION: "bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 p-5 mb-4",
+    CARD_HEADER: "bg-amber-50 dark:bg-amber-900/20 border-b border-amber-100 dark:border-amber-800/30 p-3 rounded-t-xl flex items-center gap-2",
+    CARD_TITLE: "text-sm font-bold text-slate-800 dark:text-white uppercase tracking-wide",
+    BTN_PRIMARY: "bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md shadow-indigo-500/20 transition-all flex items-center gap-2 text-sm",
+    BTN_SECONDARY: "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-600 hover:bg-slate-50 dark:hover:bg-slate-700 font-bold py-2 px-4 rounded-lg transition-all flex items-center gap-2 text-sm",
+    BTN_SUCCESS: "bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg shadow-md shadow-emerald-500/20 transition-all flex items-center gap-2 text-sm",
+    STEP_BADGE: "flex items-center justify-center w-6 h-6 rounded-full bg-amber-400 text-amber-900 font-bold text-xs mr-2",
+    TABLE_HEADER: "px-3 py-2 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700",
+    TABLE_CELL: "px-3 py-2 whitespace-nowrap text-sm text-slate-700 dark:text-slate-300 border-b border-slate-100 dark:border-slate-800",
 };
 
-// --- Tipos e Interfaces ---
-
-export interface CalculationRecord {
-    id: string;
-    date: string;
-    employeeName: string;
-    totalValue: number;
-    data: LaborData;
-}
-
-interface LaborData {
-  // Dados Contratuais
-  employeeName: string;
-  startDate: string;
-  endDate: string;
-  baseSalary: number;
-  terminationReason: 'sem_justa_causa' | 'pedido_demissao' | 'justa_causa' | 'rescisao_indireta' | 'sem_anotacao';
-  noticePeriod: 'trabalhado' | 'indenizado' | 'dispensado' | 'nao_pago'; // 'nao_pago' treated as indenizado for calculation but maybe different label? User said "quando não tem o pagamento... que seria indenizado"
-  hasFgtsBalance: number; // Saldo já depositado para cálculo da multa
-
-  // Adicionais
-  insalubridadeLevel: 'nenhum' | 'minimo' | 'medio' | 'maximo'; // 10, 20, 40%
-  periculosidade: boolean; // 30%
-  adicionalNoturno: {
-    active: boolean;
-    periods: {
-      id: string;
-      hoursPerMonth: number;
-      startDate: string;
-      endDate: string;
-    }[];
-  };
-  intrajornada: {
-      active: boolean;
-      periods: {
-          id: string;
-          hoursPerDay: number; // Quantidade (horas/dia suprimidas)
-          startDate: string;
-          endDate: string;
-      }[];
-  };
-
-  // Diferenças Salariais
-  wageGap: {
-    active: boolean;
-    floorSalary: number; // Piso da categoria
-    paidSalary: number; // Quanto realmente recebia
-    startDate: string;
-    endDate: string;
-  }[];
-
-  // Adicionais e Horas Extras (Lote)
-  overtime: {
-    id: string;
-    percentage: number; // 50, 60, 100 ou custom
-    customPercentage?: number;
-    hoursPerMonth: number;
-    startDate: string;
-    endDate: string;
-    applyDsr: boolean;
-  }[];
-
-  // Direitos CCT
-  cctRights: {
-      id: string;
-      name: string;
-      period: string; // Texto livre ou datas
-      value: string; // Texto ou valor numérico
-      parsedValue: number; // Valor numérico para soma
-  }[];
-
-  // Estabilidade / Indenizações
-  stability: {
-    isPregnant: boolean;
-    childBirthDate: string; // Para calcular 5 meses após parto
-    endDate: string; // Ou data fim manual
-  };
-  
-  // Multas e Outros
-  applyFine477: boolean; // Atraso pagamento
-  applyFine467: boolean; // Verbas incontroversas
-  moralDamages: number;
-  unpaidFgtsMonths: number; // Quantos meses não foi depositado
-  unpaid13thPeriods: { id: string; year: number; month: number; }[]; // Anos de 13o não pagos (mês/ano)
-  vacationPeriods: {
-      id: string;
-      startDate: string; // Data inicio aquisitivo
-      endDate: string;   // Data fim aquisitivo
-      isDouble: boolean;
-  }[];
-  claim13thProportional: boolean;
-  claimVacationProportional: boolean;
-  attorneyFees: number; // 5, 10, 15, 20, 25, 30%
-  
-  // Novos Campos
-  salaryBalance: {
-    active: boolean;
-    days: number; // Dias de saldo
-    customAmount?: number; // Valor manual opcional
-  };
-  severancePaid: number; // Valor já pago na rescisão (dedução)
-  salaryHistory: {
-    id: string;
-    startDate: string;
-    endDate: string;
-    salary: number;
-  }[];
-}
-
-const INITIAL_LABOR_DATA: LaborData = {
-  employeeName: '',
-  startDate: '',
-  endDate: '',
-  baseSalary: 0,
-  terminationReason: 'sem_justa_causa',
-  noticePeriod: 'indenizado',
-  hasFgtsBalance: 0,
-  insalubridadeLevel: 'nenhum',
-  periculosidade: false,
-  adicionalNoturno: { active: false, periods: [] },
-  intrajornada: { active: false, periods: [] },
-  wageGap: [],
-  overtime: [],
-  cctRights: [],
-  stability: { isPregnant: false, childBirthDate: '', endDate: '' },
-  applyFine477: false,
-  applyFine467: false,
-  moralDamages: 0,
-  unpaidFgtsMonths: 0,
-  unpaid13thPeriods: [],
-  vacationPeriods: [],
-  claim13thProportional: true,
-  claimVacationProportional: true,
-  attorneyFees: 0,
-  salaryBalance: { active: true, days: 0 },
-  severancePaid: 0,
-  salaryHistory: []
+const INITIAL_SS_DATA: SocialSecurityData = {
+    clientName: '',
+    birthDate: '',
+    gender: 'M',
+    motherName: '',
+    cpf: '',
+    cnisContent: '',
+    bonds: [],
+    calculationType: 'concession',
+    der: new Date().toISOString().split('T')[0],
+    reaffirmationDer: '',
+    smartPlanning: false
 };
 
-// --- Helpers de Cálculo ---
-
-const parseDate = (dateStr: string) => {
-  if (!dateStr) return null;
-  return new Date(dateStr);
-};
-
-const diffMonths = (d1: Date, d2: Date) => {
-  let months;
-  months = (d2.getFullYear() - d1.getFullYear()) * 12;
-  months -= d1.getMonth();
-  months += d2.getMonth();
-  return months <= 0 ? 0 : months;
-};
-
-const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
-
-const getSalaryAtDate = (date: Date, history: LaborData['salaryHistory'], currentSalary: number): number => {
-    if (!history || history.length === 0) return currentSalary;
+const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSaveCalculation }) => {
+    const [data, setData] = useState<SocialSecurityData>(INITIAL_SS_DATA);
+    const [expandedBonds, setExpandedBonds] = useState<string[]>([]);
     
-    // Find history record that covers the date
-    const record = history.find(h => {
-        const start = parseDate(h.startDate);
-        const end = h.endDate ? parseDate(h.endDate) : new Date(); // Assume open-ended if no end date? Or maybe current date.
-        // Actually, if no end date, it might mean "until now".
-        // Let's assume history records are sequential and cover periods.
-        if (!start) return false;
-        
-        if (h.endDate) {
-             const endDate = parseDate(h.endDate);
-             return date >= start && endDate && date <= endDate;
-        } else {
-             return date >= start;
+    // Batch Edit State
+    const [batchEditBondId, setBatchEditBondId] = useState<string | null>(null);
+    const [batchStart, setBatchStart] = useState('');
+    const [batchEnd, setBatchEnd] = useState('');
+    const [batchValue, setBatchValue] = useState('');
+    const [batchMode, setBatchMode] = useState<'fill_gaps' | 'overwrite'>('fill_gaps');
+
+    const handleBatchEdit = () => {
+        if (!batchEditBondId || !batchStart || !batchEnd || !batchValue) {
+            alert("Preencha todos os campos para aplicar a edição em lote.");
+            return;
         }
-    });
 
-    return record ? Number(record.salary) : currentSalary;
-};
+        const [m1, y1] = batchStart.split('/').map(Number);
+        const [m2, y2] = batchEnd.split('/').map(Number);
+        
+        if (isNaN(m1) || isNaN(y1) || isNaN(m2) || isNaN(y2)) {
+            alert("Datas inválidas. Use o formato MM/AAAA.");
+            return;
+        }
 
-const countMonths15DayRule = (start: Date, end: Date): number => {
-    let months = 0;
-    let current = new Date(start);
-    
-    // Iterate through months
-    while (current <= end) {
-        const year = current.getFullYear();
-        const month = current.getMonth();
+        const start = new Date(y1, m1 - 1, 1);
+        const end = new Date(y2, m2 - 1, 1);
         
-        const monthStart = new Date(year, month, 1);
-        const monthEnd = new Date(year, month + 1, 0);
+        if (start > end) {
+            alert("Data final deve ser maior ou igual à data inicial.");
+            return;
+        }
+
+        // Parse currency (R$ 1.000,00 -> 1000.00)
+        let numericValue = 0;
+        const cleanValue = batchValue.replace('R$', '').trim();
+        if (cleanValue.includes(',')) {
+            numericValue = parseFloat(cleanValue.replace(/\./g, '').replace(',', '.'));
+        } else {
+            numericValue = parseFloat(cleanValue);
+        }
+
+        if (isNaN(numericValue)) {
+            alert("Valor inválido.");
+            return;
+        }
+
+        setData(prev => ({
+            ...prev,
+            bonds: prev.bonds.map(b => {
+                if (b.id !== batchEditBondId) return b;
+
+                // Create a map of existing salaries for quick lookup
+                const salaryMap = new Map(b.sc.map(s => [s.month, s]));
+                const newSc = [...b.sc];
+
+                let current = new Date(start);
+                // Limit loop to avoid infinite loops
+                let safety = 0;
+                while (current <= end && safety < 1200) {
+                    const m = String(current.getMonth() + 1).padStart(2, '0');
+                    const y = current.getFullYear();
+                    const monthStr = `${m}/${y}`;
+                    
+                    const existing = salaryMap.get(monthStr);
+                    
+                    if (batchMode === 'overwrite') {
+                        // Update or Add
+                        if (existing) {
+                            // Update in place in newSc array
+                            const index = newSc.findIndex(s => s.month === monthStr);
+                            if (index !== -1) newSc[index] = { ...newSc[index], value: numericValue, isMissing: false };
+                        } else {
+                            newSc.push({ month: monthStr, value: numericValue, indicators: [], isMissing: false });
+                        }
+                    } else {
+                        // Fill gaps only (if missing or value is 0)
+                        if (!existing || existing.value === 0 || existing.value === null) {
+                             if (existing) {
+                                const index = newSc.findIndex(s => s.month === monthStr);
+                                if (index !== -1) newSc[index] = { ...newSc[index], value: numericValue, isMissing: false };
+                             } else {
+                                newSc.push({ month: monthStr, value: numericValue, indicators: [], isMissing: false });
+                             }
+                        }
+                    }
+                    
+                    current.setMonth(current.getMonth() + 1);
+                    safety++;
+                }
+                
+                // Sort by date
+                newSc.sort((a, b) => {
+                    const [ma, ya] = a.month.split('/').map(Number);
+                    const [mb, yb] = b.month.split('/').map(Number);
+                    if (ya !== yb) return ya - yb;
+                    return ma - mb;
+                });
+
+                return { ...b, sc: newSc };
+            })
+        }));
+
+        setBatchEditBondId(null);
+        setBatchStart('');
+        setBatchEnd('');
+        setBatchValue('');
+    };
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
+    const [isSavedCalculationsModalOpen, setIsSavedCalculationsModalOpen] = useState(false);
+    const [inpcIndices, setInpcIndices] = useState<Map<string, number> | undefined>(undefined);
+
+    useEffect(() => {
+        const loadIndices = async () => {
+            try {
+                // Check local storage first
+                const cached = localStorage.getItem('inpc_indices_cache');
+                const cachedDate = localStorage.getItem('inpc_indices_date');
+                const now = new Date().getTime();
+                
+                // Cache for 24 hours
+                if (cached && cachedDate && (now - parseInt(cachedDate) < 24 * 60 * 60 * 1000)) {
+                    const parsed = JSON.parse(cached);
+                    setInpcIndices(processINPCIndices(parsed));
+                } else {
+                    const data = await fetchINPCData();
+                    setInpcIndices(processINPCIndices(data));
+                    localStorage.setItem('inpc_indices_cache', JSON.stringify(data));
+                    localStorage.setItem('inpc_indices_date', now.toString());
+                }
+            } catch (e) {
+                console.error("Failed to load INPC indices", e);
+                // Fallback or just ignore (calculation will proceed without correction)
+            }
+        };
+        loadIndices();
+    }, []);
+
+    // --- Helpers ---
+    // Helper to calculate days between two dates (inclusive)
+    const getDays = (s: Date, e: Date) => {
+        if (s > e) return 0;
+        const diff = Math.abs(e.getTime() - s.getTime());
+        return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
+    };
+
+    const calculateTime = (start: string, end: string, type: string, gender: string) => {
+        // If start is missing, we can't calculate
+        if (!start) return { years: 0, months: 0, days: 0, totalDays: 0 };
         
-        // Determine overlap of period with this month
-        const periodStartInMonth = current > monthStart ? current : monthStart;
-        const periodEndInMonth = end < monthEnd ? end : monthEnd;
+        const startDate = new Date(start);
+        // If end is missing, assume it's up to the DER (or Today if DER is missing)
+        // But only if we consider it "Active". For now, let's use DER if provided, else Today.
+        let endDate = end ? new Date(end) : (data.der ? new Date(data.der) : new Date());
         
-        if (periodStartInMonth <= periodEndInMonth) {
-            const diffTime = Math.abs(periodEndInMonth.getTime() - periodStartInMonth.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Inclusive
-            
-            if (diffDays >= 15) {
-                months++;
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+             return { years: 0, months: 0, days: 0, totalDays: 0 };
+        }
+
+        // EC 103/2019 Reform Date
+        const REFORM_DATE = new Date('2019-11-13');
+
+        let totalAdjustedDays = 0;
+
+        // Determine Factor
+        let factor = 1.0;
+        if (type === 'special_25') factor = gender === 'M' ? 1.4 : 1.2;
+        if (type === 'special_20') factor = gender === 'M' ? 1.75 : 1.5;
+        if (type === 'special_15') factor = gender === 'M' ? 2.33 : 2.0;
+
+        if (factor === 1.0) {
+            // Common time, no split needed
+            totalAdjustedDays = getDays(startDate, endDate);
+        } else {
+            // Special time, check split
+            if (startDate > REFORM_DATE) {
+                // Entire period is post-reform -> No conversion (Factor 1.0)
+                totalAdjustedDays = getDays(startDate, endDate);
+            } else if (endDate <= REFORM_DATE) {
+                // Entire period is pre-reform -> Apply Factor
+                const rawDays = getDays(startDate, endDate);
+                totalAdjustedDays = Math.floor(rawDays * factor);
+            } else {
+                // Split period
+                // Part 1: Start to Reform Date -> Apply Factor
+                const part1Days = getDays(startDate, REFORM_DATE);
+                const part1Adjusted = Math.floor(part1Days * factor);
+
+                // Part 2: Reform Date + 1 to End -> Factor 1.0
+                const postReformStart = new Date(REFORM_DATE);
+                postReformStart.setDate(postReformStart.getDate() + 1);
+                const part2Days = getDays(postReformStart, endDate);
+
+                totalAdjustedDays = part1Adjusted + part2Days;
             }
         }
         
-        // Move to next month
-        current.setMonth(current.getMonth() + 1);
-        current.setDate(1); // Reset to 1st of next month
-    }
-    return months;
-};
+        const years = Math.floor(totalAdjustedDays / 365.25);
+        const months = Math.floor((totalAdjustedDays % 365.25) / 30.44);
+        const days = Math.floor((totalAdjustedDays % 365.25) % 30.44);
 
-const calculateLaborResults = (calcData: LaborData) => {
-    const results = [];
-    const start = parseDate(calcData.startDate);
-    const end = parseDate(calcData.endDate);
-    const salary = Number(calcData.baseSalary);
-
-    if (!salary) return [];
-
-    // 1. Saldo de Salário
-    if (end && salary && calcData.salaryBalance.active) {
-        let balance = 0;
-        let days = calcData.salaryBalance.days;
+        return { years, months, days, totalDays: totalAdjustedDays };
+    };
+    
+    // Unified Time Calculation (Day-by-Day Simulation)
+    // Handles concurrency (counts only once) and Special Time multipliers (pre-Reform)
+    const unifiedTime = useMemo(() => {
+        const activeBonds = data.bonds.filter(b => b.useInCalculation && b.startDate);
         
-        // Se dias for 0, tenta calcular automático
-        if (days === 0) {
-            days = end.getDate();
-        }
+        if (activeBonds.length === 0) return "0 anos, 0 meses e 0 dias";
 
-        if (calcData.salaryBalance.customAmount) {
-            balance = calcData.salaryBalance.customAmount;
-        } else {
-            balance = (salary / 30) * days;
-        }
-        
-        results.push({ desc: `Saldo de Salário (${days} dias)`, value: balance, category: 'Rescisórias' });
-    }
+        // 1. Determine Global Range
+        let minDateMs = Infinity;
+        let maxDateMs = -Infinity;
 
-    // 2. Aviso Prévio
-    let noticeValue = 0;
-    let noticeDays = 0;
-    const isIndemnified = calcData.noticePeriod === 'indenizado' || calcData.noticePeriod === 'nao_pago';
-    const shouldPayNotice = isIndemnified && calcData.terminationReason !== 'justa_causa' && calcData.terminationReason !== 'pedido_demissao';
-
-    if (start && end && salary && shouldPayNotice) {
-        const years = Math.floor(diffMonths(start, end) / 12);
-        const extraDays = Math.min(years * 3, 60); // Lei 12.506
-        noticeDays = 30 + extraDays;
-        noticeValue = (salary / 30) * noticeDays;
-        results.push({ desc: `Aviso Prévio Indenizado (${noticeDays} dias)`, value: noticeValue, category: 'Rescisórias' });
-    }
-
-    // Reflexos do Aviso Prévio (se indenizado)
-    if (noticeDays > 0 && isIndemnified) {
-        // Reflexo em 13º (1/12 avos)
-        const reflex13th = (salary / 12); 
-        // Se o aviso projeta mais de 15 dias no mês, conta 1 avo.
-        // Simplificação: Aviso de 30 dias = 1 mês = 1/12. Aviso de 90 dias = 3 meses = 3/12.
-        // A projeção é tempo de serviço.
-        // Vamos calcular quantos meses "cheios" (ou >15 dias) a projeção adiciona.
-        // Mas a prática comum é: 1/12 por ano ou fração > 15 dias.
-        // O aviso prévio indenizado integra o tempo de serviço.
-        // Então, se a projeção cai num mês novo e dá > 15 dias, ganha mais 1 avo.
-        
-        // Cálculo simplificado de reflexo financeiro direto:
-        // Reflexo 13º = (Valor Aviso / 12)? Não. É (Salário / 12) * (Meses Projeção).
-        const projectedMonths = Math.floor(noticeDays / 30); // Aproximado
-        const remainderDays = noticeDays % 30;
-        const totalReflexMonths = projectedMonths + (remainderDays >= 15 ? 1 : 0);
-        
-        if (totalReflexMonths > 0) {
-            const valReflex13 = (salary / 12) * totalReflexMonths;
-            results.push({ desc: `Reflexo Aviso Prévio em 13º (${totalReflexMonths}/12 avos)`, value: valReflex13, category: 'Rescisórias' });
+        const processedBonds = activeBonds.map(b => {
+            const start = new Date(b.startDate);
+            start.setHours(12, 0, 0, 0);
             
-            const valReflexVac = (salary / 12) * totalReflexMonths;
-            const valReflexVacTotal = valReflexVac + (valReflexVac / 3);
-            results.push({ desc: `Reflexo Aviso Prévio em Férias + 1/3 (${totalReflexMonths}/12 avos)`, value: valReflexVacTotal, category: 'Rescisórias' });
-            
-            const valReflexFgts = noticeValue * 0.08;
-            results.push({ desc: `Reflexo Aviso Prévio em FGTS (8%)`, value: valReflexFgts, category: 'FGTS' });
-        }
-    }
+            let endStr = b.endDate || data.der || new Date().toISOString().split('T')[0];
+            const end = new Date(endStr);
+            end.setHours(12, 0, 0, 0);
 
-    // 3. 13º Salário Proporcional
-    if (end && salary) {
-        if (calcData.claim13thProportional) {
-            const monthsWorkedYear = end.getMonth() + 1; // Simplificado
-            const effectiveMonths = end.getDate() > 14 ? monthsWorkedYear : monthsWorkedYear - 1;
-            const thirteenth = (salary / 12) * effectiveMonths;
-            results.push({ desc: `13º Salário Proporcional (${effectiveMonths}/12)`, value: thirteenth, category: 'Rescisórias' });
-        }
+            if (start.getTime() < minDateMs) minDateMs = start.getTime();
+            if (end.getTime() > maxDateMs) maxDateMs = end.getTime();
+
+            // Determine Factor
+            let factor = 1.0;
+            if (b.activityType === 'special_25') factor = data.gender === 'M' ? 1.4 : 1.2;
+            if (b.activityType === 'special_20') factor = data.gender === 'M' ? 1.75 : 1.5;
+            if (b.activityType === 'special_15') factor = data.gender === 'M' ? 2.33 : 2.0;
+
+            return { startMs: start.getTime(), endMs: end.getTime(), factor };
+        }).filter(b => !isNaN(b.startMs) && !isNaN(b.endMs) && b.startMs <= b.endMs);
+
+        if (processedBonds.length === 0) return "0 anos, 0 meses e 0 dias";
+
+        // EC 103/2019 Reform Date (13/11/2019)
+        const REFORM_DATE_MS = new Date('2019-11-13').setHours(12, 0, 0, 0);
+
+        let totalAdjustedDays = 0;
         
-        if (calcData.unpaid13thPeriods.length > 0) {
-            calcData.unpaid13thPeriods.forEach(p => {
-                // Determine reference date for salary lookup (Dec 20th of that year)
-                const refDate = new Date(p.year, (p.month || 12) - 1, 20);
-                const historicalSalary = getSalaryAtDate(refDate, calcData.salaryHistory, salary);
-                
-                const label = p.month ? `${String(p.month).padStart(2, '0')}/${p.year}` : `${p.year}`;
-                results.push({ desc: `13º Salário Vencido (${label})`, value: historicalSalary, category: 'Rescisórias' });
-            });
-        }
-    }
+        // 2. Iterate Day by Day using Date object to avoid DST drift
+        let current = new Date(minDateMs);
+        const maxDate = new Date(maxDateMs);
+        
+        // Limit to 100 years to prevent infinite loops
+        const MAX_LOOPS = 100 * 366; 
+        let loops = 0;
 
-    // 4. Férias
-    if (salary) {
-        // Vencidas (Lista de Períodos)
-        calcData.vacationPeriods.forEach((vac, idx) => {
-            let baseVal = salary;
-            let periodLabel = "Período Indefinido";
+        while (current <= maxDate && loops < MAX_LOOPS) {
+            const currentMs = current.getTime();
             
-            if (vac.startDate && vac.endDate) {
-                const vacStart = parseDate(vac.startDate);
-                const vacEnd = parseDate(vac.endDate);
-                
-                if (vacStart && vacEnd) {
-                    periodLabel = `${vacStart.toLocaleDateString('pt-BR')} a ${vacEnd.toLocaleDateString('pt-BR')}`;
-                    
-                    // Calculate concessive period end (end date + 1 year)
-                    const concessiveEnd = new Date(vacEnd);
-                    concessiveEnd.setFullYear(concessiveEnd.getFullYear() + 1);
-                    
-                    // Determine reference date for salary
-                    // "senão recebi as férias deve ser referente ao salário de fevereiro 2023 (que era a última data que tinha para receber as férias)"
-                    // If concessive period ended in the past, use that date. If it's in the future relative to now/termination, use termination salary.
-                    const terminationDate = end || new Date();
-                    const refDate = concessiveEnd < terminationDate ? concessiveEnd : terminationDate;
-                    
-                    baseVal = getSalaryAtDate(refDate, calcData.salaryHistory, salary);
-                    
-                    // Check if period is less than a year (using 15 day rule)
-                    // If the user inputs a full year (e.g. 01/01/2021 to 31/12/2021), countMonths should be 12.
-                    // If partial, calculate proportional.
-                    const months = countMonths15DayRule(vacStart, vacEnd);
-                    if (months < 12) {
-                        baseVal = (baseVal / 12) * months;
-                        periodLabel += ` (${months}/12 avos)`;
+            // Find max factor for this day
+            let maxFactorForDay = 0;
+            let isActive = false;
+
+            for (const bond of processedBonds) {
+                if (currentMs >= bond.startMs && currentMs <= bond.endMs) {
+                    isActive = true;
+                    // Apply factor only if Pre-Reform
+                    const applicableFactor = (currentMs < REFORM_DATE_MS) ? bond.factor : 1.0;
+                    if (applicableFactor > maxFactorForDay) {
+                        maxFactorForDay = applicableFactor;
                     }
                 }
             }
-            
-            let vacValue = baseVal + (baseVal / 3);
-            
-            if (vac.isDouble) {
-                vacValue = vacValue * 2;
-                results.push({ desc: `Férias Vencidas em Dobro + 1/3 (${periodLabel})`, value: vacValue, category: 'Rescisórias' });
-            } else {
-                results.push({ desc: `Férias Vencidas + 1/3 (${periodLabel})`, value: vacValue, category: 'Rescisórias' });
+
+            if (isActive) {
+                totalAdjustedDays += maxFactorForDay;
+            }
+
+            // Next day
+            current.setDate(current.getDate() + 1);
+            current.setHours(12, 0, 0, 0); // Maintain noon to be safe
+            loops++;
+        }
+
+        const years = Math.floor(totalAdjustedDays / 365.25);
+        const months = Math.floor((totalAdjustedDays % 365.25) / 30.44);
+        const days = Math.floor((totalAdjustedDays % 365.25) % 30.44);
+        
+        return `${years} anos, ${months} meses e ${days} dias`;
+    }, [data.bonds, data.gender, data.der]);
+
+    // Unified Carência Calculation (Merge Months)
+    const calculateUnifiedCarencia = () => {
+        const uniqueMonths = new Set<string>();
+
+        data.bonds.forEach(bond => {
+            if (!bond.useInCalculation) return;
+
+            // Priority: Date Range (since SCs might be missing from AI)
+            if (bond.startDate && bond.endDate) {
+                let current = new Date(bond.startDate);
+                // Normalize to start of month and noon to avoid timezone issues
+                current.setDate(1);
+                current.setHours(12, 0, 0, 0);
+                
+                const end = new Date(bond.endDate);
+                end.setDate(1);
+                end.setHours(12, 0, 0, 0);
+
+                // Safety break for infinite loops (e.g. bad dates)
+                let safety = 0;
+                while (current <= end && safety < 1200) { // 100 years max
+                    const m = String(current.getMonth() + 1).padStart(2, '0');
+                    const y = current.getFullYear();
+                    uniqueMonths.add(`${m}/${y}`);
+                    
+                    // Move to next month
+                    current.setMonth(current.getMonth() + 1);
+                    safety++;
+                }
+            } else if (bond.sc && bond.sc.length > 0) {
+                // Fallback to SCs if dates are missing
+                bond.sc.forEach(s => uniqueMonths.add(s.month));
             }
         });
+
+        return uniqueMonths.size;
+    };
+
+    // Helper to calculate carência for a single bond (for the table)
+    const calculateBondCarencia = (bond: CNISBond) => {
+        if (bond.startDate && bond.endDate) {
+            let current = new Date(bond.startDate);
+            current.setDate(1);
+            current.setHours(12, 0, 0, 0);
+            
+            const end = new Date(bond.endDate);
+            end.setDate(1);
+            end.setHours(12, 0, 0, 0);
+
+            let count = 0;
+            let safety = 0;
+            while (current <= end && safety < 1200) {
+                count++;
+                current.setMonth(current.getMonth() + 1);
+                safety++;
+            }
+            return count;
+        }
+        return bond.sc.length;
+    };
+
+    // Helper to generate full monthly history including gaps
+    const generateFullMonthlyHistory = (bond: CNISBond) => {
+        const history: { month: string, value: number | null, indicators: string[], isMissing: boolean }[] = [];
         
-        if (end && calcData.claimVacationProportional && start) {
-            // Determine start of current vesting period (anniversary of start date)
-            let vestingStart = new Date(start);
-            vestingStart.setFullYear(end.getFullYear());
-            
-            // If anniversary in current year is after end date, then the vesting period started last year
-            if (vestingStart > end) {
-                vestingStart.setFullYear(end.getFullYear() - 1);
-            }
-
-            const effectiveMonths = countMonths15DayRule(vestingStart, end);
-            
-            if (effectiveMonths > 0) {
-                const vacProp = (salary / 12) * effectiveMonths;
-                const vacPropTotal = vacProp + (vacProp / 3);
-                results.push({ desc: `Férias Proporcionais + 1/3 (${effectiveMonths}/12)`, value: vacPropTotal, category: 'Rescisórias' });
-            }
-        }
-    }
-
-    // 5. Adicionais
-    if (start && end) {
-        const monthsWorked = diffMonths(start, end);
-        const minimumWage = 1412;
-        
-        if (calcData.insalubridadeLevel !== 'nenhum') {
-            let perc = 0;
-            if (calcData.insalubridadeLevel === 'minimo') perc = 0.10;
-            if (calcData.insalubridadeLevel === 'medio') perc = 0.20;
-            if (calcData.insalubridadeLevel === 'maximo') perc = 0.40;
-            
-            const monthlyVal = minimumWage * perc;
-            const totalInsalub = monthlyVal * monthsWorked;
-            results.push({ desc: `Adicional Insalubridade (${perc * 100}% s/ Mínimo - ${monthsWorked} meses)`, value: totalInsalub, category: 'Adicionais' });
-            results.push({ desc: `Reflexos Insalubridade (Férias, 13º, FGTS)`, value: totalInsalub * 0.3, category: 'Reflexos' });
+        // If no start date, we can only show what we have
+        if (!bond.startDate) {
+            return bond.sc.map(s => ({ month: s.month, value: s.value, indicators: s.indicators || [], isMissing: false }));
         }
 
-        if (calcData.periculosidade && salary) {
-            const monthlyVal = salary * 0.30;
-            const totalPeric = monthlyVal * monthsWorked;
-            results.push({ desc: `Adicional Periculosidade (30% - ${monthsWorked} meses)`, value: totalPeric, category: 'Adicionais' });
-            results.push({ desc: `Reflexos Periculosidade (Férias, 13º, FGTS)`, value: totalPeric * 0.3, category: 'Reflexos' });
-        }
+        let current = new Date(bond.startDate);
+        // Normalize to start of month
+        current.setDate(1);
+        current.setHours(12, 0, 0, 0);
 
-        if (calcData.adicionalNoturno.active && salary) {
-            const hourlyRate = salary / 220;
-            const nightRate = hourlyRate * 0.20;
-            
-            calcData.adicionalNoturno.periods.forEach((period, idx) => {
-                const pStart = parseDate(period.startDate) || start;
-                const pEnd = parseDate(period.endDate) || end;
-                
-                if (pStart && pEnd && period.hoursPerMonth > 0) {
-                    const months = diffMonths(pStart, pEnd);
-                    const monthlyVal = nightRate * period.hoursPerMonth;
-                    const totalNight = monthlyVal * months;
-                    
-                    results.push({ desc: `Adicional Noturno (${period.hoursPerMonth}h/mês - ${months} meses - Período ${idx + 1})`, value: totalNight, category: 'Adicionais' });
-                    results.push({ desc: `Reflexos Ad. Noturno (Férias, 13º, FGTS, DSR) - Período ${idx + 1}`, value: totalNight * 0.35, category: 'Reflexos' });
-                }
-            });
-        }
-
-        // Intrajornada
-        if (calcData.intrajornada && calcData.intrajornada.active && salary) {
-            const hourlyRate = salary / 220;
-            // Adicional de 50% sobre a hora suprimida (Art. 71 § 4º CLT)
-            const intraRate = hourlyRate * 1.5; 
-            
-            calcData.intrajornada.periods.forEach((period, idx) => {
-                const pStart = parseDate(period.startDate) || start;
-                const pEnd = parseDate(period.endDate) || end;
-                
-                if (pStart && pEnd && period.hoursPerDay > 0) {
-                    const months = diffMonths(pStart, pEnd);
-                    // Estimativa de dias trabalhados por mês: 22
-                    const totalHours = period.hoursPerDay * 22 * months;
-                    const totalIntra = intraRate * totalHours;
-                    
-                    results.push({ desc: `Adicional Intrajornada (${period.hoursPerDay}h/dia - ${months} meses)`, value: totalIntra, category: 'Adicionais' });
-                    // Natureza indenizatória após Reforma Trabalhista (11/2017)? 
-                    // Antes era salarial. O usuário pediu "reflexos" implicitamente ao pedir "adicional intrajornada"?
-                    // Geralmente pede-se reflexos. Vamos adicionar reflexos como padrão, mas talvez devesse ser opcional.
-                    // Vou adicionar reflexos por padrão pois é "Calculadora Trabalhista" (pró-reclamante).
-                    results.push({ desc: `Reflexos Intrajornada (Férias, 13º, FGTS, DSR)`, value: totalIntra * 0.35, category: 'Reflexos' });
-                }
-            });
-        }
-    }
-
-    // 6. Diferença Salarial
-    calcData.wageGap.forEach((gap, idx) => {
-        const gapStart = parseDate(gap.startDate) || start;
-        const gapEnd = parseDate(gap.endDate) || end;
-        
-        if (gapStart && gapEnd && gap.floorSalary > gap.paidSalary) {
-            const months = diffMonths(gapStart, gapEnd);
-            const diffValue = (gap.floorSalary - gap.paidSalary) * months;
-            results.push({ desc: `Diferença Salarial (Período ${idx + 1}: ${months} meses)`, value: diffValue, category: 'Salários' });
-            const reflex = diffValue * 0.3;
-            results.push({ desc: `Reflexos s/ Diferença Salarial (Est. 30%)`, value: reflex, category: 'Reflexos' });
-        }
-    });
-
-    // 7. Horas Extras
-    calcData.overtime.forEach((ot, idx) => {
-        const otStart = parseDate(ot.startDate) || start;
-        const otEnd = parseDate(ot.endDate) || end;
-        
-        if (otStart && otEnd && ot.hoursPerMonth > 0) {
-            const months = diffMonths(otStart, otEnd);
-            const perc = ot.percentage === -1 ? (ot.customPercentage || 50) : ot.percentage;
-            
-            const hourlyRate = salary / 220;
-            const otRate = hourlyRate * (1 + (perc / 100));
-            const totalOt = otRate * ot.hoursPerMonth * months;
-            
-            results.push({ desc: `Horas Extras ${perc}% (${ot.hoursPerMonth}h/mês x ${months} meses)`, value: totalOt, category: 'Horas Extras' });
-            
-            if (ot.applyDsr) {
-                const dsr = totalOt * 0.1666;
-                results.push({ desc: `DSR sobre H.E. (Lote ${idx+1})`, value: dsr, category: 'Horas Extras' });
-            }
-        }
-    });
-
-    // 8. Estabilidade Gestante
-    if (calcData.stability.isPregnant && salary) {
-        let stabEnd = parseDate(calcData.stability.endDate);
-        const stabStart = end || new Date();
-        
-        if (!stabEnd && calcData.stability.childBirthDate) {
-            const birth = parseDate(calcData.stability.childBirthDate);
-            if (birth) {
-                stabEnd = new Date(birth);
-                stabEnd.setMonth(stabEnd.getMonth() + 5);
-            }
-        }
-
-        if (stabEnd && stabEnd > stabStart) {
-            const monthsStab = diffMonths(stabStart, stabEnd);
-            const stabValue = salary * monthsStab;
-            results.push({ desc: `Indenização Estabilidade Gestante (${monthsStab} meses)`, value: stabValue, category: 'Indenizações' });
-        }
-    }
-
-    // 9. Direitos CCT
-    if (calcData.cctRights && calcData.cctRights.length > 0) {
-        calcData.cctRights.forEach(right => {
-            if (right.parsedValue > 0) {
-                results.push({ desc: `CCT: ${right.name} (${right.period})`, value: right.parsedValue, category: 'Convenção Coletiva' });
-            }
-        });
-    }
-
-    // 10. FGTS + 40%
-    let totalFgtsBase = Number(calcData.hasFgtsBalance) || 0;
-    
-    // Se não tem saldo informado, estima com base no histórico ou salário atual
-    if (totalFgtsBase === 0 && start && end) {
-        const monthsWorked = diffMonths(start, end);
-        // Se tiver histórico, usa média ponderada (simplificado: usa salário base atual para tudo se não tiver histórico complexo)
-        // Melhoria: Iterar meses e pegar salário vigente
-        if (calcData.salaryHistory.length > 0) {
-            // Lógica complexa de histórico: para cada mês, acha o salário
-            let estimatedFgts = 0;
-            let currentDate = new Date(start);
-            while (currentDate < end) {
-                const currentMonthStr = currentDate.toISOString().slice(0, 7); // YYYY-MM
-                // Acha salário vigente
-                const hist = calcData.salaryHistory.find(h => {
-                    const hStart = new Date(h.startDate);
-                    const hEnd = h.endDate ? new Date(h.endDate) : new Date();
-                    return currentDate >= hStart && currentDate <= hEnd;
-                });
-                const monthSalary = hist ? Number(hist.salary) : salary;
-                estimatedFgts += (monthSalary * 0.08);
-                currentDate.setMonth(currentDate.getMonth() + 1);
-            }
-            totalFgtsBase = estimatedFgts;
+        let end: Date;
+        if (bond.endDate) {
+            end = new Date(bond.endDate);
         } else {
-             // Estima com salário atual
-             totalFgtsBase = (salary * 0.08) * monthsWorked;
+            // If active, go up to today
+            end = new Date();
         }
-    }
-
-    if (calcData.unpaidFgtsMonths > 0 && salary) {
-        // Usa salário atual para meses não pagos (padrão)
-        const unpaidFgts = (salary * 0.08) * calcData.unpaidFgtsMonths;
-        results.push({ desc: `FGTS Não Depositado (${calcData.unpaidFgtsMonths} meses)`, value: unpaidFgts, category: 'FGTS' });
-    }
-    
-    const rescisaoFgtsBase = results
-        .filter(r => ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais', 'Reflexos', 'Convenção Coletiva'].includes(r.category))
-        .reduce((sum, item) => sum + item.value, 0);
-    
-    const totalFgtsParaMulta = totalFgtsBase + (rescisaoFgtsBase * 0.08);
-
-    if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta' || calcData.terminationReason === 'sem_anotacao') {
-        const fine40 = totalFgtsParaMulta * 0.4;
-        results.push({ desc: `Multa 40% do FGTS (Base Est.: ${formatCurrency(totalFgtsParaMulta)})`, value: fine40, category: 'FGTS' });
-    }
-
-    // 11. Multas CLT
-    if (calcData.applyFine477 && salary) {
-        results.push({ desc: `Multa Art. 477 (Atraso)`, value: salary, category: 'Multas' });
-    }
-    
-    if (calcData.applyFine467) {
-        const incontroverso = results
-            .filter(r => r.category === 'Rescisórias')
-            .reduce((sum, item) => sum + item.value, 0);
-        results.push({ desc: `Multa Art. 467 (50% Incontroverso)`, value: incontroverso * 0.5, category: 'Multas' });
-    }
-
-    // 12. Danos Morais
-    if (calcData.moralDamages > 0) {
-        results.push({ desc: `Indenização por Danos Morais`, value: Number(calcData.moralDamages), category: 'Indenizações' });
-    }
-
-    // 13. Honorários Advocatícios
-    const currentTotal = results.reduce((acc, curr) => acc + curr.value, 0);
-    if (calcData.attorneyFees > 0) {
-        const feesValue = currentTotal * (calcData.attorneyFees / 100);
-        results.push({ desc: `Honorários Advocatícios (${calcData.attorneyFees}%)`, value: feesValue, category: 'Honorários' });
-    }
-
-    // 14. Deduções
-    if (calcData.severancePaid > 0) {
-        results.push({ desc: `Valor Pago na Rescisão (Dedução)`, value: -Math.abs(calcData.severancePaid), category: 'Deduções' });
-    }
-
-    return results;
-};
-
-interface LaborCalcProps {
-    clients?: ClientRecord[];
-    contracts?: ContractRecord[];
-    savedCalculations?: CalculationRecord[];
-    onSaveCalculation?: (calc: CalculationRecord) => void;
-    onDeleteCalculation?: (id: string) => void;
-}
-
-export default function LaborCalc({ clients = [], contracts = [], savedCalculations = [], onSaveCalculation, onDeleteCalculation }: LaborCalcProps) {
-  const [data, setData] = useState<LaborData>(INITIAL_LABOR_DATA);
-  const [activeTab, setActiveTab] = useState<number>(1);
-  const [calcResult, setCalcResult] = useState<any[]>([]);
-  const [totalValue, setTotalValue] = useState<number>(0);
-  const [showSavedList, setShowSavedList] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  // --- Handlers ---
-  const handleInputChange = (field: keyof LaborData, value: any) => {
-    setData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleClientSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const selectedName = e.target.value;
-      if (!selectedName) return;
-
-      // Tenta achar em clientes ou contratos
-      const client = clients.find(c => c.name === selectedName);
-      const contract = contracts.find(c => `${c.firstName} ${c.lastName}` === selectedName);
-
-      if (client) {
-          setData(prev => ({ ...prev, employeeName: client.name }));
-      } else if (contract) {
-          setData(prev => ({ ...prev, employeeName: `${contract.firstName} ${contract.lastName}` }));
-      }
-  };
-
-  const addOvertimeBatch = () => {
-    setData(prev => ({
-      ...prev,
-      overtime: [...prev.overtime, {
-        id: Math.random().toString(),
-        percentage: 50,
-        hoursPerMonth: 0,
-        startDate: prev.startDate,
-        endDate: prev.endDate,
-        applyDsr: true
-      }]
-    }));
-  };
-
-  const removeOvertimeBatch = (id: string) => {
-    setData(prev => ({ ...prev, overtime: prev.overtime.filter(o => o.id !== id) }));
-  };
-
-  const addWageGap = () => {
-      setData(prev => ({
-          ...prev,
-          wageGap: [...prev.wageGap, {
-              active: true,
-              floorSalary: 0,
-              paidSalary: prev.baseSalary,
-              startDate: prev.startDate,
-              endDate: prev.endDate
-          }]
-      }));
-  };
-
-  const removeWageGap = (idx: number) => {
-      const newGaps = [...data.wageGap];
-      newGaps.splice(idx, 1);
-      setData(prev => ({ ...prev, wageGap: newGaps }));
-  };
-
-  const addNightShiftPeriod = () => {
-    setData(prev => ({
-      ...prev,
-      adicionalNoturno: {
-        ...prev.adicionalNoturno,
-        periods: [
-          ...prev.adicionalNoturno.periods,
-          {
-            id: Math.random().toString(),
-            hoursPerMonth: 0,
-            startDate: prev.startDate,
-            endDate: prev.endDate
-          }
-        ]
-      }
-    }));
-  };
-
-  const removeNightShiftPeriod = (id: string) => {
-    setData(prev => ({
-      ...prev,
-      adicionalNoturno: {
-        ...prev.adicionalNoturno,
-        periods: prev.adicionalNoturno.periods.filter(p => p.id !== id)
-      }
-    }));
-  };
-
-  const addIntrajornadaPeriod = () => {
-      const newId = Math.random().toString(36).substr(2, 9);
-      setData(prev => ({
-          ...prev,
-          intrajornada: {
-              ...prev.intrajornada,
-              periods: [...prev.intrajornada.periods, { id: newId, hoursPerDay: 1, startDate: data.startDate, endDate: data.endDate }]
-          }
-      }));
-  };
-
-  const removeIntrajornadaPeriod = (id: string) => {
-      setData(prev => ({
-          ...prev,
-          intrajornada: {
-              ...prev.intrajornada,
-              periods: prev.intrajornada.periods.filter(p => p.id !== id)
-          }
-      }));
-  };
-
-  const addCctRight = () => {
-      const newId = Math.random().toString(36).substr(2, 9);
-      setData(prev => ({
-          ...prev,
-          cctRights: [...prev.cctRights, { id: newId, name: '', period: '', value: '', parsedValue: 0 }]
-      }));
-  };
-
-  const removeCctRight = (id: string) => {
-      setData(prev => ({
-          ...prev,
-          cctRights: prev.cctRights.filter(r => r.id !== id)
-      }));
-  };
-
-  const updateCctRight = (id: string, field: keyof LaborData['cctRights'][0], value: any) => {
-      setData(prev => ({
-          ...prev,
-          cctRights: prev.cctRights.map(r => {
-              if (r.id === id) {
-                  const updated = { ...r, [field]: value };
-                  if (field === 'value') {
-                      const cleanVal = String(value).replace(/[R$\s%]/g, '').replace(',', '.');
-                      const parsed = parseFloat(cleanVal);
-                      updated.parsedValue = isNaN(parsed) ? 0 : parsed;
-                  }
-                  return updated;
-              }
-              return r;
-          })
-      }));
-  };
-
-  const addVacationPeriod = () => {
-      setData(prev => ({
-          ...prev,
-          vacationPeriods: [
-              ...prev.vacationPeriods,
-              { id: Math.random().toString(), startDate: '', endDate: '', isDouble: false }
-          ]
-      }));
-  };
-
-  const removeVacationPeriod = (id: string) => {
-      setData(prev => ({
-          ...prev,
-          vacationPeriods: prev.vacationPeriods.filter(v => v.id !== id)
-      }));
-  };
-
-  const updateVacationPeriod = (id: string, field: 'startDate' | 'endDate' | 'isDouble', value: any) => {
-      setData(prev => ({
-          ...prev,
-          vacationPeriods: prev.vacationPeriods.map(v => v.id === id ? { ...v, [field]: value } : v)
-      }));
-  };
-
-  const addSalaryHistory = () => {
-      setData(prev => ({
-          ...prev,
-          salaryHistory: [
-              ...prev.salaryHistory,
-              { id: Math.random().toString(), startDate: prev.startDate, endDate: prev.endDate, salary: prev.baseSalary }
-          ]
-      }));
-  };
-
-  const removeSalaryHistory = (id: string) => {
-      setData(prev => ({
-          ...prev,
-          salaryHistory: prev.salaryHistory.filter(s => s.id !== id)
-      }));
-  };
-
-  const updateSalaryHistory = (id: string, field: keyof LaborData['salaryHistory'][0], value: any) => {
-      setData(prev => ({
-          ...prev,
-          salaryHistory: prev.salaryHistory.map(s => s.id === id ? { ...s, [field]: value } : s)
-      }));
-  };
-
-  const add13thPeriod = () => {
-      setData(prev => ({
-          ...prev,
-          unpaid13thPeriods: [
-              ...prev.unpaid13thPeriods,
-              { id: Math.random().toString(), year: new Date().getFullYear() - 1, month: 12 }
-          ]
-      }));
-  };
-
-  const remove13thPeriod = (id: string) => {
-      setData(prev => ({
-          ...prev,
-          unpaid13thPeriods: prev.unpaid13thPeriods.filter(p => p.id !== id)
-      }));
-  };
-
-  const update13thPeriod = (id: string, field: 'year' | 'month', value: number) => {
-      setData(prev => ({
-          ...prev,
-          unpaid13thPeriods: prev.unpaid13thPeriods.map(p => p.id === id ? { ...p, [field]: value } : p)
-      }));
-  };
-
-  const handleSave = () => {
-      if (!data.employeeName) {
-          alert("Informe o nome do cliente para salvar.");
-          return;
-      }
-      if (onSaveCalculation) {
-          const record: CalculationRecord = {
-              id: editingId || Math.random().toString(36).substr(2, 9),
-              date: new Date().toISOString(),
-              employeeName: data.employeeName,
-              totalValue: totalValue,
-              data: data
-          };
-          onSaveCalculation(record);
-          setEditingId(null);
-          alert("Cálculo salvo com sucesso!");
-      }
-  };
-
-  const loadCalculation = (calc: CalculationRecord) => {
-      const mergedData = { ...INITIAL_LABOR_DATA, ...calc.data };
-      // Ensure arrays are initialized if missing in saved data
-      if (!mergedData.salaryHistory) mergedData.salaryHistory = [];
-      if (!mergedData.unpaid13thPeriods) mergedData.unpaid13thPeriods = [];
-      if (!mergedData.vacationPeriods) mergedData.vacationPeriods = [];
-      if (!mergedData.adicionalNoturno) mergedData.adicionalNoturno = { active: false, periods: [] };
-      if (!mergedData.wageGap) mergedData.wageGap = [];
-      if (!mergedData.overtime) mergedData.overtime = [];
-      if (!mergedData.salaryBalance) mergedData.salaryBalance = { active: true, days: 0 };
-      
-      setData(mergedData);
-      setEditingId(calc.id);
-      setShowSavedList(false);
-      calculate(mergedData); // Recalcula para mostrar resultados
-  };
-
-  // --- ENGINE DE CÁLCULO ---
-  const calculate = (calcData = data) => {
-    const results = calculateLaborResults(calcData);
-    setCalcResult(results);
-    setTotalValue(results.reduce((acc, curr) => acc + curr.value, 0));
-    setActiveTab(5); // Ir para resultados
-  };
-
-  const generatePDF = (calcDataInput?: LaborData) => {
-      // @ts-ignore
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
-      const margin = 20;
-      
-      const dataToUse = calcDataInput || data;
-      let resultsToUse = calcResult;
-      let totalToUse = totalValue;
-
-      if (calcDataInput) {
-          resultsToUse = calculateLaborResults(calcDataInput);
-          totalToUse = resultsToUse.reduce((acc, curr) => acc + curr.value, 0);
-      }
-      
-      // Header
-      doc.setFillColor(30, 58, 138); // Primary Blue
-      doc.rect(0, 0, pageWidth, 40, 'F');
-      
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(22);
-      doc.setTextColor(255, 255, 255);
-      doc.text("RELATÓRIO DE CÁLCULO TRABALHISTA", pageWidth / 2, 20, { align: "center" });
-      doc.setFontSize(10);
-      doc.text("Estimativa Preliminar", pageWidth / 2, 28, { align: "center" });
-
-      // Info Cliente
-      let y = 55;
-      doc.setTextColor(0);
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      doc.text("DADOS DO PROCESSO / CLIENTE", margin, y);
-      doc.setLineWidth(0.5);
-      doc.line(margin, y+2, pageWidth - margin, y+2);
-      
-      y += 10;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(10);
-      doc.text(`Cliente: ${dataToUse.employeeName || 'Não informado'}`, margin, y);
-      doc.text(`Data Base: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth - margin, y, { align: "right" });
-      y += 6;
-      doc.text(`Admissão: ${dataToUse.startDate ? new Date(dataToUse.startDate).toLocaleDateString('pt-BR') : '-'}`, margin, y);
-      doc.text(`Demissão: ${dataToUse.endDate ? new Date(dataToUse.endDate).toLocaleDateString('pt-BR') : '-'}`, pageWidth - margin, y, { align: "right" });
-      y += 6;
-      doc.text(`Salário Base: ${formatCurrency(dataToUse.baseSalary)}`, margin, y);
-      doc.text(`Motivo: ${dataToUse.terminationReason.replace(/_/g, ' ').toUpperCase()}`, pageWidth - margin, y, { align: "right" });
-
-      // Tabela de Verbas
-      y += 15;
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      doc.text("DETALHAMENTO DAS VERBAS", margin, y);
-      doc.line(margin, y+2, pageWidth - margin, y+2);
-      y += 10;
-
-      // Header Tabela
-      doc.setFillColor(241, 245, 249);
-      doc.rect(margin, y - 6, pageWidth - (margin*2), 8, 'F');
-      doc.setFontSize(10);
-      doc.text("DESCRIÇÃO", margin + 2, y);
-      doc.text("VALOR (R$)", pageWidth - margin - 2, y, { align: "right" });
-      y += 10;
-
-      doc.setFont("helvetica", "normal");
-      let currentCategory = '';
-
-      resultsToUse.forEach((item) => {
-          if (y > pageHeight - 40) { doc.addPage(); y = 30; }
-
-          if (item.category !== currentCategory) {
-              y += 4;
-              doc.setFont("helvetica", "bold");
-              doc.setTextColor(30, 58, 138);
-              doc.text(item.category.toUpperCase(), margin, y);
-              doc.line(margin, y+1, pageWidth-margin, y+1);
-              y += 6;
-              currentCategory = item.category;
-              doc.setTextColor(0);
-              doc.setFont("helvetica", "normal");
-          }
-
-          doc.text(item.desc, margin + 2, y);
-          doc.text(formatCurrency(item.value), pageWidth - margin - 2, y, { align: "right" });
-          y += 6;
-      });
-
-      // Total
-      y += 5;
-      doc.setLineWidth(0.5);
-      doc.line(margin, y, pageWidth - margin, y);
-      y += 10;
-      
-      doc.setFillColor(30, 58, 138);
-      doc.rect(margin, y - 8, pageWidth - (margin*2), 12, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.text("TOTAL ESTIMADO:", margin + 4, y);
-      doc.text(formatCurrency(totalToUse), pageWidth - margin - 4, y, { align: "right" });
-
-      // Explicação Metodológica (Justificado)
-      y += 20;
-      if (y > pageHeight - 60) { doc.addPage(); y = 30; }
-
-      doc.setTextColor(0);
-      doc.setFontSize(12);
-      doc.text("METODOLOGIA DE CÁLCULO", margin, y);
-      doc.line(margin, y+2, pageWidth - margin, y+2);
-      y += 8;
-
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      const text = "O presente cálculo é uma estimativa preliminar realizada com base nas informações fornecidas pelo cliente e nos parâmetros da CLT. As verbas rescisórias consideram o saldo de salário, aviso prévio (indenizado ou trabalhado), férias vencidas e proporcionais acrescidas de 1/3, e 13º salário proporcional. Adicionais como insalubridade e periculosidade foram calculados sobre o salário mínimo e salário base, respectivamente, conforme legislação vigente. A multa de 40% do FGTS é estimada sobre o saldo informado somado aos depósitos mensais devidos no período. Este documento não possui valor de sentença judicial e está sujeito a alterações mediante análise de provas documentais e convenções coletivas da categoria.";
-      
-      const splitText = doc.splitTextToSize(text, pageWidth - (margin * 2));
-      doc.text(splitText, margin, y, { align: "justify", maxWidth: pageWidth - (margin * 2) });
-
-      // Footer
-      const pageCount = doc.getNumberOfPages();
-      for(let i = 1; i <= pageCount; i++) {
-          doc.setPage(i);
-          doc.setFontSize(8);
-          doc.setTextColor(150);
-          doc.text(`Gerado por Gestão INSS Jurídico em ${new Date().toLocaleDateString()} - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: "center" });
-      }
-
-      doc.save(`Relatorio_Calculo_${dataToUse.employeeName || 'Trabalhista'}.pdf`);
-  };
-
-  return (
-    <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-900 overflow-hidden">
-      {/* Header da Calculadora */}
-      <div className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 flex justify-between items-center shadow-sm z-10">
-         <div className="flex items-center gap-3">
-             <div className="bg-indigo-100 dark:bg-indigo-900/30 p-2 rounded-lg text-indigo-600 dark:text-indigo-400">
-                 <CalculatorIcon className="h-6 w-6" />
-             </div>
-             <div>
-                 <h2 className="text-lg font-bold text-slate-800 dark:text-white leading-tight">Calculadora Trabalhista</h2>
-                 <p className="text-xs text-slate-500 dark:text-slate-400">Estimativas Rescisórias & Indenizatórias</p>
-             </div>
-         </div>
-         <div className="flex gap-2">
-            <button onClick={() => setShowSavedList(!showSavedList)} className="text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition border border-slate-200 dark:border-slate-700">
-                <ArchiveBoxIcon className="h-4 w-4" /> {showSavedList ? 'Ocultar Salvos' : 'Ver Salvos'}
-            </button>
-            <button onClick={() => { setData(INITIAL_LABOR_DATA); setEditingId(null); setCalcResult([]); setTotalValue(0); setActiveTab(1); }} className="text-xs font-bold text-slate-500 hover:text-red-500 flex items-center gap-1 px-3 py-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition">
-                <TrashIcon className="h-4 w-4" /> Limpar
-            </button>
-            {totalValue > 0 && (
-                <button onClick={() => generatePDF()} className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-lg shadow-indigo-500/30 flex items-center gap-2 transition">
-                    <DocumentTextIcon className="h-4 w-4" />
-                    Baixar PDF
-                </button>
-            )}
-         </div>
-      </div>
-
-      {/* Saved List Overlay */}
-      {showSavedList && (
-          <div className="bg-slate-100 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 p-4 animate-in slide-in-from-top-4">
-              <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-3">Cálculos Salvos</h3>
-              {savedCalculations.length === 0 ? (
-                  <p className="text-sm text-slate-500 italic">Nenhum cálculo salvo.</p>
-              ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                      {savedCalculations.map(calc => (
-                          <div key={calc.id} className="bg-white dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex justify-between items-center shadow-sm">
-                              <div>
-                                  <p className="font-bold text-slate-800 dark:text-white text-sm">{calc.employeeName}</p>
-                                  <p className="text-xs text-slate-500">{new Date(calc.date).toLocaleDateString()} - {formatCurrency(calc.totalValue)}</p>
-                              </div>
-                              <div className="flex gap-1">
-                                  <button onClick={() => generatePDF(calc.data)} className="p-1.5 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded" title="Baixar PDF"><DocumentTextIcon className="h-4 w-4" /></button>
-                                  <button onClick={() => loadCalculation(calc)} className="p-1.5 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded" title="Editar / Visualizar"><PencilSquareIcon className="h-4 w-4" /></button>
-                                  <button onClick={() => onDeleteCalculation && onDeleteCalculation(calc.id)} className="p-1.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded" title="Excluir"><TrashIcon className="h-4 w-4" /></button>
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-              )}
-          </div>
-      )}
-
-      {/* Tabs Navigation */}
-      <div className="flex overflow-x-auto border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 gap-1 shrink-0">
-         {['Dados Contratuais', 'Verbas & Lote', 'Indenizações', 'Estabilidade', 'Resultados'].map((label, idx) => (
-             <button
-                key={idx}
-                onClick={() => setActiveTab(idx + 1)}
-                className={`px-4 py-3 text-sm font-bold border-b-2 whitespace-nowrap transition-colors ${
-                    activeTab === idx + 1 
-                    ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400' 
-                    : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
-                }`}
-             >
-                 {idx + 1}. {label}
-             </button>
-         ))}
-      </div>
-
-      {/* Content Area */}
-      <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
-          <div className="max-w-5xl mx-auto space-y-6 pb-20">
-              
-              {/* TAB 1: DADOS BASE */}
-              {activeTab === 1 && (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      <div className={`md:col-span-2 ${STYLES.CARD_SECTION}`}>
-                          <h3 className={STYLES.CARD_TITLE}>
-                              <DocumentTextIcon className="h-5 w-5 text-indigo-500" /> Informações Básicas
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="md:col-span-2">
-                                  <label className={STYLES.LABEL_TEXT}>Nome do Cliente / Reclamante</label>
-                                  <div className="flex gap-2">
-                                      <input type="text" className={STYLES.INPUT_FIELD} value={data.employeeName} onChange={e => handleInputChange('employeeName', e.target.value)} placeholder="Ex: João da Silva" />
-                                      <select className={`${STYLES.INPUT_FIELD} w-1/3`} onChange={handleClientSelect} defaultValue="">
-                                          <option value="" disabled>Selecionar...</option>
-                                          {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-                                          {contracts.map(c => <option key={c.id} value={`${c.firstName} ${c.lastName}`}>{c.firstName} {c.lastName}</option>)}
-                                      </select>
-                                  </div>
-                              </div>
-                              <div>
-                                  <label className={STYLES.LABEL_TEXT}>Data Admissão</label>
-                                  <input type="date" className={STYLES.INPUT_FIELD} value={data.startDate} onChange={e => handleInputChange('startDate', e.target.value)} />
-                              </div>
-                              <div>
-                                  <label className={STYLES.LABEL_TEXT}>Data Demissão / Ajuizamento</label>
-                                  <input type="date" className={STYLES.INPUT_FIELD} value={data.endDate} onChange={e => handleInputChange('endDate', e.target.value)} />
-                              </div>
-                              <div>
-                                  <label className={STYLES.LABEL_TEXT}>Último Salário Base (R$)</label>
-                                  <input type="number" className={STYLES.INPUT_FIELD} value={data.baseSalary} onChange={e => handleInputChange('baseSalary', e.target.value)} placeholder="0.00" />
-                              </div>
-                              <div>
-                                  <label className={STYLES.LABEL_TEXT}>Motivo da Rescisão</label>
-                                  <select className={STYLES.INPUT_FIELD} value={data.terminationReason} onChange={e => handleInputChange('terminationReason', e.target.value)}>
-                                      <option value="sem_justa_causa">Dispensa Sem Justa Causa</option>
-                                      <option value="rescisao_indireta">Rescisão Indireta</option>
-                                      <option value="pedido_demissao">Pedido de Demissão</option>
-                                      <option value="justa_causa">Justa Causa</option>
-                                      <option value="sem_anotacao">Sem Anotação na CTPS</option>
-                                  </select>
-                              </div>
-                              <div>
-                                  <label className={STYLES.LABEL_TEXT}>Aviso Prévio</label>
-                                  <select className={STYLES.INPUT_FIELD} value={data.noticePeriod} onChange={e => handleInputChange('noticePeriod', e.target.value)}>
-                                      <option value="indenizado">Indenizado (Pago)</option>
-                                      <option value="trabalhado">Trabalhado</option>
-                                      <option value="dispensado">Dispensado</option>
-                                  </select>
-                              </div>
-                              <div>
-                                  <label className={STYLES.LABEL_TEXT}>Saldo FGTS (Para Multa 40%)</label>
-                                  <input type="number" className={STYLES.INPUT_FIELD} value={data.hasFgtsBalance} onChange={e => handleInputChange('hasFgtsBalance', e.target.value)} placeholder="Saldo em conta..." />
-                              </div>
-                          </div>
-                      </div>
-
-                      {/* Histórico Salarial */}
-                      <div className={`md:col-span-2 ${STYLES.CARD_SECTION}`}>
-                          <div className="flex justify-between items-center mb-4">
-                              <h3 className={STYLES.CARD_TITLE}>
-                                  <BanknotesIcon className="h-5 w-5 text-indigo-500" /> Histórico Salarial
-                              </h3>
-                              <button onClick={addSalaryHistory} className={STYLES.BTN_SECONDARY_SM}>
-                                  <PlusIcon className="h-4 w-4" /> Adicionar Período
-                              </button>
-                          </div>
-                          
-                          {data.salaryHistory.length === 0 ? (
-                              <div className="text-center py-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-dashed border-slate-200 dark:border-slate-700">
-                                  <p className="text-sm text-slate-500">Nenhum histórico adicionado. O cálculo usará o <strong>Último Salário Base</strong> para todo o período.</p>
-                              </div>
-                          ) : (
-                              <div className="space-y-3">
-                                  {data.salaryHistory.map((hist, idx) => (
-                                      <div key={hist.id} className="grid grid-cols-1 md:grid-cols-7 gap-3 items-end p-3 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-700">
-                                          <div className="md:col-span-2">
-                                              <label className={STYLES.LABEL_TINY}>Início</label>
-                                              <input type="date" className={STYLES.INPUT_TINY} value={hist.startDate} onChange={e => updateSalaryHistory(hist.id, 'startDate', e.target.value)} />
-                                          </div>
-                                          <div className="md:col-span-2">
-                                              <label className={STYLES.LABEL_TINY}>Fim</label>
-                                              <input type="date" className={STYLES.INPUT_TINY} value={hist.endDate} onChange={e => updateSalaryHistory(hist.id, 'endDate', e.target.value)} />
-                                          </div>
-                                          <div className="md:col-span-2">
-                                              <label className={STYLES.LABEL_TINY}>Salário (R$)</label>
-                                              <input type="number" className={STYLES.INPUT_TINY} value={hist.salary} onChange={e => updateSalaryHistory(hist.id, 'salary', Number(e.target.value))} />
-                                          </div>
-                                          <div className="md:col-span-1 flex justify-end">
-                                              <button onClick={() => removeSalaryHistory(hist.id)} className="p-2 text-slate-400 hover:text-red-500 transition"><TrashIcon className="h-4 w-4" /></button>
-                                          </div>
-                                      </div>
-                                  ))}
-                              </div>
-                          )}
-                      </div>
-                      
-                      <div className="md:col-span-2 flex justify-end">
-                          <button onClick={() => setActiveTab(2)} className={STYLES.BTN_PRIMARY}>
-                              Próxima Etapa <ArrowPathIcon className="h-4 w-4" />
-                          </button>
-                      </div>
-                  </div>
-              )}
-
-              {/* TAB 2: VERBAS E LOTE */}
-              {activeTab === 2 && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      
-                      {/* Seção Saldo de Salário e Deduções */}
-                      <div className={STYLES.CARD_SECTION}>
-                          <h3 className={`${STYLES.CARD_TITLE} text-emerald-600 dark:text-emerald-400`}>
-                              <BanknotesIcon className="h-5 w-5" /> Saldo de Salário & Deduções
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              {/* Saldo de Salário */}
-                              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl">
-                                  <label className="flex items-center gap-3 cursor-pointer mb-3">
-                                      <input 
-                                          type="checkbox" 
-                                          checked={data.salaryBalance.active} 
-                                          onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, active: e.target.checked } }))} 
-                                          className="w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" 
-                                      />
-                                      <span className="font-bold text-slate-700 dark:text-slate-200">Calcular Saldo de Salário</span>
-                                  </label>
-                                  
-                                  {data.salaryBalance.active && (
-                                      <div className="grid grid-cols-2 gap-3 pl-8">
-                                          <div>
-                                              <label className={STYLES.LABEL_TINY}>Dias Trabalhados (Mês Rescisão)</label>
-                                              <input 
-                                                  type="number" 
-                                                  className={STYLES.INPUT_TINY} 
-                                                  value={data.salaryBalance.days} 
-                                                  onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, days: Number(e.target.value) } }))} 
-                                                  placeholder="0 = Automático"
-                                              />
-                                              <p className="text-[9px] text-slate-400 mt-1">Deixe 0 para usar data de demissão.</p>
-                                          </div>
-                                          <div>
-                                              <label className={STYLES.LABEL_TINY}>Valor Manual (Opcional)</label>
-                                              <input 
-                                                  type="number" 
-                                                  className={STYLES.INPUT_TINY} 
-                                                  value={data.salaryBalance.customAmount || ''} 
-                                                  onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, customAmount: Number(e.target.value) } }))} 
-                                                  placeholder="R$ 0,00"
-                                              />
-                                          </div>
-                                      </div>
-                                  )}
-                              </div>
-
-                              {/* Deduções */}
-                              <div className="p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-xl">
-                                  <h4 className="font-bold text-red-700 dark:text-red-400 mb-3 text-sm">Deduções / Compensações</h4>
-                                  <div>
-                                      <label className={STYLES.LABEL_TINY}>Valor Pago na Rescisão (TRCT)</label>
-                                      <input 
-                                          type="number" 
-                                          className={STYLES.INPUT_TINY} 
-                                          value={data.severancePaid} 
-                                          onChange={e => handleInputChange('severancePaid', Number(e.target.value))} 
-                                          placeholder="R$ 0,00"
-                                      />
-                                      <p className="text-[9px] text-slate-400 mt-1">Este valor será subtraído do total estimado.</p>
-                                  </div>
-                              </div>
-                          </div>
-                      </div>
-
-                      {/* Seção Adicionais Fixos */}
-                      <div className={STYLES.CARD_SECTION}>
-                          <h3 className={`${STYLES.CARD_TITLE} text-indigo-600 dark:text-indigo-400`}>
-                              <PlusIcon className="h-5 w-5" /> Adicionais Recorrentes
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                  <label className={`${STYLES.LABEL_TEXT} mb-2`}>Insalubridade</label>
-                                  <select 
-                                      className={STYLES.INPUT_FIELD} 
-                                      value={data.insalubridadeLevel} 
-                                      onChange={e => handleInputChange('insalubridadeLevel', e.target.value)}
-                                  >
-                                      <option value="nenhum">Não se aplica</option>
-                                      <option value="minimo">Grau Mínimo (10%)</option>
-                                      <option value="medio">Grau Médio (20%)</option>
-                                      <option value="maximo">Grau Máximo (40%)</option>
-                                  </select>
-                                  <p className="text-[10px] text-slate-400 mt-1">Base: Salário Mínimo</p>
-                              </div>
-
-                              <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 flex flex-col justify-center">
-                                  <label className="flex items-center gap-3 cursor-pointer">
-                                      <input 
-                                          type="checkbox" 
-                                          checked={data.periculosidade} 
-                                          onChange={e => handleInputChange('periculosidade', e.target.checked)} 
-                                          className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" 
-                                      />
-                                      <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">
-                                          Periculosidade (30%)
-                                      </span>
-                                  </label>
-                                  <p className="text-[10px] text-slate-400 mt-1 pl-8">Base: Salário Base</p>
-                              </div>
-
-                              <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 col-span-1 md:col-span-3">
-                                  <div className="flex justify-between items-center mb-2">
-                                      <label className="flex items-center gap-3 cursor-pointer">
-                                          <input 
-                                              type="checkbox" 
-                                              checked={data.adicionalNoturno.active} 
-                                              onChange={e => setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, active: e.target.checked } }))} 
-                                              className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" 
-                                          />
-                                          <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">
-                                              Adicional Noturno (20%)
-                                          </span>
-                                      </label>
-                                      {data.adicionalNoturno.active && (
-                                          <button onClick={addNightShiftPeriod} className={`${STYLES.BTN_SECONDARY_SM} text-[10px] py-1 px-2`}>
-                                              <PlusIcon className="h-3 w-3" /> Add Período
-                                          </button>
-                                      )}
-                                  </div>
-                                  
-                                  {data.adicionalNoturno.active && (
-                                      <div className="space-y-2 mt-2">
-                                          <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-2">
-                                              Considera-se noturno o trabalho entre <strong>22h e 5h</strong> (urbano). A hora noturna é reduzida (52min 30s).
-                                          </p>
-                                          {data.adicionalNoturno.periods.length === 0 && <p className="text-xs text-slate-400 italic">Nenhum período adicionado.</p>}
-                                          {data.adicionalNoturno.periods.map((period, idx) => (
-                                              <div key={period.id} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 relative">
-                                                  <button onClick={() => removeNightShiftPeriod(period.id)} className="absolute top-1 right-1 text-slate-400 hover:text-red-500"><TrashIcon className="h-3 w-3" /></button>
-                                                  <div>
-                                                      <label className={STYLES.LABEL_TINY}>Horas/Mês (Média)</label>
-                                                      <input 
-                                                          type="number" 
-                                                          className={STYLES.INPUT_TINY}
-                                                          value={period.hoursPerMonth}
-                                                          onChange={e => {
-                                                              const newPeriods = [...data.adicionalNoturno.periods];
-                                                              newPeriods[idx].hoursPerMonth = Number(e.target.value);
-                                                              setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, periods: newPeriods } }));
-                                                          }}
-                                                      />
-                                                  </div>
-                                                  <div>
-                                                      <label className={STYLES.LABEL_TINY}>Início</label>
-                                                      <input 
-                                                          type="date" 
-                                                          className={STYLES.INPUT_TINY}
-                                                          value={period.startDate}
-                                                          onChange={e => {
-                                                              const newPeriods = [...data.adicionalNoturno.periods];
-                                                              newPeriods[idx].startDate = e.target.value;
-                                                              setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, periods: newPeriods } }));
-                                                          }}
-                                                      />
-                                                  </div>
-                                                  <div>
-                                                      <label className={STYLES.LABEL_TINY}>Fim</label>
-                                                      <input 
-                                                          type="date" 
-                                                          className={STYLES.INPUT_TINY}
-                                                          value={period.endDate}
-                                                          onChange={e => {
-                                                              const newPeriods = [...data.adicionalNoturno.periods];
-                                                              newPeriods[idx].endDate = e.target.value;
-                                                              setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, periods: newPeriods } }));
-                                                          }}
-                                                      />
-                                                  </div>
-                                              </div>
-                                          ))}
-                                      </div>
-                                  )}
-                              </div>
-
-                              {/* Intrajornada */}
-                              <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 col-span-1 md:col-span-3">
-                                  <div className="flex justify-between items-center mb-2">
-                                      <label className="flex items-center gap-3 cursor-pointer">
-                                          <input 
-                                              type="checkbox" 
-                                              checked={data.intrajornada.active} 
-                                              onChange={e => setData(prev => ({ ...prev, intrajornada: { ...prev.intrajornada, active: e.target.checked } }))} 
-                                              className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" 
-                                          />
-                                          <span className="font-bold text-slate-700 dark:text-slate-200 text-sm">
-                                              Adicional Intrajornada (Intervalo Suprimido)
-                                          </span>
-                                      </label>
-                                      {data.intrajornada.active && (
-                                          <button onClick={addIntrajornadaPeriod} className={`${STYLES.BTN_SECONDARY_SM} text-[10px] py-1 px-2`}>
-                                              <PlusIcon className="h-3 w-3" /> Add Período
-                                          </button>
-                                      )}
-                                  </div>
-                                  
-                                  {data.intrajornada.active && (
-                                      <div className="space-y-2 mt-2">
-                                          <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-2">
-                                              Intervalo para repouso e alimentação não concedido ou concedido parcialmente. Indenização de 50% sobre a hora suprimida.
-                                          </p>
-                                          {data.intrajornada.periods.length === 0 && <p className="text-xs text-slate-400 italic">Nenhum período adicionado.</p>}
-                                          {data.intrajornada.periods.map((period, idx) => (
-                                              <div key={period.id} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 relative">
-                                                  <button onClick={() => removeIntrajornadaPeriod(period.id)} className="absolute top-1 right-1 text-slate-400 hover:text-red-500"><TrashIcon className="h-3 w-3" /></button>
-                                                  <div>
-                                                      <label className={STYLES.LABEL_TINY}>Qtd. Horas/Dia</label>
-                                                      <input 
-                                                          type="number" 
-                                                          className={STYLES.INPUT_TINY}
-                                                          value={period.hoursPerDay}
-                                                          onChange={e => {
-                                                              const newPeriods = [...data.intrajornada.periods];
-                                                              newPeriods[idx].hoursPerDay = Number(e.target.value);
-                                                              setData(prev => ({ ...prev, intrajornada: { ...prev.intrajornada, periods: newPeriods } }));
-                                                          }}
-                                                      />
-                                                  </div>
-                                                  <div>
-                                                      <label className={STYLES.LABEL_TINY}>Início</label>
-                                                      <input 
-                                                          type="date" 
-                                                          className={STYLES.INPUT_TINY}
-                                                          value={period.startDate}
-                                                          onChange={e => {
-                                                              const newPeriods = [...data.intrajornada.periods];
-                                                              newPeriods[idx].startDate = e.target.value;
-                                                              setData(prev => ({ ...prev, intrajornada: { ...prev.intrajornada, periods: newPeriods } }));
-                                                          }}
-                                                      />
-                                                  </div>
-                                                  <div>
-                                                      <label className={STYLES.LABEL_TINY}>Fim</label>
-                                                      <input 
-                                                          type="date" 
-                                                          className={STYLES.INPUT_TINY}
-                                                          value={period.endDate}
-                                                          onChange={e => {
-                                                              const newPeriods = [...data.intrajornada.periods];
-                                                              newPeriods[idx].endDate = e.target.value;
-                                                              setData(prev => ({ ...prev, intrajornada: { ...prev.intrajornada, periods: newPeriods } }));
-                                                          }}
-                                                      />
-                                                  </div>
-                                              </div>
-                                          ))}
-                                      </div>
-                                  )}
-                              </div>
-                          </div>
-                      </div>
-
-                      {/* Seção Direitos Normativos (CCT) */}
-                      <div className={STYLES.CARD_SECTION}>
-                          <div className="flex justify-between items-center mb-4">
-                              <h3 className={`${STYLES.CARD_TITLE} text-purple-600 dark:text-purple-400`}>
-                                  <DocumentTextIcon className="h-5 w-5" /> Direitos Normativos (CCT)
-                              </h3>
-                              <button onClick={addCctRight} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Direito</button>
-                          </div>
-                          
-                          {data.cctRights.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum direito normativo cadastrado.</p>}
-                          
-                          {data.cctRights.map((right, idx) => (
-                              <div key={right.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative">
-                                  <button onClick={() => removeCctRight(right.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                      <div className="md:col-span-1">
-                                          <label className={STYLES.LABEL_TINY}>Nome do Direito</label>
-                                          <input 
-                                              type="text" 
-                                              className={STYLES.INPUT_TINY} 
-                                              placeholder="Ex: Quebra de Caixa"
-                                              value={right.name}
-                                              onChange={e => updateCctRight(right.id, 'name', e.target.value)}
-                                          />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Período / Referência</label>
-                                          <input 
-                                              type="text" 
-                                              className={STYLES.INPUT_TINY} 
-                                              placeholder="Ex: 2021/2022 ou Jan/23"
-                                              value={right.period}
-                                              onChange={e => updateCctRight(right.id, 'period', e.target.value)}
-                                          />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Valor (R$ ou %)</label>
-                                          <input 
-                                              type="text" 
-                                              className={STYLES.INPUT_TINY} 
-                                              placeholder="Ex: 10% ou 150,00"
-                                              value={right.value}
-                                              onChange={e => updateCctRight(right.id, 'value', e.target.value)}
-                                          />
-                                          <p className="text-[9px] text-slate-400 mt-1">Valor numérico será somado ao total.</p>
-                                      </div>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-
-                      {/* Seção Diferença Salarial */}
-                      <div className={STYLES.CARD_SECTION}>
-                          <div className="flex justify-between items-center mb-4">
-                              <h3 className={`${STYLES.CARD_TITLE} text-green-600 dark:text-green-400`}>
-                                  <BanknotesIcon className="h-5 w-5" /> Diferença Salarial (Piso)
-                              </h3>
-                              <button onClick={addWageGap} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Período</button>
-                          </div>
-                          {data.wageGap.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum período de diferença salarial cadastrado.</p>}
-                          {data.wageGap.map((gap, idx) => (
-                              <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative group">
-                                  <button onClick={() => removeWageGap(idx)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Início</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.startDate} onChange={(e) => {
-                                              const newGaps = [...data.wageGap]; newGaps[idx].startDate = e.target.value; setData({...data, wageGap: newGaps});
-                                          }} />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Fim</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.endDate} onChange={(e) => {
-                                              const newGaps = [...data.wageGap]; newGaps[idx].endDate = e.target.value; setData({...data, wageGap: newGaps});
-                                          }} />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Salário Piso (Deveria ser)</label>
-                                          <input type="number" className={`${STYLES.INPUT_TINY} font-bold text-green-600`} value={gap.floorSalary} onChange={(e) => {
-                                              const newGaps = [...data.wageGap]; newGaps[idx].floorSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
-                                          }} />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Salário Pago (Real)</label>
-                                          <input type="number" className={STYLES.INPUT_TINY} value={gap.paidSalary} onChange={(e) => {
-                                              const newGaps = [...data.wageGap]; newGaps[idx].paidSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
-                                          }} />
-                                      </div>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-
-                      {/* Seção Horas Extras */}
-                      <div className={STYLES.CARD_SECTION}>
-                          <div className="flex justify-between items-center mb-4">
-                              <h3 className={`${STYLES.CARD_TITLE} text-orange-600 dark:text-orange-400`}>
-                                  <ClockIcon className="h-5 w-5" /> Horas Extras em Lote
-                              </h3>
-                              <button onClick={addOvertimeBatch} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Lote</button>
-                          </div>
-                          
-                          {data.overtime.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum lote de horas extras cadastrado.</p>}
-                          
-                          {data.overtime.map((ot, idx) => (
-                              <div key={ot.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative">
-                                  <button onClick={() => removeOvertimeBatch(ot.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
-                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
-                                      <div className="col-span-1">
-                                          <label className={STYLES.LABEL_TINY}>Adicional (%)</label>
-                                          <select 
-                                            className={STYLES.INPUT_TINY} 
-                                            value={ot.percentage} 
-                                            onChange={(e) => {
-                                                const newOt = [...data.overtime];
-                                                newOt[idx].percentage = Number(e.target.value);
-                                                setData({...data, overtime: newOt});
-                                            }}
-                                          >
-                                              <option value={50}>50%</option>
-                                              <option value={60}>60%</option>
-                                              <option value={100}>100%</option>
-                                              <option value={-1}>Outro...</option>
-                                          </select>
-                                          {ot.percentage === -1 && (
-                                              <input 
-                                                type="number" 
-                                                className={`${STYLES.INPUT_TINY} mt-1`} 
-                                                placeholder="%" 
-                                                value={ot.customPercentage || ''}
-                                                onChange={(e) => {
-                                                    const newOt = [...data.overtime];
-                                                    newOt[idx].customPercentage = Number(e.target.value);
-                                                    setData({...data, overtime: newOt});
-                                                }}
-                                              />
-                                          )}
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Horas/Mês (Média)</label>
-                                          <input type="number" className={STYLES.INPUT_TINY} value={ot.hoursPerMonth} onChange={(e) => {
-                                              const newOt = [...data.overtime]; newOt[idx].hoursPerMonth = Number(e.target.value); setData({...data, overtime: newOt});
-                                          }} />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>De</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.startDate} onChange={(e) => {
-                                              const newOt = [...data.overtime]; newOt[idx].startDate = e.target.value; setData({...data, overtime: newOt});
-                                          }} />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Até</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.endDate} onChange={(e) => {
-                                              const newOt = [...data.overtime]; newOt[idx].endDate = e.target.value; setData({...data, overtime: newOt});
-                                          }} />
-                                      </div>
-                                      <div className="flex items-center h-10">
-                                           <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300 select-none">
-                                               <input type="checkbox" checked={ot.applyDsr} onChange={(e) => {
-                                                   const newOt = [...data.overtime]; newOt[idx].applyDsr = e.target.checked; setData({...data, overtime: newOt});
-                                               }} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
-                                               Reflexo DSR
-                                           </label>
-                                      </div>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-
-                      <div className="md:col-span-2 flex justify-between">
-                          <button onClick={() => setActiveTab(1)} className={STYLES.BTN_SECONDARY}>Voltar</button>
-                          <button onClick={() => setActiveTab(3)} className={STYLES.BTN_PRIMARY}>Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
-                      </div>
-                  </div>
-              )}
-
-              {/* TAB 3: INDENIZAÇÕES E MULTAS */}
-              {activeTab === 3 && (
-                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      
-                       <div className={STYLES.CARD_SECTION}>
-                           <h3 className={`${STYLES.CARD_TITLE} text-red-600 dark:text-red-400`}>
-                               <ExclamationTriangleIcon className="h-5 w-5" /> Multas e Verbas Vencidas
-                           </h3>
-                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                               <div className="space-y-3">
-                                   <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
-                                       <input type="checkbox" checked={data.applyFine477} onChange={e => handleInputChange('applyFine477', e.target.checked)} className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
-                                       <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 477 (Atraso Pagamento)</span>
-                                   </label>
-                                   <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
-                                       <input type="checkbox" checked={data.applyFine467} onChange={e => handleInputChange('applyFine467', e.target.checked)} className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
-                                       <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 467 (Verbas Incontroversas)</span>
-                                   </label>
-                                   
-                                   <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">Férias</h4>
-                                       <label className="flex items-center gap-3 mb-2 cursor-pointer">
-                                            <input type="checkbox" checked={data.claimVacationProportional} onChange={e => handleInputChange('claimVacationProportional', e.target.checked)} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
-                                            <span className="text-xs font-semibold dark:text-slate-300">Calcular Proporcionais + 1/3</span>
-                                       </label>
-                                       
-                                       <div className="mt-3">
-                                           <div className="flex justify-between items-center mb-2">
-                                               <label className={STYLES.LABEL_TINY}>Férias Vencidas (Períodos Aquisitivos)</label>
-                                               <button onClick={addVacationPeriod} className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold hover:bg-indigo-200 transition">+ Adicionar</button>
-                                           </div>
-                                           
-                                           {data.vacationPeriods.length === 0 ? (
-                                               <p className="text-xs text-slate-400 italic text-center py-2 border border-dashed border-slate-300 rounded-lg">Nenhum período vencido adicionado.</p>
-                                           ) : (
-                                               <div className="space-y-2">
-                                                   {data.vacationPeriods.map((vac, idx) => (
-                                                       <div key={vac.id} className="flex flex-col gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-                                                           <div className="flex items-center gap-2">
-                                                               <div className="grid grid-cols-2 gap-2 flex-1">
-                                                                   <div>
-                                                                       <label className={STYLES.LABEL_TINY}>Início</label>
-                                                                       <input 
-                                                                           type="date" 
-                                                                           className={STYLES.INPUT_TINY}
-                                                                           value={vac.startDate}
-                                                                           onChange={e => updateVacationPeriod(vac.id, 'startDate', e.target.value)}
-                                                                       />
-                                                                   </div>
-                                                                   <div>
-                                                                       <label className={STYLES.LABEL_TINY}>Fim</label>
-                                                                       <input 
-                                                                           type="date" 
-                                                                           className={STYLES.INPUT_TINY}
-                                                                           value={vac.endDate}
-                                                                           onChange={e => updateVacationPeriod(vac.id, 'endDate', e.target.value)}
-                                                                       />
-                                                                   </div>
-                                                               </div>
-                                                               <button onClick={() => removeVacationPeriod(vac.id)} className="text-slate-400 hover:text-red-500 p-1 self-end mb-1"><TrashIcon className="h-4 w-4" /></button>
-                                                           </div>
-                                                           <label className="flex items-center gap-2 cursor-pointer">
-                                                               <input 
-                                                                   type="checkbox" 
-                                                                   checked={vac.isDouble} 
-                                                                   onChange={e => updateVacationPeriod(vac.id, 'isDouble', e.target.checked)} 
-                                                                   className="w-3 h-3 text-red-600 rounded focus:ring-red-500" 
-                                                               />
-                                                               <span className="text-[10px] font-bold text-red-600 dark:text-red-400">Em Dobro (Art. 137)</span>
-                                                           </label>
-                                                       </div>
-                                                   ))}
-                                               </div>
-                                           )}
-                                       </div>
-                                   </div>
-
-                                   <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">13º Salário</h4>
-                                       <label className="flex items-center gap-3 mb-2 cursor-pointer">
-                                            <input type="checkbox" checked={data.claim13thProportional} onChange={e => handleInputChange('claim13thProportional', e.target.checked)} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
-                                            <span className="text-xs font-semibold dark:text-slate-300">Calcular Proporcional</span>
-                                       </label>
-                                       <div className="mt-3">
-                                           <div className="flex justify-between items-center mb-2">
-                                               <label className={STYLES.LABEL_TINY}>13º Vencidos (Mês/Ano)</label>
-                                               <button onClick={add13thPeriod} className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold hover:bg-indigo-200 transition">+ Adicionar</button>
-                                           </div>
-                                           
-                                           {data.unpaid13thPeriods.length === 0 ? (
-                                               <p className="text-xs text-slate-400 italic text-center py-2 border border-dashed border-slate-300 rounded-lg">Nenhum ano adicionado.</p>
-                                           ) : (
-                                               <div className="space-y-2">
-                                                   {data.unpaid13thPeriods.map((period, idx) => (
-                                                       <div key={period.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-                                                           <div className="flex-1 grid grid-cols-2 gap-2">
-                                                               <input 
-                                                                   type="number" 
-                                                                   placeholder="Mês" 
-                                                                   className={`${STYLES.INPUT_TINY}`}
-                                                                   value={period.month}
-                                                                   onChange={e => update13thPeriod(period.id, 'month', Number(e.target.value))}
-                                                                   min={1} max={12}
-                                                               />
-                                                               <input 
-                                                                   type="number" 
-                                                                   placeholder="Ano" 
-                                                                   className={`${STYLES.INPUT_TINY}`}
-                                                                   value={period.year}
-                                                                   onChange={e => update13thPeriod(period.id, 'year', Number(e.target.value))}
-                                                               />
-                                                           </div>
-                                                           <button onClick={() => remove13thPeriod(period.id)} className="text-slate-400 hover:text-red-500 p-1"><TrashIcon className="h-4 w-4" /></button>
-                                                       </div>
-                                                   ))}
-                                               </div>
-                                           )}
-                                       </div>
-                                   </div>
-                               </div>
-                               <div className="space-y-4">
-                                   <div>
-                                       <label className={STYLES.LABEL_TEXT}>Meses de FGTS não depositado</label>
-                                       <input type="number" className={STYLES.INPUT_FIELD} value={data.unpaidFgtsMonths} onChange={e => handleInputChange('unpaidFgtsMonths', Number(e.target.value))} />
-                                   </div>
-                                   <div>
-                                       <label className={STYLES.LABEL_TEXT}>Indenização por Danos Morais (Estimativa R$)</label>
-                                       <input type="number" className={STYLES.INPUT_FIELD} value={data.moralDamages} onChange={e => handleInputChange('moralDamages', Number(e.target.value))} placeholder="0.00" />
-                                   </div>
-                                   
-                                   <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">Honorários Advocatícios</h4>
-                                       <label className={STYLES.LABEL_TINY}>Percentual de Sucumbência</label>
-                                       <select 
-                                           className={STYLES.INPUT_TINY} 
-                                           value={data.attorneyFees} 
-                                           onChange={e => handleInputChange('attorneyFees', Number(e.target.value))}
-                                       >
-                                           <option value={0}>Não aplicar</option>
-                                           <option value={5}>5%</option>
-                                           <option value={10}>10%</option>
-                                           <option value={15}>15%</option>
-                                           <option value={20}>20%</option>
-                                           <option value={25}>25%</option>
-                                           <option value={30}>30%</option>
-                                       </select>
-                                   </div>
-                               </div>
-                           </div>
-                       </div>
-
-                       <div className="md:col-span-2 flex justify-between">
-                          <button onClick={() => setActiveTab(2)} className={STYLES.BTN_SECONDARY}>Voltar</button>
-                          <button onClick={() => setActiveTab(4)} className={STYLES.BTN_PRIMARY}>Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
-                      </div>
-                  </div>
-              )}
-
-              {/* TAB 4: ESTABILIDADE GESTANTE */}
-              {activeTab === 4 && (
-                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <div className={`${STYLES.CARD_SECTION} bg-pink-50 dark:bg-pink-900/10 border-pink-100 dark:border-pink-900/30`}>
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="p-2 bg-pink-100 dark:bg-pink-900/40 rounded-full text-pink-600 dark:text-pink-400">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6">
-                                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                                    </svg>
+        end.setDate(1);
+        end.setHours(12, 0, 0, 0);
+
+        // Create a map of existing SCs
+        const scMap = new Map();
+        bond.sc.forEach(s => scMap.set(s.month, s));
+
+        let safety = 0;
+        while (current <= end && safety < 1200) {
+            const m = String(current.getMonth() + 1).padStart(2, '0');
+            const y = current.getFullYear();
+            const monthStr = `${m}/${y}`;
+
+            if (scMap.has(monthStr)) {
+                const s = scMap.get(monthStr);
+                history.push({ month: monthStr, value: s.value, indicators: s.indicators || [], isMissing: false });
+            } else {
+                history.push({ month: monthStr, value: null, indicators: [], isMissing: true });
+            }
+            
+            current.setMonth(current.getMonth() + 1);
+            safety++;
+        }
+        
+        return history;
+    };
+
+    // --- Handlers ---
+    const toggleBondExpansion = (bondId: string) => {
+        setExpandedBonds(prev => 
+            prev.includes(bondId) ? prev.filter(id => id !== bondId) : [...prev, bondId]
+        );
+    };
+
+    const handleInputChange = (field: keyof SocialSecurityData, value: any) => {
+        setData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleBondChange = (id: string, field: keyof CNISBond, value: any) => {
+        setData(prev => ({
+            ...prev,
+            bonds: prev.bonds.map(b => b.id === id ? { ...b, [field]: value } : b)
+        }));
+    };
+
+    const handleClientSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const clientId = e.target.value;
+        if (!clientId) return;
+        
+        const client = clients.find(c => c.id === clientId);
+        if (client) {
+            setData(prev => ({
+                ...prev,
+                clientId: client.id,
+                clientName: client.name,
+                cpf: client.cpf,
+            }));
+        }
+    };
+
+    const analyzeCNISWithAI = async (text: string): Promise<Partial<SocialSecurityData> | null> => {
+        try {
+            const response = await fetch('/api/analyze-cnis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cnisContent: text })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error("AI API Error:", response.status, errorText);
+                alert(`Erro na IA (Debug): Status ${response.status}\nDetalhes: ${errorText}`);
+                return null;
+            }
+
+            let aiData;
+            try {
+                aiData = await response.json();
+            } catch (e) {
+                console.error("Failed to parse AI JSON:", e);
+                alert("Erro ao processar resposta da IA (JSON inválido). O servidor pode ter retornado um erro não tratado.");
+                return null;
+            }
+            
+            if (!aiData || !aiData.bonds) {
+                console.warn("AI returned no bonds:", aiData);
+                return null;
+            }
+
+            const mappedBonds: CNISBond[] = (aiData.bonds || []).map((b: any) => {
+                // AI returns YYYY-MM-DD. We MUST keep it as YYYY-MM-DD for <input type="date">
+                let startDate = b.startDate || '';
+                let endDate = b.endDate || '';
+                
+                const sc = (b.sc || []).map((s: any) => ({ 
+                    month: s.month, 
+                    value: s.value,
+                    indicators: s.indicators || []
+                }));
+
+                // Post-Processing: Infer dates if missing
+                if (!startDate && sc.length > 0) {
+                    // Use first SC month as start date (01/MM/YYYY -> YYYY-MM-01)
+                    const [m, y] = sc[0].month.split('/');
+                    startDate = `${y}-${m}-01`;
+                }
+
+                if (!endDate && sc.length > 0) {
+                    // Use last SC month as end date (Last Day of Month)
+                    const lastSc = sc[sc.length - 1];
+                    const [m, y] = lastSc.month.split('/').map(Number);
+                    const lastDay = new Date(y, m, 0).getDate();
+                    endDate = `${y}-${String(m).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+                }
+
+                return {
+                    id: crypto.randomUUID(),
+                    seq: b.seq,
+                    nit: b.nit,
+                    code: b.code,
+                    origin: b.origin,
+                    type: b.type,
+                    startDate,
+                    endDate,
+                    indicators: b.indicators || [],
+                    sc,
+                    activityType: 'common',
+                    isConcomitant: b.isConcomitant || false,
+                    useInCalculation: true
+                };
+            });
+
+            return {
+                clientName: aiData.client.name,
+                cpf: aiData.client.cpf,
+                birthDate: aiData.client.birthDate ? aiData.client.birthDate.split('-').reverse().join('/') : '',
+                motherName: aiData.client.motherName,
+                gender: aiData.client.gender,
+                bonds: mappedBonds,
+                analysis: aiData.analysis
+            };
+        } catch (error) {
+            console.error("AI Analysis failed", error);
+            return null;
+        }
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (file.type !== 'application/pdf') {
+            alert('Por favor, selecione um arquivo PDF.');
+            return;
+        }
+
+        setIsProcessing(true);
+        try {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map((item: any) => item.str).join(' ');
+                fullText += pageText + '\n';
+            }
+
+            setData(prev => ({ ...prev, cnisContent: fullText }));
+            
+            // Try AI first
+            // Truncate text to ~300k characters to avoid Vercel function timeouts (approx 60-80 pages of dense text)
+            // The free tier has a 10s limit, Pro has 60s (or 300s if configured). 
+            // Gemini has a large context window, so we can send more.
+            const truncatedText = fullText.length > 300000 ? fullText.substring(0, 300000) + "\n...[Texto truncado para análise]..." : fullText;
+            
+            const aiResult = await analyzeCNISWithAI(truncatedText);
+            
+            if (aiResult) {
+                setData(prev => ({
+                    ...prev,
+                    ...aiResult,
+                    bonds: aiResult.bonds || [],
+                    cnisContent: fullText
+                }));
+                alert("Análise concluída! (Dados processados 100% via IA)");
+            } else {
+                console.error("AI Analysis failed and local fallback is disabled.");
+                alert("A análise da IA falhou. Por favor, tente novamente ou verifique o arquivo.");
+            }
+
+        } catch (error) {
+            console.error('Erro ao ler PDF:', error);
+            alert('Erro ao processar o arquivo PDF. Verifique se o arquivo é válido.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const generateReport = () => {
+        // @ts-ignore
+        const doc = new jsPDF();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 20;
+        
+        // Header
+        doc.setFontSize(18);
+        doc.text("Relatório de Análise Previdenciária", pageWidth / 2, 20, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.text(`Cliente: ${data.clientName || "Não informado"}`, margin, 35);
+        doc.text(`CPF: ${data.cpf || "Não informado"}`, margin, 42);
+        doc.text(`Data de Nascimento: ${data.birthDate ? data.birthDate.split('-').reverse().join('/') : "Não informada"}`, margin, 49);
+        doc.text(`DER: ${data.der ? data.der.split('-').reverse().join('/') : "Não informada"}`, margin, 56);
+        
+        doc.line(margin, 60, pageWidth - margin, 60);
+        
+        // Summary
+        doc.setFontSize(14);
+        doc.text("Resumo do Tempo de Contribuição", margin, 70);
+        doc.setFontSize(12);
+        doc.text(`Tempo Total Calculado: ${calculateUnifiedTime()}`, margin, 80);
+        
+        // Bonds Table
+        let y = 95;
+        doc.setFontSize(14);
+        doc.text("Detalhamento dos Vínculos", margin, y);
+        y += 10;
+        
+        doc.setFontSize(10);
+        // Table Header
+        doc.text("Seq", margin, y);
+        doc.text("Origem", margin + 10, y);
+        doc.text("Início", margin + 80, y);
+        doc.text("Fim", margin + 105, y);
+        doc.text("Tempo", margin + 130, y);
+        doc.text("Carência", margin + 160, y);
+        
+        y += 5;
+        doc.line(margin, y, pageWidth - margin, y);
+        y += 5;
+        
+        data.bonds.forEach((bond, idx) => {
+            if (y > 280) {
+                doc.addPage();
+                y = 20;
+            }
+            
+            if (bond.useInCalculation) {
+                const time = calculateTime(bond.startDate, bond.endDate, bond.activityType, data.gender);
+                const timeStr = `${time.years}a ${time.months}m ${time.days}d`;
+                
+                doc.text((idx + 1).toString(), margin, y);
+                doc.text(bond.origin.substring(0, 35), margin + 10, y);
+                doc.text(bond.startDate ? bond.startDate.split('-').reverse().join('/') : '-', margin + 80, y);
+                doc.text(bond.endDate ? bond.endDate.split('-').reverse().join('/') : '-', margin + 105, y);
+                doc.text(timeStr, margin + 130, y);
+                doc.text(bond.sc.length.toString(), margin + 160, y);
+                
+                y += 7;
+            }
+        });
+        
+        doc.save(`Relatorio_Previdenciario_${data.clientName.replace(/\s+/g, '_')}.pdf`);
+    };
+
+    const handleSave = () => {
+        if (onSaveCalculation) {
+            onSaveCalculation(data);
+            // Also save locally for the modal
+            try {
+                const saved = localStorage.getItem('social_security_calculations');
+                const calculations = saved ? JSON.parse(saved) : [];
+                const newCalc = {
+                    id: new Date().getTime().toString(),
+                    date: new Date().toISOString(),
+                    clientName: data.clientName,
+                    data: data
+                };
+                localStorage.setItem('social_security_calculations', JSON.stringify([newCalc, ...calculations]));
+            } catch (e) {
+                console.error("Error saving locally", e);
+            }
+            alert("Cálculo salvo com sucesso!");
+        } else {
+            // Fallback local save if no prop provided
+             try {
+                const saved = localStorage.getItem('social_security_calculations');
+                const calculations = saved ? JSON.parse(saved) : [];
+                const newCalc = {
+                    id: new Date().getTime().toString(),
+                    date: new Date().toISOString(),
+                    clientName: data.clientName,
+                    data: data
+                };
+                localStorage.setItem('social_security_calculations', JSON.stringify([newCalc, ...calculations]));
+                alert("Cálculo salvo localmente com sucesso!");
+            } catch (e) {
+                console.error("Error saving locally", e);
+                alert("Erro ao salvar localmente.");
+            }
+        }
+    };
+
+    const handleLoadCalculation = (loadedData: SocialSecurityData) => {
+        setData(loadedData);
+        alert("Cálculo carregado com sucesso!");
+    };
+
+    const handleSalaryChange = (bondId: string, month: string, newValue: string) => {
+        const valueFloat = parseFloat(newValue.replace(/\./g, '').replace(',', '.'));
+        
+        setData(prev => {
+            const newBonds = prev.bonds.map(bond => {
+                if (bond.id !== bondId) return bond;
+
+                const newSc = [...bond.sc];
+                const existingIndex = newSc.findIndex(s => s.month === month);
+
+                if (isNaN(valueFloat)) {
+                    // If invalid or empty, remove the entry if it exists (reset to missing)
+                    if (existingIndex !== -1) {
+                        newSc.splice(existingIndex, 1);
+                    }
+                } else {
+                    // Update or Add
+                    if (existingIndex !== -1) {
+                        newSc[existingIndex].value = valueFloat;
+                    } else {
+                        newSc.push({ month, value: valueFloat, indicators: [] });
+                    }
+                }
+                
+                // Sort SCs
+                newSc.sort((a, b) => {
+                    const [ma, ya] = a.month.split('/').map(Number);
+                    const [mb, yb] = b.month.split('/').map(Number);
+                    return (ya * 12 + ma) - (yb * 12 + mb);
+                });
+
+                return { ...bond, sc: newSc };
+            });
+            return { ...prev, bonds: newBonds };
+        });
+    };
+
+    // --- CNIS Parsing Logic (Refined) ---
+    const parseCNIS = (contentOverride?: string) => {
+        const content = contentOverride || data.cnisContent;
+        if (!content) return;
+        
+        const bonds: CNISBond[] = [];
+        
+        // 1. Extract Personal Data
+        const nameMatch = content.match(/Nome:\s+(.+?)(?=\s+Data|\s+CPF|\s+NIT|$)/);
+        const cpfMatch = content.match(/CPF:\s+([\d.-]+)/);
+        const birthMatch = content.match(/Data de nascimento:\s+(\d{2}\/\d{2}\/\d{4})/);
+        const motherMatch = content.match(/Nome da mãe:\s+(.+?)(?=\s+Página|$)/);
+
+        const newData: Partial<SocialSecurityData> = {};
+        if (nameMatch) newData.clientName = nameMatch[1].trim();
+        if (cpfMatch) newData.cpf = cpfMatch[1].trim();
+        if (birthMatch) {
+            const [d, m, y] = birthMatch[1].split('/');
+            newData.birthDate = `${y}-${m}-${d}`;
+        }
+        if (motherMatch) newData.motherName = motherMatch[1].trim();
+
+        // 2. Extract Bonds - Split by "Seq." to isolate blocks
+        // We use a regex that looks for "Seq." followed by a number to split
+        // But since split consumes the separator, we need to be careful.
+        // Instead, let's find all indices of "Seq." followed by a number
+        
+        // Alternative: The text from PDF.js often has "Seq." then "NIT" then "Código Emp." on one line
+        // and then the actual data on the next.
+        // Or "1 123.456..."
+        
+        // Let's try to find blocks starting with a sequence number at the start of a line (or after newline)
+        // Regex: \n\s*(\d+)\s+(\d{3}\.\d{5}\.\d{2}-\d)
+        
+        // Based on the OCR provided:
+        // "1 27.638.097/0001-19 LABORATORIO..."
+        // "2 124.56525.90-8 1183224483 Benefício..."
+        
+        // We will look for the pattern: Sequence Number + (NIT or CNPJ)
+        // We'll iterate through the text finding these start points.
+        
+        const bondStartRegex = /\b(\d+)\s+(?=\d{3}\.\d{5}\.\d{2}-\d|\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{2}\.\d{3}\.\d{5}\/\d{2})/g;
+        
+        let match;
+        const indices: number[] = [];
+        while ((match = bondStartRegex.exec(content)) !== null) {
+            indices.push(match.index);
+        }
+        
+        indices.forEach((startIndex, i) => {
+            const endIndex = indices[i+1] || content.length;
+            const block = content.substring(startIndex, endIndex);
+            
+            // Parse the block
+            const seqMatch = block.match(/^(\d+)/);
+            if (!seqMatch) return;
+            const seq = parseInt(seqMatch[1]);
+            
+            // Extract NIT
+            const nitMatch = block.match(/(\d{3}\.\d{5}\.\d{2}-\d)/);
+            const nit = nitMatch ? nitMatch[0] : '';
+
+            // Extract Code (CNPJ/CEI)
+            const codeMatch = block.match(/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}|\d{2}\.\d{3}\.\d{5}\/\d{2})/);
+            const code = codeMatch ? codeMatch[0] : '';
+            
+            // Extract Type
+            const typeMatch = block.match(/(Empregado|Contribuinte Individual|Facultativo|Trabalhador Avulso|Segurado Especial|Menor Aprendiz|Doméstico)/i);
+            const type = typeMatch ? typeMatch[0] : 'Indefinido';
+
+            // Extract Origin
+            let origin = 'VÍNCULO SEM NOME';
+            if (code) {
+                // Try to find the company name. It usually comes after the code.
+                // "27.638.097/0001-19 LABORATORIO CELULA..."
+                const codeIndex = block.indexOf(code);
+                if (codeIndex !== -1) {
+                    const afterCode = block.substring(codeIndex + code.length).trim();
+                    // It usually ends before "Empregado" or a date
+                    const endNameMatch = afterCode.match(/(Empregado|Contribuinte|Facultativo|Trabalhador|\d{2}\/\d{2}\/\d{4})/);
+                    if (endNameMatch && endNameMatch.index) {
+                        let rawName = afterCode.substring(0, endNameMatch.index).trim();
+                        // Cleanup common OCR artifacts
+                        rawName = rawName.replace(/Origem do Vínculo/i, '').replace(/-/g, ' ').trim();
+                        if (rawName.length > 2) origin = rawName;
+                    }
+                }
+            } else if (type === 'Contribuinte Individual' || type === 'Facultativo') {
+                origin = 'RECOLHIMENTO PRÓPRIO';
+            } else if (block.includes('Benefício')) {
+                 // Handle Benefit case
+                 const benefitMatch = block.match(/Benefício\s+([0-9]+(?:\s+-\s+[A-Z\s]+)?)/);
+                 if (benefitMatch) {
+                     origin = "BENEFÍCIO " + benefitMatch[1];
+                 } else {
+                     origin = "BENEFÍCIO INSS";
+                 }
+            }
+
+            // Extract Dates
+            // Look for dates in the first part of the block (header)
+            // We assume the first two dates found are Start and End
+            // But we must be careful not to pick up dates from the "Remunerações" section immediately
+            // The header usually ends before "Remunerações" or "Competência"
+            
+            const headerEndIndex = block.search(/(Remunerações|Competência)/);
+            const headerPart = headerEndIndex !== -1 ? block.substring(0, headerEndIndex) : block.substring(0, 500);
+            
+            // Find full dates (DD/MM/YYYY)
+            const fullDatePattern = /(\d{2}\/\d{2}\/\d{4})/g;
+            const fullDates = [...headerPart.matchAll(fullDatePattern)].map(m => ({ text: m[0], index: m.index! }));
+            
+            let startDate = '';
+            let endDate = '';
+            
+            if (fullDates.length >= 2) {
+                startDate = fullDates[0].text;
+                endDate = fullDates[1].text;
+            } else if (fullDates.length === 1) {
+                startDate = fullDates[0].text;
+            }
+
+            // Se não encontrou data fim (endDate vazio), tenta buscar por "Últ. Remun."
+            if (!endDate) {
+                // Tenta encontrar padrão MM/AAAA que apareça após a data de início
+                // Muitas vezes aparece abaixo de "Últ. Remun."
+                const startIndex = fullDates.length > 0 ? fullDates[0].index + 10 : 0;
+                const searchPart = headerPart.substring(startIndex);
+                
+                // Procura explícito por "Últ. Remun." ou apenas uma data MM/AAAA solta
+                const lastRemunLabelMatch = searchPart.match(/(?:Últ\.|Ult\.|Última|Ultima)\s*Remun\.?\s*(\d{2}\/\d{4})/i);
+                
+                if (lastRemunLabelMatch) {
+                     const lastRemun = lastRemunLabelMatch[1];
+                     const [m, y] = lastRemun.split('/').map(Number);
+                     // Fix: Use the LAST day of the month
+                     const lastDay = new Date(y, m, 0).getDate(); 
+                     endDate = `${String(lastDay).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+                } else {
+                    // Fallback: Pega a primeira data MM/AAAA que encontrar após o início
+                    const mmYyyyPattern = /(\d{2}\/\d{4})/g;
+                    const mmYyyyMatches = [...searchPart.matchAll(mmYyyyPattern)];
+                    
+                    if (mmYyyyMatches.length > 0) {
+                        const lastRemun = mmYyyyMatches[0][0];
+                        const [m, y] = lastRemun.split('/').map(Number);
+                        // Fix: Use the LAST day of the month
+                        const lastDay = new Date(y, m, 0).getDate();
+                        endDate = `${String(lastDay).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+                    }
+                }
+            }
+
+            // Extract Indicators
+            const bondIndicators: string[] = [];
+            const indMatch = block.match(/Indicadores:\s+([A-Z0-9-,\s]+)/);
+            if (indMatch) {
+                // Only take indicators if they are in the header part
+                if (block.indexOf(indMatch[0]) < (headerEndIndex !== -1 ? headerEndIndex : 500)) {
+                    const inds = indMatch[1].split(/[\s,]+/);
+                    inds.forEach(i => {
+                        if (i.length >= 3 && !bondIndicators.includes(i)) bondIndicators.push(i);
+                    });
+                }
+            }
+
+            // Extract Remunerations
+            const sc: { month: string; value: number, indicators?: string[] }[] = [];
+            // Regex for MM/YYYY followed by Value
+            // Value can be "1.234,56"
+            const remunRegex = /(\d{2}\/\d{4})\s+([\d.]*,\d{2})(?:\s+([A-Z0-9-]+))?/g;
+            
+            let remunMatch;
+            // We search in the whole block
+            while ((remunMatch = remunRegex.exec(block)) !== null) {
+                const [_, m, v, ind] = remunMatch;
+                
+                // Avoid capturing the header dates as remunerations if they match the format (unlikely for full dates, but MM/YYYY matches)
+                // Actually header dates are DD/MM/YYYY, so they won't match MM/YYYY exactly unless regex is loose.
+                // Our regex requires MM/YYYY.
+                
+                // Also check if this date is the same as start/end date (sometimes OCR duplicates)
+                // But usually Remuneration is distinct.
+                
+                const value = parseFloat(v.replace(/\./g, '').replace(',', '.'));
+                sc.push({ month: m, value, indicators: ind ? [ind] : [] });
+            }
+
+            // Sort SC
+            sc.sort((a, b) => {
+                const [ma, ya] = a.month.split('/').map(Number);
+                const [mb, yb] = b.month.split('/').map(Number);
+                return (ya * 12 + ma) - (yb * 12 + mb);
+            });
+
+            // Infer End Date if missing
+            if (!endDate && sc.length > 0) {
+                const lastRemun = sc[sc.length - 1];
+                const [m, y] = lastRemun.month.split('/').map(Number);
+                // Fix: Use the LAST day of the month
+                const lastDay = new Date(y, m, 0).getDate();
+                endDate = `${String(lastDay).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+            }
+
+            bonds.push({
+                id: Math.random().toString(),
+                seq,
+                nit,
+                code,
+                origin,
+                type,
+                startDate: startDate ? startDate.split('/').reverse().join('-') : '',
+                endDate: endDate ? endDate.split('/').reverse().join('-') : '',
+                indicators: bondIndicators,
+                sc,
+                activityType: 'common',
+                isConcomitant: false,
+                useInCalculation: true
+            });
+        });
+
+        if (bonds.length > 0) {
+            setData(prev => ({
+                ...prev,
+                ...newData,
+                bonds: [...prev.bonds, ...bonds]
+            }));
+            // alert(`${bonds.length} vínculos importados com sucesso!`);
+        } else {
+            alert("Não foi possível identificar vínculos. Verifique se o PDF é um CNIS válido.");
+        }
+    };
+
+    const handleAddBond = () => {
+        const newBond: CNISBond = {
+            id: crypto.randomUUID(),
+            seq: data.bonds.length + 1,
+            origin: 'Novo Período',
+            startDate: '',
+            endDate: '',
+            sc: [],
+            indicators: [],
+            type: 'Empregado',
+            activityType: 'common',
+            isConcomitant: false,
+            useInCalculation: true
+        };
+        setData(prev => ({ ...prev, bonds: [...prev.bonds, newBond] }));
+    };
+
+    const handleExpandAll = () => {
+        if (expandedBonds.length === data.bonds.length) {
+            setExpandedBonds([]);
+        } else {
+            setExpandedBonds(data.bonds.map(b => b.id));
+        }
+    };
+
+    const handleSortBonds = () => {
+        setData(prev => ({
+            ...prev,
+            bonds: [...prev.bonds].sort((a, b) => {
+                if (!a.startDate) return 1;
+                if (!b.startDate) return -1;
+                return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+            })
+        }));
+    };
+
+    const handleRemoveEmpty = () => {
+        setData(prev => ({
+            ...prev,
+            bonds: prev.bonds.filter(b => b.startDate || b.endDate || b.sc.length > 0)
+        }));
+    };
+
+    const handleRemoveAll = () => {
+        if (confirm('Tem certeza que deseja remover todos os períodos?')) {
+            setData(prev => ({ ...prev, bonds: [] }));
+        }
+    };
+
+    return (
+        <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto">
+            {/* Header */}
+            <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 flex justify-between items-center sticky top-0 z-10">
+                <div>
+                    <h2 className="text-lg font-bold text-slate-800 dark:text-white flex items-center gap-2">
+                        <CalculatorIcon className="h-6 w-6 text-indigo-600" />
+                        Calculadora Previdenciária
+                    </h2>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Análise de Tempo de Contribuição e RMI</p>
+                </div>
+                <div className="flex gap-2">
+                    <button className={STYLES.BTN_SECONDARY} onClick={() => setIsSavedCalculationsModalOpen(true)}>
+                        <FolderOpenIcon className="h-4 w-4" />
+                        Abrir Salvos
+                    </button>
+                    <button className={STYLES.BTN_SECONDARY} onClick={generateReport}>
+                        <ArrowDownTrayIcon className="h-4 w-4" />
+                        Exportar Relatório
+                    </button>
+                    <button className={STYLES.BTN_PRIMARY} onClick={handleSave}>
+                        <CheckCircleIcon className="h-4 w-4" />
+                        Salvar Cálculo
+                    </button>
+                </div>
+            </div>
+
+            <div className="p-6 max-w-7xl mx-auto w-full space-y-6">
+                
+                {/* STEP 1: IMPORTAÇÃO */}
+                <div className={STYLES.CARD_SECTION}>
+                    <div className={STYLES.CARD_HEADER}>
+                        <span className={STYLES.STEP_BADGE}>1</span>
+                        <h3 className={STYLES.CARD_TITLE}>Importação do CNIS <span className="text-slate-400 text-[10px] normal-case font-normal">(Opcional)</span></h3>
+                    </div>
+                    <div className="p-4">
+                        {data.bonds.length > 0 ? (
+                            <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 rounded-lg p-4 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <CheckCircleIcon className="h-6 w-6 text-emerald-600" />
+                                    <div>
+                                        <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">CNIS importado com sucesso contendo {data.bonds.length} vínculos.</p>
+                                        <p className="text-xs text-emerald-600 dark:text-emerald-400">Os dados foram carregados nos passos abaixo.</p>
+                                    </div>
                                 </div>
-                                <h3 className={`${STYLES.CARD_TITLE} text-pink-700 dark:text-pink-300 mb-0`}>Estabilidade Gestante / Rescisão Indireta</h3>
+                                <div className="flex gap-2">
+                                    <button 
+                                        className="text-xs bg-white dark:bg-slate-800 border border-emerald-200 text-emerald-700 px-3 py-2 rounded-lg hover:bg-emerald-50 transition"
+                                        onClick={() => document.getElementById('cnis-upload')?.click()}
+                                    >
+                                        Reimportar CNIS
+                                    </button>
+                                </div>
                             </div>
-                            
-                            <label className="flex items-center gap-3 cursor-pointer mb-6">
+                        ) : (
+                            <div className="flex flex-col md:flex-row gap-6 items-center">
+                                <div className="flex-1">
+                                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-emerald-500 border-dashed rounded-lg cursor-pointer bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/10 dark:hover:bg-emerald-900/20 transition-all group">
+                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                            <CloudArrowUpIcon className={`w-8 h-8 mb-2 ${isProcessing ? 'text-emerald-600 animate-bounce' : 'text-emerald-600 group-hover:scale-110 transition-transform'}`} />
+                                            <p className="text-sm font-bold text-emerald-700">Importar um novo CNIS (PDF)</p>
+                                        </div>
+                                        <input 
+                                            id="cnis-upload"
+                                            type="file" 
+                                            className="hidden" 
+                                            accept="application/pdf"
+                                            onChange={handleFileUpload}
+                                            disabled={isProcessing}
+                                        />
+                                    </label>
+                                </div>
+                                <div className="flex-1 text-sm text-slate-600 dark:text-slate-400 border-l-4 border-blue-400 pl-4 bg-blue-50 dark:bg-blue-900/10 p-3 rounded-r-lg">
+                                    <p>A importação do CNIS é opcional, mas <strong>altamente recomendada</strong>.</p>
+                                    <p className="mt-1">Importando o CNIS você não precisa digitar os períodos contributivos e os salários de contribuição já reconhecidos pelo INSS.</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* STEP 2: DADOS DO SEGURADO */}
+                <div className={STYLES.CARD_SECTION}>
+                    <div className={STYLES.CARD_HEADER}>
+                        <span className={STYLES.STEP_BADGE}>2</span>
+                        <h3 className={STYLES.CARD_TITLE}>Dados do Segurado</h3>
+                        <div className="ml-auto">
+                            <select 
+                                className="text-xs bg-white dark:bg-slate-800 border border-slate-300 rounded px-2 py-1"
+                                onChange={handleClientSelect}
+                                value={data.clientId || ''}
+                            >
+                                <option value="">Carregar de Cliente...</option>
+                                {clients.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="lg:col-span-1">
+                            <label className={STYLES.LABEL_TEXT}>CPF</label>
+                            <input 
+                                type="text" 
+                                className={STYLES.INPUT_FIELD} 
+                                value={data.cpf}
+                                onChange={e => handleInputChange('cpf', e.target.value)}
+                            />
+                        </div>
+                        <div className="lg:col-span-2">
+                            <label className={STYLES.LABEL_TEXT}>Nome do Segurado</label>
+                            <input 
+                                type="text" 
+                                className={STYLES.INPUT_FIELD} 
+                                value={data.clientName}
+                                onChange={e => handleInputChange('clientName', e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className={STYLES.LABEL_TEXT}>Data de Nascimento</label>
+                            <input 
+                                type="date" 
+                                className={`${STYLES.INPUT_FIELD} ${!data.birthDate ? 'border-red-300 bg-red-50 dark:bg-red-900/10' : ''}`}
+                                value={data.birthDate}
+                                onChange={e => handleInputChange('birthDate', e.target.value)}
+                            />
+                        </div>
+                        <div>
+                            <label className={STYLES.LABEL_TEXT}>Sexo</label>
+                            <select 
+                                className={`${STYLES.INPUT_FIELD} ${!data.gender ? 'border-red-300' : ''}`}
+                                value={data.gender}
+                                onChange={e => handleInputChange('gender', e.target.value as 'M' | 'F')}
+                            >
+                                <option value="M">Masculino</option>
+                                <option value="F">Feminino</option>
+                            </select>
+                        </div>
+                        <div className="lg:col-span-3">
+                            <label className={STYLES.LABEL_TEXT}>Nome da Mãe</label>
+                            <input 
+                                type="text" 
+                                className={STYLES.INPUT_FIELD} 
+                                value={data.motherName}
+                                onChange={e => handleInputChange('motherName', e.target.value)}
+                            />
+                        </div>
+                        
+                        <div className="lg:col-span-4 grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
+                            <label className="flex items-center space-x-2 cursor-pointer">
                                 <input 
                                     type="checkbox" 
-                                    checked={data.stability.isPregnant} 
-                                    onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, isPregnant: e.target.checked } }))} 
-                                    className="w-5 h-5 text-pink-600 bg-pink-50 dark:bg-slate-700 border-pink-300 dark:border-pink-700 rounded focus:ring-pink-500" 
+                                    checked={data.isTeacher || false}
+                                    onChange={e => setData(prev => ({ ...prev, isTeacher: e.target.checked }))}
+                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
                                 />
-                                <span className="font-bold text-slate-700 dark:text-slate-200">
-                                    Calcular indenização do período de estabilidade gestacional
-                                </span>
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Professor(a) (Magistério Exclusivo)</span>
                             </label>
+                            <label className="flex items-center space-x-2 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={data.isPcd || false}
+                                    onChange={e => setData(prev => ({ ...prev, isPcd: e.target.checked }))}
+                                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                                />
+                                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Pessoa com Deficiência (PCD)</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
 
-                            {data.stability.isPregnant && (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-8 border-l-2 border-pink-200 dark:border-pink-800">
-                                    <div>
-                                        <label className={`${STYLES.LABEL_TEXT} text-pink-700 dark:text-pink-300`}>Data do Parto (Real ou Provável)</label>
-                                        <input 
-                                            type="date" 
-                                            className={`${STYLES.INPUT_FIELD} border-pink-200 focus:ring-pink-500`} 
-                                            value={data.stability.childBirthDate} 
-                                            onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, childBirthDate: e.target.value } }))} 
-                                        />
-                                        <p className="text-xs text-slate-500 mt-1">O sistema calculará automaticamente 5 meses após esta data.</p>
-                                    </div>
-                                    <div>
-                                        <label className={`${STYLES.LABEL_TEXT} text-pink-700 dark:text-pink-300`}>Ou Data Final da Estabilidade (Manual)</label>
-                                        <input 
-                                            type="date" 
-                                            className={`${STYLES.INPUT_FIELD} border-pink-200 focus:ring-pink-500`} 
-                                            value={data.stability.endDate} 
-                                            onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, endDate: e.target.value } }))} 
-                                        />
-                                    </div>
+                {/* STEP 2.5: ANÁLISE JURÍDICA (IA) */}
+                {data.analysis && (
+                    <div className={`${STYLES.CARD_SECTION} border-l-4 border-indigo-500`}>
+                        <div className={STYLES.CARD_HEADER}>
+                            <span className={`${STYLES.STEP_BADGE} bg-indigo-600`}>IA</span>
+                            <h3 className={STYLES.CARD_TITLE}>Análise Jurídica Preliminar (Dr. Michel Felix)</h3>
+                        </div>
+                        <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 text-sm whitespace-pre-wrap font-serif">
+                            {data.analysis}
+                        </div>
+                    </div>
+                )}
+
+                {/* STEP 3: PARÂMETROS */}
+                <div className={STYLES.CARD_SECTION}>
+                    <div className={STYLES.CARD_HEADER}>
+                        <span className={STYLES.STEP_BADGE}>3</span>
+                        <h3 className={STYLES.CARD_TITLE}>Parâmetros</h3>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        <div>
+                            <label className={STYLES.LABEL_TEXT}>Concessão, planejamento previdenciário ou revisão</label>
+                            <div className="flex gap-4 mt-2">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input 
+                                        type="radio" 
+                                        name="calcType" 
+                                        checked={data.calculationType === 'concession'}
+                                        onChange={() => handleInputChange('calculationType', 'concession')}
+                                        className="text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className="text-sm text-slate-700 dark:text-slate-300">Concessão de novo benefício e/ou planejamento</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input 
+                                        type="radio" 
+                                        name="calcType" 
+                                        checked={data.calculationType === 'revision'}
+                                        onChange={() => handleInputChange('calculationType', 'revision')}
+                                        className="text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className="text-sm text-slate-700 dark:text-slate-300">Revisão de benefício já concedido</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className={STYLES.LABEL_TEXT}>Data de Entrada do Requerimento (DER)</label>
+                                <div className="flex gap-2">
+                                    <input 
+                                        type="date" 
+                                        className={STYLES.INPUT_FIELD} 
+                                        value={data.der}
+                                        onChange={e => handleInputChange('der', e.target.value)}
+                                    />
+                                    <button 
+                                        onClick={() => handleInputChange('der', new Date().toISOString().split('T')[0])}
+                                        className="whitespace-nowrap px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold rounded-lg hover:bg-slate-200 transition"
+                                    >
+                                        Hoje
+                                    </button>
                                 </div>
-                            )}
+                            </div>
+                            <div>
+                                <label className={STYLES.LABEL_TEXT}>Reafirmação da DER (Opcional)</label>
+                                <input 
+                                    type="date" 
+                                    className={STYLES.INPUT_FIELD} 
+                                    value={data.reaffirmationDer}
+                                    onChange={e => handleInputChange('reaffirmationDer', e.target.value)}
+                                />
+                            </div>
                         </div>
 
-                        <div className="md:col-span-2 flex justify-between">
-                          <button onClick={() => setActiveTab(3)} className={STYLES.BTN_SECONDARY}>Voltar</button>
-                          <button 
-                            onClick={() => calculate()} 
-                            className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-green-500/30 flex items-center gap-2 transform hover:scale-105 transition-all"
-                          >
-                             <CalculatorIcon className="h-5 w-5" /> Calcular Tudo
-                          </button>
-                      </div>
-                   </div>
-              )}
+                        <div className="flex items-start gap-2 pt-2">
+                            <input 
+                                type="checkbox" 
+                                id="smartPlanning"
+                                checked={data.smartPlanning}
+                                onChange={e => handleInputChange('smartPlanning', e.target.checked)}
+                                className="mt-1 text-indigo-600 rounded focus:ring-indigo-500"
+                            />
+                            <label htmlFor="smartPlanning" className="text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                                <span className="font-bold block">Fazer Planejamento Previdenciário Inteligente</span>
+                                <span className="text-xs text-slate-500">Se marcada, inclui na análise a situação do segurado na data de hoje, indica quando poderá se aposentar e se vale a pena continuar recolhendo.</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
 
-              {/* TAB 5: RESULTADOS */}
-              {activeTab === 5 && (
-                  <div className="animate-in zoom-in-95 duration-500 space-y-6">
-                      <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
-                          <div>
-                              <p className="text-slate-400 text-sm font-bold uppercase tracking-wider">Total Estimado Bruto</p>
-                              <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-500">
-                                  {formatCurrency(totalValue)}
-                              </p>
-                          </div>
-                          <div className="flex gap-3">
-                              <button onClick={() => setActiveTab(1)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-sm transition">
-                                  Revisar Dados
-                              </button>
-                              <button onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-lg shadow-blue-500/50 flex items-center gap-2 transition">
-                                  <ArchiveBoxIcon className="h-5 w-5" /> Salvar
-                              </button>
-                              <button onClick={() => generatePDF()} className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-bold text-sm shadow-lg shadow-indigo-500/50 flex items-center gap-2 transition">
-                                  <DocumentTextIcon className="h-5 w-5" /> PDF
-                              </button>
-                          </div>
-                      </div>
+                {/* STEP 4: VÍNCULOS (GRID) */}
+                <div className={STYLES.CARD_SECTION}>
+                    <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+                        <div className="flex gap-2">
+                            <button className={STYLES.BTN_SUCCESS} onClick={handleAddBond}>
+                                <PlusIcon className="h-4 w-4" />
+                                Adicionar novo período
+                            </button>
+                            <button className="bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-all flex items-center gap-2 text-sm" onClick={handleExpandAll}>
+                                <Cog6ToothIcon className="h-4 w-4" />
+                                {expandedBonds.length > 0 && expandedBonds.length === data.bonds.length ? 'Recolher Detalhes' : 'Salários e detalhes'}
+                            </button>
+                        </div>
+                        <div className="flex gap-2">
+                            <button className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-2 rounded hover:bg-slate-200 transition" onClick={handleSortBonds}>Ordenar períodos</button>
+                            <button className="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-2 rounded hover:bg-slate-200 transition" onClick={handleRemoveEmpty}>Remover vazios</button>
+                            <button className="text-xs bg-red-50 dark:bg-red-900/20 text-red-600 px-3 py-2 rounded hover:bg-red-100 transition" onClick={handleRemoveAll}>Remover todos</button>
+                        </div>
+                    </div>
 
-                      <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                          <table className="w-full text-left text-sm">
-                              <thead className="bg-slate-50 dark:bg-slate-900/50">
-                                  <tr>
-                                      <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-400">Descrição</th>
-                                      <th className="px-6 py-4 font-bold text-slate-600 dark:text-slate-400 text-right">Valor</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                                  {calcResult.map((item, idx) => (
-                                      <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
-                                          <td className="px-6 py-4">
-                                              <span className="block font-medium text-slate-800 dark:text-slate-200">{item.desc}</span>
-                                              <span className="text-xs text-slate-400 font-bold uppercase tracking-wide">{item.category}</span>
-                                          </td>
-                                          <td className="px-6 py-4 text-right font-mono text-slate-700 dark:text-slate-300 font-bold">
-                                              {formatCurrency(item.value)}
-                                          </td>
-                                      </tr>
-                                  ))}
-                              </tbody>
-                          </table>
-                      </div>
-                      
-                      <div className="bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-xl border border-yellow-100 dark:border-yellow-900/30 flex gap-3">
-                          <ExclamationTriangleIcon className="h-6 w-6 text-yellow-600 dark:text-yellow-500 shrink-0" />
-                          <p className="text-xs text-yellow-700 dark:text-yellow-400">
-                              <strong>Atenção:</strong> Estes valores são estimativas baseadas nos dados inseridos e não substituem o cálculo oficial de liquidação de sentença. Verifique convenções coletivas para alíquotas específicas.
-                          </p>
-                      </div>
-                  </div>
-              )}
+                    <div className="overflow-x-auto border border-slate-200 dark:border-slate-700 rounded-lg">
+                        <table className="w-full">
+                            <thead className="bg-amber-50 dark:bg-amber-900/20">
+                                <tr>
+                                    <th className={`${STYLES.TABLE_HEADER} w-10`}>Nº</th>
+                                    <th className={STYLES.TABLE_HEADER}>Nome / Anotações</th>
+                                    <th className={STYLES.TABLE_HEADER}>Início</th>
+                                    <th className={STYLES.TABLE_HEADER}>Fim</th>
+                                    <th className={STYLES.TABLE_HEADER}>Atividade / Especial</th>
+                                    <th className={STYLES.TABLE_HEADER}>Tempo</th>
+                                    <th className={STYLES.TABLE_HEADER}>Carência</th>
+                                    <th className={STYLES.TABLE_HEADER}>Opções</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-100 dark:divide-slate-700">
+                                {data.bonds.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={8} className="p-8 text-center text-slate-400 italic">
+                                            Nenhum período cadastrado. Importe o CNIS ou adicione manualmente.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    data.bonds.map((bond, idx) => {
+                                        const time = calculateTime(bond.startDate, bond.endDate, bond.activityType, data.gender);
+                                        return (
+                                            <React.Fragment key={bond.id}>
+                                                <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                                                    <td className="px-3 py-2 text-center">
+                                                        <input type="checkbox" checked={bond.useInCalculation} onChange={() => handleBondChange(bond.id, 'useInCalculation', !bond.useInCalculation)} className="rounded text-indigo-600" />
+                                                        <span className="block text-[10px] text-slate-400 font-mono">{idx + 1}</span>
+                                                    </td>
+                                                    <td className={STYLES.TABLE_CELL}>
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 dark:text-slate-200 p-0"
+                                                            value={bond.origin}
+                                                            onChange={e => handleBondChange(bond.id, 'origin', e.target.value)}
+                                                        />
+                                                        <div className="text-[10px] text-slate-400">{bond.type}</div>
+                                                    </td>
+                                                    <td className={STYLES.TABLE_CELL}>
+                                                        <input 
+                                                            type="date" 
+                                                            className="bg-transparent border border-slate-200 dark:border-slate-600 rounded px-1 py-0.5 text-xs w-28"
+                                                            value={bond.startDate}
+                                                            onChange={e => handleBondChange(bond.id, 'startDate', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className={STYLES.TABLE_CELL}>
+                                                        <input 
+                                                            type="date" 
+                                                            className="bg-transparent border border-slate-200 dark:border-slate-600 rounded px-1 py-0.5 text-xs w-28"
+                                                            value={bond.endDate}
+                                                            onChange={e => handleBondChange(bond.id, 'endDate', e.target.value)}
+                                                        />
+                                                    </td>
+                                                    <td className={STYLES.TABLE_CELL}>
+                                                        <select 
+                                                            className="bg-transparent border border-slate-200 dark:border-slate-600 rounded px-1 py-0.5 text-xs w-full max-w-[140px]"
+                                                            value={bond.activityType}
+                                                            onChange={e => handleBondChange(bond.id, 'activityType', e.target.value)}
+                                                        >
+                                                            <option value="common">Período Comum (1.0)</option>
+                                                            <option value="special_25">Especial 25 Anos ({data.gender === 'M' ? '1.4' : '1.2'})</option>
+                                                            <option value="special_20">Especial 20 Anos ({data.gender === 'M' ? '1.75' : '1.5'})</option>
+                                                            <option value="special_15">Especial 15 Anos ({data.gender === 'M' ? '2.33' : '2.0'})</option>
+                                                            <option value="rural">Rural</option>
+                                                            <option value="teacher">Professor</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className={STYLES.TABLE_CELL}>
+                                                        <div className="text-xs font-mono">
+                                                            {time.years}a {time.months}m {time.days}d
+                                                        </div>
+                                                    </td>
+                                                    <td className={STYLES.TABLE_CELL}>
+                                                        <div className="text-xs text-center">{calculateBondCarencia(bond)}</div>
+                                                    </td>
+                                                    <td className={STYLES.TABLE_CELL}>
+                                                        <div className="flex gap-1">
+                                                            <button 
+                                                                onClick={() => toggleBondExpansion(bond.id)}
+                                                                className={`p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 ${expandedBonds.includes(bond.id) ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400'}`}
+                                                                title="Ver Salários"
+                                                            >
+                                                                <TableCellsIcon className="h-4 w-4" />
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => setData(prev => ({ ...prev, bonds: prev.bonds.filter(b => b.id !== bond.id) }))}
+                                                                className="p-1 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-slate-400 hover:text-red-500"
+                                                                title="Excluir"
+                                                            >
+                                                                <TrashIcon className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {expandedBonds.includes(bond.id) && (
+                                                    <tr>
+                                                        <td colSpan={8} className="bg-slate-50 dark:bg-slate-900/50 p-4 border-b border-slate-200 dark:border-slate-700">
+                                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                <div>
+                                                                    <div className="flex justify-between items-center mb-2">
+                                                                        <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">
+                                                                            Salários de Contribuição ({bond.sc.length})
+                                                                        </h4>
+                                                                        <div className="flex gap-2 items-center">
+                                                                            {generateFullMonthlyHistory(bond).some(h => h.isMissing) && (
+                                                                                <span className="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded font-bold flex items-center gap-1">
+                                                                                    <ExclamationTriangleIcon className="h-3 w-3" />
+                                                                                    Lacunas
+                                                                                </span>
+                                                                            )}
+                                                                            <button 
+                                                                                onClick={() => {
+                                                                                    if (batchEditBondId === bond.id) {
+                                                                                        setBatchEditBondId(null);
+                                                                                    } else {
+                                                                                        setBatchEditBondId(bond.id);
+                                                                                        // Pre-fill dates if available
+                                                                                        if (bond.startDate && bond.startDate.length === 10) setBatchStart(bond.startDate.substring(3)); // DD/MM/YYYY -> MM/YYYY
+                                                                                        if (bond.endDate && bond.endDate.length === 10) setBatchEnd(bond.endDate.substring(3));
+                                                                                    }
+                                                                                }}
+                                                                                className={`text-xs px-2 py-1 rounded flex items-center gap-1 transition ${batchEditBondId === bond.id ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                                                                                title="Edição em Lote"
+                                                                            >
+                                                                                <PencilSquareIcon className="h-3.5 w-3.5" />
+                                                                                <span className="hidden sm:inline">Edição em Lote</span>
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                    
+                                                                    {batchEditBondId === bond.id && (
+                                                                        <div className="bg-slate-50 dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 mb-3 animate-in slide-in-from-top-2 duration-200">
+                                                                            <h5 className="text-xs font-bold text-indigo-600 dark:text-indigo-400 mb-2 uppercase tracking-wide flex items-center gap-1">
+                                                                                <PencilSquareIcon className="h-3 w-3" />
+                                                                                Ferramenta de Edição em Lote
+                                                                            </h5>
+                                                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+                                                                                <div>
+                                                                                    <label className="text-[10px] text-slate-500 font-bold block mb-0.5">Início (MM/AAAA)</label>
+                                                                                    <input 
+                                                                                        type="text" 
+                                                                                        value={batchStart} 
+                                                                                        onChange={(e) => setBatchStart(e.target.value)}
+                                                                                        className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                                                        placeholder="MM/AAAA"
+                                                                                    />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="text-[10px] text-slate-500 font-bold block mb-0.5">Fim (MM/AAAA)</label>
+                                                                                    <input 
+                                                                                        type="text" 
+                                                                                        value={batchEnd} 
+                                                                                        onChange={(e) => setBatchEnd(e.target.value)}
+                                                                                        className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                                                        placeholder="MM/AAAA"
+                                                                                    />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="text-[10px] text-slate-500 font-bold block mb-0.5">Valor (R$)</label>
+                                                                                    <input 
+                                                                                        type="text" 
+                                                                                        value={batchValue} 
+                                                                                        onChange={(e) => setBatchValue(e.target.value)}
+                                                                                        className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                                                        placeholder="R$ 0,00"
+                                                                                    />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <label className="text-[10px] text-slate-500 font-bold block mb-0.5">Modo</label>
+                                                                                    <select 
+                                                                                        value={batchMode} 
+                                                                                        onChange={(e) => setBatchMode(e.target.value as any)}
+                                                                                        className="w-full text-xs p-1.5 rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 outline-none focus:ring-1 focus:ring-indigo-500"
+                                                                                    >
+                                                                                        <option value="fill_gaps">Preencher Lacunas</option>
+                                                                                        <option value="overwrite">Sobrescrever Tudo</option>
+                                                                                    </select>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div className="flex justify-end gap-2">
+                                                                                <button 
+                                                                                    onClick={() => setBatchEditBondId(null)}
+                                                                                    className="px-3 py-1 text-xs text-slate-500 hover:text-slate-700 font-medium"
+                                                                                >
+                                                                                    Cancelar
+                                                                                </button>
+                                                                                <button 
+                                                                                    onClick={handleBatchEdit}
+                                                                                    className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded flex items-center gap-1 shadow-sm"
+                                                                                >
+                                                                                    <CheckCircleIcon className="h-3 w-3" />
+                                                                                    Aplicar Alterações
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="max-h-60 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded bg-white dark:bg-slate-800">
+                                                                        <table className="w-full text-xs">
+                                                                            <thead className="bg-slate-100 dark:bg-slate-700 sticky top-0">
+                                                                                <tr>
+                                                                                    <th className="px-2 py-1 text-left text-slate-500 dark:text-slate-400">Competência</th>
+                                                                                    <th className="px-2 py-1 text-right text-slate-500 dark:text-slate-400">Valor</th>
+                                                                                    <th className="px-2 py-1 text-center text-slate-500 dark:text-slate-400">Ind.</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                                                                {generateFullMonthlyHistory(bond).length > 0 ? (
+                                                                                    generateFullMonthlyHistory(bond).map((s, i) => (
+                                                                                        <tr key={s.month} className={s.isMissing ? "bg-amber-50 dark:bg-amber-900/10" : ""}>
+                                                                                            <td className="px-2 py-1 text-slate-700 dark:text-slate-300 font-mono">{s.month}</td>
+                                                                                            <td className={`px-2 py-1 text-right font-mono ${s.isMissing ? "text-amber-600 italic" : "text-slate-700 dark:text-slate-300"}`}>
+                                                                                                <input 
+                                                                                                    type="text" 
+                                                                                                    className={`w-full bg-transparent text-right border-none focus:ring-1 focus:ring-indigo-500 rounded px-1 py-0.5 ${s.isMissing ? "placeholder-amber-400" : ""}`}
+                                                                                                    placeholder="Sem registro"
+                                                                                                    defaultValue={s.isMissing ? "" : formatCurrency(s.value!).replace('R$', '').trim()}
+                                                                                                    onBlur={(e) => handleSalaryChange(bond.id, s.month, e.target.value)}
+                                                                                                />
+                                                                                            </td>
+                                                                                            <td className="px-2 py-1 text-center text-slate-500 dark:text-slate-400 text-[10px]">
+                                                                                                {s.indicators?.join(', ')}
+                                                                                            </td>
+                                                                                        </tr>
+                                                                                    ))
+                                                                                ) : (
+                                                                                    <tr>
+                                                                                        <td colSpan={3} className="px-2 py-4 text-center text-slate-400 italic">
+                                                                                            <p className="mb-2">Nenhum salário registrado. Carência calculada por data ({calculateBondCarencia(bond)} meses).</p>
+                                                                                            <button 
+                                                                                                onClick={() => {
+                                                                                                    // Generate months between start and end date
+                                                                                                    if (!bond.startDate || !bond.endDate) {
+                                                                                                        alert("Defina as datas de Início e Fim do vínculo primeiro.");
+                                                                                                        return;
+                                                                                                    }
+                                                                                                    
+                                                                                                    // Parse dates correctly (DD/MM/YYYY)
+                                                                                                    const [d1, m1, y1] = bond.startDate.split('/').map(Number);
+                                                                                                    const [d2, m2, y2] = bond.endDate.split('/').map(Number);
+                                                                                                    
+                                                                                                    const start = new Date(y1, m1 - 1, 1); // Start of month
+                                                                                                    const end = new Date(y2, m2 - 1, 1);   // Start of month
+                                                                                                    
+                                                                                                    const newSc = [];
+                                                                                                    let current = new Date(start);
+                                                                                                    
+                                                                                                    while (current <= end) {
+                                                                                                        const m = String(current.getMonth() + 1).padStart(2, '0');
+                                                                                                        const y = current.getFullYear();
+                                                                                                        newSc.push({ month: `${m}/${y}`, value: 0, indicators: [] });
+                                                                                                        current.setMonth(current.getMonth() + 1);
+                                                                                                    }
+                                                                                                    
+                                                                                                    setData(prev => ({
+                                                                                                        ...prev,
+                                                                                                        bonds: prev.bonds.map(b => b.id === bond.id ? { ...b, sc: newSc } : b)
+                                                                                                    }));
+                                                                                                }}
+                                                                                                className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded hover:bg-indigo-100 transition border border-indigo-200"
+                                                                                            >
+                                                                                                Gerar Competências (Preencher Manualmente)
+                                                                                            </button>
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                )}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                                <div>
+                                                                    <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-2">Indicadores e Detalhes</h4>
+                                                                    <div className="flex flex-wrap gap-2 mb-4">
+                                                                        {bond.indicators.length > 0 ? (
+                                                                            bond.indicators.map((ind, i) => (
+                                                                                <span key={i} className="px-2 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300 text-[10px] font-bold rounded">
+                                                                                    {ind}
+                                                                                </span>
+                                                                            ))
+                                                                        ) : (
+                                                                            <span className="text-xs text-slate-400 italic">Nenhum indicador</span>
+                                                                        )}
+                                                                    </div>
+                                                                    
+                                                                    <div className="space-y-2">
+                                                                        <label className="flex items-center gap-2 cursor-pointer">
+                                                                            <input 
+                                                                                type="checkbox" 
+                                                                                checked={bond.isConcomitant} 
+                                                                                onChange={() => handleBondChange(bond.id, 'isConcomitant', !bond.isConcomitant)}
+                                                                                className="rounded text-indigo-600 focus:ring-indigo-500" 
+                                                                            />
+                                                                            <span className="text-xs text-slate-700 dark:text-slate-300">Marcar como concomitante (apenas informativo)</span>
+                                                                        </label>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
+                                        );
+                                    })
+                                )}
+                            </tbody>
+                            <tfoot className="bg-slate-900 text-white sticky bottom-0 z-10">
+                                <tr>
+                                    <td colSpan={5} className="px-4 py-3 text-right font-bold text-sm uppercase tracking-wider">
+                                        Tempo Líquido (Unificado):
+                                    </td>
+                                    <td className="px-4 py-3 font-mono font-bold text-emerald-400 text-sm">
+                                        {unifiedTime}
+                                    </td>
+                                    <td colSpan={2} className="px-4 py-3 font-mono font-bold text-emerald-400 text-sm text-right">
+                                        Carência Total: {calculateUnifiedCarencia()} meses
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
 
-          </div>
-      </div>
-      
-    </div>
-  );
-}
+                {/* Footer Actions */}
+                <div className="flex justify-between items-center mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                    <div className="text-sm text-slate-500 dark:text-slate-400">
+                        * O cálculo é uma estimativa e não substitui a análise oficial do INSS.
+                    </div>
+                    <div className="flex gap-3">
+                        <button
+                            onClick={() => setIsAnalysisModalOpen(true)}
+                            className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md shadow-indigo-500/20 transition-all flex items-center gap-2 text-sm"
+                        >
+                            <ChartBarIcon className="h-5 w-5" />
+                            Analisar Requisitos e RMI
+                        </button>
+                        <button
+                            onClick={handleSave}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg shadow-md shadow-emerald-500/20 transition-all flex items-center gap-2 text-sm"
+                        >
+                            <CloudArrowUpIcon className="h-5 w-5" />
+                            Salvar Cálculo
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <BenefitAnalysisModal 
+                isOpen={isAnalysisModalOpen}
+                onClose={() => setIsAnalysisModalOpen(false)}
+                data={data}
+                inpcIndices={inpcIndices}
+            />
+
+            <SavedCalculationsModal
+                isOpen={isSavedCalculationsModalOpen}
+                onClose={() => setIsSavedCalculationsModalOpen(false)}
+                onLoad={handleLoadCalculation}
+            />
+        </div>
+    );
+};
+
+export default SocialSecurityCalc;
