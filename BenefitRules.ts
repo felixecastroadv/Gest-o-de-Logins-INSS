@@ -5,7 +5,7 @@ export interface BenefitResult {
     isEligible: boolean;
     missingDetails?: string;
     rmi?: number;
-    ruleType: 'Pre-Reform' | 'Transition' | 'Post-Reform';
+    ruleType: 'Pre-Reform' | 'Transition' | 'Post-Reform' | 'Transition_50' | 'Transition_100' | 'Disability' | 'Death' | 'Pre-Reform-8696' | 'Pre-Reform-Age' | 'Pre-Reform-Special' | 'Pre-Reform-Disability' | 'Pre-Reform-Teacher' | 'Pre-Reform-Death';
     category: 'aposentadorias' | 'auxilios' | 'dependentes';
 }
 
@@ -149,11 +149,12 @@ export const calculateAge = (birthDateStr: string, targetDateStr: string) => {
 // --- RMI Calculation Logic ---
 export const calculateRMI = (
     bonds: CNISBond[], 
-    ruleType: 'Pre-Reform' | 'Post-Reform' | 'Transition_50' | 'Transition_100' | 'Disability' | 'Death',
+    ruleType: 'Pre-Reform' | 'Post-Reform' | 'Transition_50' | 'Transition_100' | 'Disability' | 'Death' | 'Pre-Reform-8696' | 'Pre-Reform-Age' | 'Pre-Reform-Special' | 'Pre-Reform-Disability' | 'Pre-Reform-Teacher' | 'Pre-Reform-Death',
     gender: 'M' | 'F',
     totalYears: number,
     inpcIndices?: Map<string, number>,
-    der?: string
+    der?: string,
+    ageYears?: number // Added age for Pre-Reform Factor calculation
 ) => {
     // 1. Flatten Salaries
     let allSalaries: { date: Date, value: number, originalValue: number }[] = [];
@@ -211,15 +212,54 @@ export const calculateRMI = (
 
     let average = 0;
 
-    if (ruleType === 'Pre-Reform') {
+    if (ruleType.startsWith('Pre-Reform')) {
         // Average of 80% highest
         const cutoff = Math.floor(allSalaries.length * 0.8);
         const top80 = allSalaries.slice(0, cutoff);
         const sum = top80.reduce((acc, curr) => acc + curr.value, 0);
         average = sum / (top80.length || 1);
         
-        // Apply Fator Previdenciário (Simplified placeholder)
-        return average; 
+        // Fator Previdenciário Calculation (Simplified)
+        // Formula: f = (Tc * a) / 100 * (1 + (Id + Tc * a) / 100)
+        // Tc = Tempo de Contribuição
+        // a = Alíquota (0.31)
+        // Id = Idade
+        // Es = Expectativa de Sobrevida (IBGE 2019 for Pre-Reform)
+        
+        let fator = 1.0;
+        
+        if (ruleType === 'Pre-Reform' || ruleType === 'Pre-Reform-Teacher') {
+            // Apply Factor
+            // Using IBGE 2018 table (valid for 2019 until Nov) approx expectation
+            // Let's approximate Es based on age. 
+            // Es(50) ~ 30. Es(55) ~ 26. Es(60) ~ 22. Es(65) ~ 18.
+            // Linear approx: Es = 83 - Age (Very rough)
+            const Es = 83 - (ageYears || 60); 
+            const Tc = totalYears;
+            const a = 0.31;
+            const Id = ageYears || 60;
+            
+            fator = ((Tc * a) / Es) * (1 + (Id + (Tc * a)) / 100);
+            
+            // Teacher bonus on time? Usually teacher has reduced time requirement, factor applies normally.
+        }
+        
+        if (ruleType === 'Pre-Reform-8696' || ruleType === 'Pre-Reform-Special' || ruleType === 'Pre-Reform-Disability' || ruleType === 'Pre-Reform-Death') {
+            // 100% of Avg80, No Factor (unless factor > 1, but usually 100% benefit)
+            // For 86/96, factor is optional if > 1. Let's assume 1.0 for simplicity or "Integral".
+            fator = 1.0;
+        }
+
+        if (ruleType === 'Pre-Reform-Age') {
+            // 70% + 1% per year
+            // Fator is not applied directly, but a coefficient.
+            // But base is Avg80.
+            let coef = 0.70 + (totalYears * 0.01);
+            if (coef > 1.0) coef = 1.0;
+            return average * coef;
+        }
+
+        return average * fator; 
     } else {
         // Average of 100% (Post-Reform)
         const sum = allSalaries.reduce((acc, curr) => acc + curr.value, 0);
@@ -350,7 +390,226 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
 
     const benefits: BenefitResult[] = [];
 
-    // --- 1. APOSENTADORIAS ---
+    // --- 0. BENEFÍCIOS PRÉ-REFORMA (DIREITO ADQUIRIDO ATÉ 13/11/2019) ---
+    
+    // Calculate stats at Reform Date
+    const reformDate = '2019-11-13';
+    const timeAtReformTotal = calculateTimeForPeriod(data.bonds, reformDate, data.gender);
+    const ageAtReform = calculateAge(data.birthDate, reformDate);
+    const pointsAtReform = ageAtReform.years + timeAtReformTotal.years + (timeAtReformTotal.months / 12);
+    
+    // Calculate Carência at Reform
+    const uniqueMonthsReform = new Set<string>();
+    const reformDateObj = new Date(reformDate);
+    data.bonds.forEach(b => {
+        if (!b.useInCalculation) return;
+        if (b.sc.length > 0) {
+            b.sc.forEach(s => {
+                const [m, y] = s.month.split('/').map(Number);
+                const d = new Date(y, m - 1, 1);
+                if (d <= reformDateObj) uniqueMonthsReform.add(s.month);
+            });
+        } else if (b.startDate && b.endDate) {
+            let start = new Date(b.startDate);
+            let end = new Date(b.endDate);
+            if (end > reformDateObj) end = new Date(reformDateObj);
+            
+            let safety = 0;
+            while(start <= end && safety < 1200) {
+                if (start <= reformDateObj) {
+                    uniqueMonthsReform.add(`${start.getMonth()+1}/${start.getFullYear()}`);
+                }
+                start.setMonth(start.getMonth() + 1);
+                safety++;
+            }
+        }
+    });
+    const carenciaAtReform = uniqueMonthsReform.size;
+
+    // 0.1 Aposentadoria por Tempo de Contribuição (Regra Geral - Pré-Reforma)
+    const timeReqPre = data.gender === 'M' ? 35 : 30;
+    if (timeAtReformTotal.years >= timeReqPre && carenciaAtReform >= 180) {
+        benefits.push({
+            benefitName: "0.1) Aposentadoria por Tempo de Contribuição (Direito Adquirido - Regra Geral)",
+            isEligible: true,
+            ruleType: 'Pre-Reform',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Pre-Reform', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+        });
+    } else {
+        benefits.push({
+            benefitName: "0.1) Aposentadoria por Tempo de Contribuição (Direito Adquirido - Regra Geral)",
+            isEligible: false,
+            ruleType: 'Pre-Reform',
+            category: 'aposentadorias',
+            missingDetails: `Em 13/11/2019: Tempo ${timeAtReformTotal.years}/${timeReqPre}. Carência ${carenciaAtReform}/180.`
+        });
+    }
+
+    // 0.2 Aposentadoria por Tempo de Contribuição (Regra 86/96 - Pré-Reforma)
+    const pointsReqPre = data.gender === 'M' ? 96 : 86;
+    if (timeAtReformTotal.years >= timeReqPre && pointsAtReform >= pointsReqPre && carenciaAtReform >= 180) {
+        benefits.push({
+            benefitName: "0.2) Aposentadoria por Tempo de Contribuição (Direito Adquirido - Pontos 86/96)",
+            isEligible: true,
+            ruleType: 'Pre-Reform-8696',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Pre-Reform-8696', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+        });
+    } else {
+        benefits.push({
+            benefitName: "0.2) Aposentadoria por Tempo de Contribuição (Direito Adquirido - Pontos 86/96)",
+            isEligible: false,
+            ruleType: 'Pre-Reform-8696',
+            category: 'aposentadorias',
+            missingDetails: `Em 13/11/2019: Pontos ${pointsAtReform.toFixed(1)}/${pointsReqPre}. Tempo ${timeAtReformTotal.years}/${timeReqPre}.`
+        });
+    }
+
+    // 0.3 Aposentadoria por Idade Urbana (Pré-Reforma)
+    const ageReqPre = data.gender === 'M' ? 65 : 60;
+    if (ageAtReform.years >= ageReqPre && carenciaAtReform >= 180) {
+        benefits.push({
+            benefitName: "0.3) Aposentadoria por Idade Urbana (Direito Adquirido)",
+            isEligible: true,
+            ruleType: 'Pre-Reform-Age',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Pre-Reform-Age', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+        });
+    } else {
+        benefits.push({
+            benefitName: "0.3) Aposentadoria por Idade Urbana (Direito Adquirido)",
+            isEligible: false,
+            ruleType: 'Pre-Reform-Age',
+            category: 'aposentadorias',
+            missingDetails: `Em 13/11/2019: Idade ${ageAtReform.years}/${ageReqPre}. Carência ${carenciaAtReform}/180.`
+        });
+    }
+
+    // 0.4 Aposentadoria Especial (Pré-Reforma)
+    // Need to calculate special time at reform
+    let specialTime15Pre = 0;
+    let specialTime20Pre = 0;
+    let specialTime25Pre = 0;
+    
+    data.bonds.forEach(b => {
+        if (!b.useInCalculation || !b.startDate) return;
+        const start = new Date(b.startDate);
+        let end = b.endDate ? new Date(b.endDate) : new Date();
+        if (end > reformDateObj) end = new Date(reformDateObj);
+        if (start > reformDateObj) return;
+
+        const diff = end.getTime() - start.getTime();
+        const days = diff / (1000 * 60 * 60 * 24);
+        const years = days / 365.25;
+        
+        if (b.activityType === 'special_15') specialTime15Pre += years;
+        if (b.activityType === 'special_20') specialTime20Pre += years;
+        if (b.activityType === 'special_25') specialTime25Pre += years;
+    });
+
+    if (specialTime25Pre >= 25) {
+         benefits.push({
+            benefitName: "0.4a) Aposentadoria Especial (Direito Adquirido - 25 Anos)",
+            isEligible: true,
+            ruleType: 'Pre-Reform-Special',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Pre-Reform-Special', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+        });
+    } else if (specialTime20Pre >= 20) {
+         benefits.push({
+            benefitName: "0.4b) Aposentadoria Especial (Direito Adquirido - 20 Anos)",
+            isEligible: true,
+            ruleType: 'Pre-Reform-Special',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Pre-Reform-Special', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+        });
+    } else if (specialTime15Pre >= 15) {
+         benefits.push({
+            benefitName: "0.4c) Aposentadoria Especial (Direito Adquirido - 15 Anos)",
+            isEligible: true,
+            ruleType: 'Pre-Reform-Special',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Pre-Reform-Special', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+        });
+    } else {
+         benefits.push({
+            benefitName: "0.4) Aposentadoria Especial (Direito Adquirido)",
+            isEligible: false,
+            ruleType: 'Pre-Reform-Special',
+            category: 'aposentadorias',
+            missingDetails: `Em 13/11/2019: Tempo Especial (25): ${specialTime25Pre.toFixed(1)}/25.`
+        });
+    }
+
+    // 0.5 Aposentadoria do Professor (Pré-Reforma)
+    const teacherTimeReqPre = data.gender === 'M' ? 30 : 25;
+    if (data.isTeacher) {
+        if (timeAtReformTotal.years >= teacherTimeReqPre) {
+             benefits.push({
+                benefitName: "0.5) Aposentadoria do Professor (Direito Adquirido)",
+                isEligible: true,
+                ruleType: 'Pre-Reform-Teacher',
+                category: 'aposentadorias',
+                rmi: calculateRMI(data.bonds, 'Pre-Reform-Teacher', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+            });
+        } else {
+             benefits.push({
+                benefitName: "0.5) Aposentadoria do Professor (Direito Adquirido)",
+                isEligible: false,
+                ruleType: 'Pre-Reform-Teacher',
+                category: 'aposentadorias',
+                missingDetails: `Em 13/11/2019: Tempo Professor ${timeAtReformTotal.years}/${teacherTimeReqPre}.`
+            });
+        }
+    }
+
+    // Check Insured Quality at Reform Date (for Pre-Reform benefits)
+    const { hasQuality: hasQualityAtReform } = checkInsuredQuality(data.bonds, reformDate);
+
+    // 0.6 Aposentadoria por Invalidez (Pré-Reforma)
+    if (carenciaAtReform >= 12 && hasQualityAtReform) { 
+         benefits.push({
+            benefitName: "0.6) Aposentadoria por Invalidez (Direito Adquirido)",
+            isEligible: true, // Potential
+            ruleType: 'Pre-Reform-Disability',
+            category: 'aposentadorias',
+            rmi: calculateRMI(data.bonds, 'Pre-Reform-Disability', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years),
+            missingDetails: "Requer comprovação de incapacidade permanente antes de 13/11/2019."
+        });
+    } else {
+         benefits.push({
+            benefitName: "0.6) Aposentadoria por Invalidez (Direito Adquirido)",
+            isEligible: false,
+            ruleType: 'Pre-Reform-Disability',
+            category: 'aposentadorias',
+            missingDetails: !hasQualityAtReform 
+                ? "Segurado sem qualidade em 13/11/2019." 
+                : `Carência em 13/11/2019: ${carenciaAtReform}/12.`
+        });
+    }
+
+    // 0.7 Pensão por Morte (Pré-Reforma)
+    if (hasQualityAtReform) {
+        benefits.push({
+            benefitName: "0.7) Pensão por Morte (Óbito antes de 13/11/2019)",
+            isEligible: true, // Potential
+            ruleType: 'Pre-Reform-Death',
+            category: 'dependentes',
+            rmi: calculateRMI(data.bonds, 'Pre-Reform-Death', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years),
+            missingDetails: "Requer óbito do instituidor antes de 13/11/2019."
+        });
+    } else {
+        benefits.push({
+            benefitName: "0.7) Pensão por Morte (Óbito antes de 13/11/2019)",
+            isEligible: false,
+            ruleType: 'Pre-Reform-Death',
+            category: 'dependentes',
+            missingDetails: "Instituidor sem qualidade de segurado em 13/11/2019."
+        });
+    }
+
+    // --- 1. APOSENTADORIAS (POST-REFORM) ---
 
     // 1.1 Aposentadoria por idade (Filiados até 13/11/2019)
     const ageReqOld = data.gender === 'M' ? 65 : 62;
