@@ -102,9 +102,9 @@ interface LaborData {
 
   // Estabilidade / Indenizações
   stability: {
-    isPregnant: boolean;
-    childBirthDate: string; // Para calcular 5 meses após parto
-    endDate: string; // Ou data fim manual
+    active: boolean;
+    type: 'gestante' | 'acidentaria' | 'cipa' | 'outros';
+    endDate: string; // Data fim da estabilidade
   };
   
   // Multas e Outros
@@ -153,7 +153,7 @@ const INITIAL_LABOR_DATA: LaborData = {
   wageGap: [],
   overtime: [],
   cctRights: [],
-  stability: { isPregnant: false, childBirthDate: '', endDate: '' },
+  stability: { active: false, type: 'gestante', endDate: '' },
   applyFine477: false,
   applyFine467: false,
   moralDamages: 0,
@@ -544,23 +544,24 @@ const calculateLaborResults = (calcData: LaborData) => {
         }
     });
 
-    // 8. Estabilidade Gestante
-    if (calcData.stability.isPregnant && salary) {
-        let stabEnd = parseDate(calcData.stability.endDate);
+    // 8. Estabilidade Provisória
+    let stabilityFgts = 0;
+    if (calcData.stability.active && salary) {
+        const stabEnd = parseDate(calcData.stability.endDate);
         const stabStart = end || new Date();
         
-        if (!stabEnd && calcData.stability.childBirthDate) {
-            const birth = parseDate(calcData.stability.childBirthDate);
-            if (birth) {
-                stabEnd = new Date(birth);
-                stabEnd.setMonth(stabEnd.getMonth() + 5);
-            }
-        }
-
         if (stabEnd && stabEnd > stabStart) {
             const monthsStab = diffMonths(stabStart, stabEnd);
             const stabValue = salary * monthsStab;
-            results.push({ desc: `Indenização Estabilidade Gestante (${monthsStab} meses)`, value: stabValue, category: 'Indenizações' });
+            const typeLabel = calcData.stability.type === 'gestante' ? 'Gestante' : 
+                              calcData.stability.type === 'acidentaria' ? 'Acidentária' : 
+                              calcData.stability.type === 'cipa' ? 'CIPA' : 'Outros';
+            
+            results.push({ desc: `Indenização Estabilidade ${typeLabel} (${monthsStab} meses)`, value: stabValue, category: 'Indenizações' });
+            
+            // FGTS sobre estabilidade (Súmula 396 TST - período de estabilidade conta como tempo de serviço)
+            stabilityFgts = stabValue * 0.08;
+            results.push({ desc: `FGTS sobre Estabilidade (${monthsStab} meses)`, value: stabilityFgts, category: 'FGTS' });
         }
     }
 
@@ -575,18 +576,16 @@ const calculateLaborResults = (calcData: LaborData) => {
 
     // 10. FGTS + 40%
     let totalFgtsBase = Number(calcData.hasFgtsBalance) || 0;
+    let isEstimated = false;
     
     // Se não tem saldo informado, estima com base no histórico ou salário atual
     if (totalFgtsBase === 0 && start && end) {
         const monthsWorked = diffMonths(start, end);
-        // Se tiver histórico, usa média ponderada (simplificado: usa salário base atual para tudo se não tiver histórico complexo)
-        // Melhoria: Iterar meses e pegar salário vigente
+        // Se tiver histórico, usa média ponderada
         if (calcData.salaryHistory.length > 0) {
-            // Lógica complexa de histórico: para cada mês, acha o salário
             let estimatedFgts = 0;
             let currentDate = new Date(start);
             while (currentDate < end) {
-                const currentMonthStr = currentDate.toISOString().slice(0, 7); // YYYY-MM
                 // Acha salário vigente
                 const hist = calcData.salaryHistory.find(h => {
                     const hStart = new Date(h.startDate);
@@ -602,11 +601,12 @@ const calculateLaborResults = (calcData: LaborData) => {
              // Estima com salário atual
              totalFgtsBase = (salary * 0.08) * monthsWorked;
         }
+        isEstimated = true;
     }
 
+    let unpaidFgts = 0;
     if (calcData.unpaidFgtsMonths > 0 && salary) {
-        // Usa salário atual para meses não pagos (padrão)
-        const unpaidFgts = (salary * 0.08) * calcData.unpaidFgtsMonths;
+        unpaidFgts = (salary * 0.08) * calcData.unpaidFgtsMonths;
         results.push({ desc: `FGTS Não Depositado (${calcData.unpaidFgtsMonths} meses)`, value: unpaidFgts, category: 'FGTS' });
     }
     
@@ -614,7 +614,17 @@ const calculateLaborResults = (calcData: LaborData) => {
         .filter(r => ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais', 'Reflexos', 'Convenção Coletiva'].includes(r.category))
         .reduce((sum, item) => sum + item.value, 0);
     
-    const totalFgtsParaMulta = totalFgtsBase + (rescisaoFgtsBase * 0.08);
+    // Base para multa de 40%:
+    // 1. Total depositado (ou estimado para todo o período)
+    // 2. FGTS não depositado (se o total não foi estimado)
+    // 3. FGTS sobre estabilidade (se houver)
+    // 4. FGTS sobre verbas rescisórias
+    let totalFgtsParaMulta = totalFgtsBase + stabilityFgts + (rescisaoFgtsBase * 0.08);
+    
+    if (!isEstimated) {
+        // Se o saldo foi informado pelo usuário, somamos o que não foi depositado
+        totalFgtsParaMulta += unpaidFgts;
+    }
 
     if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta' || calcData.terminationReason === 'sem_anotacao') {
         const fine40 = totalFgtsParaMulta * 0.4;
@@ -1832,41 +1842,45 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
                                     </svg>
                                 </div>
-                                <h3 className={`${STYLES.CARD_TITLE} text-pink-700 dark:text-pink-300 mb-0`}>Estabilidade Gestante / Rescisão Indireta</h3>
+                                <h3 className={`${STYLES.CARD_TITLE} text-pink-700 dark:text-pink-300 mb-0`}>Estabilidade Provisória</h3>
                             </div>
                             
                             <label className="flex items-center gap-3 cursor-pointer mb-6">
                                 <input 
                                     type="checkbox" 
-                                    checked={data.stability.isPregnant} 
-                                    onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, isPregnant: e.target.checked } }))} 
+                                    checked={data.stability.active} 
+                                    onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, active: e.target.checked } }))} 
                                     className="w-5 h-5 text-pink-600 bg-pink-50 dark:bg-slate-700 border-pink-300 dark:border-pink-700 rounded focus:ring-pink-500" 
                                 />
                                 <span className="font-bold text-slate-700 dark:text-slate-200">
-                                    Calcular indenização do período de estabilidade gestacional
+                                    Havia Estabilidade Provisória no momento da rescisão?
                                 </span>
                             </label>
 
-                            {data.stability.isPregnant && (
+                            {data.stability.active && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pl-8 border-l-2 border-pink-200 dark:border-pink-800">
                                     <div>
-                                        <label className={`${STYLES.LABEL_TEXT} text-pink-700 dark:text-pink-300`}>Data do Parto (Real ou Provável)</label>
-                                        <input 
-                                            type="date" 
-                                            className={`${STYLES.INPUT_FIELD} border-pink-200 focus:ring-pink-500`} 
-                                            value={data.stability.childBirthDate} 
-                                            onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, childBirthDate: e.target.value } }))} 
-                                        />
-                                        <p className="text-xs text-slate-500 mt-1">O sistema calculará automaticamente 5 meses após esta data.</p>
+                                        <label className={`${STYLES.LABEL_TEXT} text-pink-700 dark:text-pink-300`}>Tipo de Estabilidade</label>
+                                        <select 
+                                            className={`${STYLES.INPUT_FIELD} border-pink-200 focus:ring-pink-500`}
+                                            value={data.stability.type}
+                                            onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, type: e.target.value as any } }))}
+                                        >
+                                            <option value="gestante">Gestante (5 meses após parto)</option>
+                                            <option value="acidentaria">Acidentária (12 meses após alta)</option>
+                                            <option value="cipa">CIPA (Até 2 anos após mandato)</option>
+                                            <option value="outros">Outros / Dirigente Sindical</option>
+                                        </select>
                                     </div>
                                     <div>
-                                        <label className={`${STYLES.LABEL_TEXT} text-pink-700 dark:text-pink-300`}>Ou Data Final da Estabilidade (Manual)</label>
+                                        <label className={`${STYLES.LABEL_TEXT} text-pink-700 dark:text-pink-300`}>Data Final da Estabilidade</label>
                                         <input 
                                             type="date" 
                                             className={`${STYLES.INPUT_FIELD} border-pink-200 focus:ring-pink-500`} 
                                             value={data.stability.endDate} 
                                             onChange={e => setData(prev => ({ ...prev, stability: { ...prev.stability, endDate: e.target.value } }))} 
                                         />
+                                        <p className="text-xs text-slate-500 mt-1">Informe a data em que terminaria a estabilidade.</p>
                                     </div>
                                 </div>
                             )}
@@ -1875,7 +1889,12 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                         <div className="md:col-span-2 flex justify-between">
                           <button onClick={() => setActiveTab(3)} className={STYLES.BTN_SECONDARY}>Voltar</button>
                           <button 
-                            onClick={() => calculate()} 
+                            onClick={() => {
+                                const results = calculateLaborResults(data);
+                                setCalcResult(results);
+                                setTotalValue(results.reduce((acc, curr) => acc + curr.value, 0));
+                                setActiveTab(5);
+                            }} 
                             className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-green-500/30 flex items-center gap-2 transform hover:scale-105 transition-all"
                           >
                              <CalculatorIcon className="h-5 w-5" /> Calcular Tudo
