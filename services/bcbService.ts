@@ -82,18 +82,29 @@ export const getCorrectionFactor = (
     
     const startFactor = indicesMap.get(contributionMonth);
     
-    // For the End Factor, we usually use the index of the month PRIOR to the DER, 
-    // because the DER month's inflation might not be out yet, or the rule says "up to previous month".
-    // Let's try to get the DER month first, if not, go back 1 month.
+    // For the End Factor, we usually use the index of the month PRIOR to the DER.
+    // If the DER is in the future (relative to API data), we should use the LATEST available index.
+    
     let endFactor = indicesMap.get(derMonth);
     
     if (!endFactor) {
-        // Try previous month
+        // Try previous month first (standard rule)
         const [m, y] = derMonth.split('/').map(Number);
         let prevDate = new Date(y, m - 1, 1);
         prevDate.setMonth(prevDate.getMonth() - 1);
         const prevMonthStr = `${prevDate.getMonth() + 1}/${prevDate.getFullYear()}`;
         endFactor = indicesMap.get(prevMonthStr);
+
+        // If still not found, it might be a future date beyond our data.
+        // Use the latest available index in the map.
+        if (!endFactor && indicesMap.size > 0) {
+            // Map preserves insertion order? No, but we processed it sorted.
+            // Let's find the max value or just the last entry if we trust insertion order from processINPCIndices
+            // processINPCIndices sorts by date, so the last set value is the latest.
+            const keys = Array.from(indicesMap.keys());
+            const lastKey = keys[keys.length - 1];
+            endFactor = indicesMap.get(lastKey);
+        }
     }
 
     if (!startFactor || !endFactor) {
