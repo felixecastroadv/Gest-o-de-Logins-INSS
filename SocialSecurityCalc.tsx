@@ -59,6 +59,10 @@ export interface SocialSecurityData {
     // New flags for benefit analysis
     isTeacher?: boolean;
     isPcd?: boolean;
+    
+    // Custom Minimum Wage
+    customMinWage?: number;
+    customMinWageDate?: string;
 }
 
 export interface SocialSecurityCalcProps {
@@ -92,7 +96,9 @@ const INITIAL_SS_DATA: SocialSecurityData = {
     calculationType: 'concession',
     der: new Date().toISOString().split('T')[0],
     reaffirmationDer: '',
-    smartPlanning: false
+    smartPlanning: false,
+    customMinWage: 1621.00, // Default for 2026 as requested
+    customMinWageDate: '2026-01-01'
 };
 
 const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSaveCalculation }) => {
@@ -1334,6 +1340,29 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                     className={STYLES.INPUT_FIELD} 
                                     value={data.reaffirmationDer}
                                     onChange={e => handleInputChange('reaffirmationDer', e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-700">
+                            <div>
+                                <label className={STYLES.LABEL_TEXT}>Salário Mínimo Personalizado (R$)</label>
+                                <input 
+                                    type="number" 
+                                    step="0.01"
+                                    className={STYLES.INPUT_FIELD} 
+                                    value={data.customMinWage || 1621.00}
+                                    onChange={e => handleInputChange('customMinWage', parseFloat(e.target.value))}
+                                />
+                                <p className="text-[10px] text-slate-400 mt-1">Valor padrão para 2026: R$ 1.621,00</p>
+                            </div>
+                            <div>
+                                <label className={STYLES.LABEL_TEXT}>Data de Vigência do Novo Salário</label>
+                                <input 
+                                    type="date" 
+                                    className={STYLES.INPUT_FIELD} 
+                                    value={data.customMinWageDate || '2026-01-01'}
+                                    onChange={e => handleInputChange('customMinWageDate', e.target.value)}
                                 />
                             </div>
                         </div>
