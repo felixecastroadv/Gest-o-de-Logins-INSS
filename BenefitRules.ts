@@ -170,12 +170,16 @@ export const calculateRMI = (
     inpcIndices?: Map<string, number>,
     der?: string,
     ageYears?: number,
-    customMinWage?: number
+    customMinWage?: number,
+    salaryLimitDate?: string
 ) => {
     // 1. Flatten Salaries
     let allSalaries: { date: Date, value: number, originalValue: number, correctionFactor: number, monthStr: string }[] = [];
     
     let derMonthStr = "";
+    const derDate = der ? new Date(der) : new Date();
+    const limitDate = salaryLimitDate ? new Date(salaryLimitDate) : new Date(2100, 0, 1);
+
     if (der) {
         const [y, m, d] = der.split('-').map(Number);
         derMonthStr = `${m}/${y}`;
@@ -188,8 +192,8 @@ export const calculateRMI = (
             const [mes, ano] = s.month.split('/').map(Number);
             const date = new Date(ano, mes - 1, 1);
             
-            // Filter >= July 1994
-            if (date >= new Date(1994, 6, 1)) {
+            // Filter >= July 1994 AND <= DER AND <= salaryLimitDate
+            if (date >= new Date(1994, 6, 1) && date <= derDate && date <= limitDate) {
                 let correctedValue = s.value;
                 let correctionFactor = 1.0;
 
@@ -512,7 +516,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: true,
             ruleType: 'Pre-Reform',
             category: 'aposentadorias',
-            ...calculateRMI(data.bonds, 'Pre-Reform', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+            ...calculateRMI(data.bonds, 'Pre-Reform', data.gender, timeAtReformTotal.years, inpcIndices, der, ageAtReform.years, data.customMinWage, reformDate)
         });
     } else {
         benefits.push({
@@ -532,7 +536,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: true,
             ruleType: 'Pre-Reform-8696',
             category: 'aposentadorias',
-            ...calculateRMI(data.bonds, 'Pre-Reform-8696', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+            ...calculateRMI(data.bonds, 'Pre-Reform-8696', data.gender, timeAtReformTotal.years, inpcIndices, der, ageAtReform.years, data.customMinWage, reformDate)
         });
     } else {
         benefits.push({
@@ -552,7 +556,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: true,
             ruleType: 'Pre-Reform-Age',
             category: 'aposentadorias',
-            ...calculateRMI(data.bonds, 'Pre-Reform-Age', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+            ...calculateRMI(data.bonds, 'Pre-Reform-Age', data.gender, timeAtReformTotal.years, inpcIndices, der, ageAtReform.years, data.customMinWage, reformDate)
         });
     } else {
         benefits.push({
@@ -592,7 +596,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: true,
             ruleType: 'Pre-Reform-Special',
             category: 'aposentadorias',
-            ...calculateRMI(data.bonds, 'Pre-Reform-Special', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+            ...calculateRMI(data.bonds, 'Pre-Reform-Special', data.gender, timeAtReformTotal.years, inpcIndices, der, ageAtReform.years, data.customMinWage, reformDate)
         });
     } else if (specialTime20Pre >= 20) {
          benefits.push({
@@ -600,7 +604,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: true,
             ruleType: 'Pre-Reform-Special',
             category: 'aposentadorias',
-            ...calculateRMI(data.bonds, 'Pre-Reform-Special', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+            ...calculateRMI(data.bonds, 'Pre-Reform-Special', data.gender, timeAtReformTotal.years, inpcIndices, der, ageAtReform.years, data.customMinWage, reformDate)
         });
     } else if (specialTime15Pre >= 15) {
          benefits.push({
@@ -608,7 +612,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: true,
             ruleType: 'Pre-Reform-Special',
             category: 'aposentadorias',
-            ...calculateRMI(data.bonds, 'Pre-Reform-Special', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+            ...calculateRMI(data.bonds, 'Pre-Reform-Special', data.gender, timeAtReformTotal.years, inpcIndices, der, ageAtReform.years, data.customMinWage, reformDate)
         });
     } else {
          benefits.push({
@@ -629,7 +633,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
                 isEligible: true,
                 ruleType: 'Pre-Reform-Teacher',
                 category: 'aposentadorias',
-                ...calculateRMI(data.bonds, 'Pre-Reform-Teacher', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years)
+                ...calculateRMI(data.bonds, 'Pre-Reform-Teacher', data.gender, timeAtReformTotal.years, inpcIndices, der, ageAtReform.years, data.customMinWage, reformDate)
             });
         } else {
              benefits.push({
@@ -652,7 +656,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: true, // Potential
             ruleType: 'Pre-Reform-Disability',
             category: 'aposentadorias',
-            ...calculateRMI(data.bonds, 'Pre-Reform-Disability', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years),
+            ...calculateRMI(data.bonds, 'Pre-Reform-Disability', data.gender, timeAtReformTotal.years, inpcIndices, der, ageAtReform.years, data.customMinWage, reformDate),
             missingDetails: "Requer comprovação de incapacidade permanente antes de 13/11/2019."
         });
     } else {
@@ -674,7 +678,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: true, // Potential
             ruleType: 'Pre-Reform-Death',
             category: 'dependentes',
-            ...calculateRMI(data.bonds, 'Pre-Reform-Death', data.gender, timeAtReformTotal.years, inpcIndices, reformDate, ageAtReform.years),
+            ...calculateRMI(data.bonds, 'Pre-Reform-Death', data.gender, timeAtReformTotal.years, inpcIndices, der, ageAtReform.years, data.customMinWage, reformDate),
             missingDetails: "Requer óbito do instituidor antes de 13/11/2019."
         });
     } else {
