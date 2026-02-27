@@ -14,6 +14,7 @@ import { formatCurrency } from './utils';
 import BenefitAnalysisModal from './Components/BenefitAnalysisModal';
 import SavedCalculationsModal from './Components/SavedCalculationsModal';
 import { fetchINPCData, processINPCIndices } from './services/bcbService';
+import { fetchIBGELifeExpectancy, IBGELifeExpectancy } from './services/ibgeService';
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -30,7 +31,7 @@ export interface CNISBond {
     startDate: string;
     endDate: string;
     indicators: string[];
-    sc: { month: string; value: number, indicators?: string[] }[];
+    sc: { month: string; value: number, indicators?: string[], isMissing?: boolean }[];
     
     // New fields for the calculator
     activityType: string; // 'common', 'special_25', etc.
@@ -213,18 +214,19 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     const [isAnalysisModalOpen, setIsAnalysisModalOpen] = useState(false);
     const [isSavedCalculationsModalOpen, setIsSavedCalculationsModalOpen] = useState(false);
     const [inpcIndices, setInpcIndices] = useState<Map<string, number> | undefined>(undefined);
+    const [ibgeTable, setIbgeTable] = useState<IBGELifeExpectancy[] | undefined>(undefined);
 
     useEffect(() => {
         const loadIndices = async () => {
             try {
-                // Check local storage first
-                const cached = localStorage.getItem('inpc_indices_cache');
-                const cachedDate = localStorage.getItem('inpc_indices_date');
+                // Check local storage first for INPC
+                const cachedInpc = localStorage.getItem('inpc_indices_cache');
+                const cachedInpcDate = localStorage.getItem('inpc_indices_date');
                 const now = new Date().getTime();
                 
                 // Cache for 24 hours
-                if (cached && cachedDate && (now - parseInt(cachedDate) < 24 * 60 * 60 * 1000)) {
-                    const parsed = JSON.parse(cached);
+                if (cachedInpc && cachedInpcDate && (now - parseInt(cachedInpcDate) < 24 * 60 * 60 * 1000)) {
+                    const parsed = JSON.parse(cachedInpc);
                     setInpcIndices(processINPCIndices(parsed));
                 } else {
                     const data = await fetchINPCData();
@@ -232,9 +234,21 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     localStorage.setItem('inpc_indices_cache', JSON.stringify(data));
                     localStorage.setItem('inpc_indices_date', now.toString());
                 }
+
+                // Check local storage for IBGE
+                const cachedIbge = localStorage.getItem('ibge_table_cache');
+                const cachedIbgeDate = localStorage.getItem('ibge_table_date');
+                
+                if (cachedIbge && cachedIbgeDate && (now - parseInt(cachedIbgeDate) < 24 * 60 * 60 * 1000)) {
+                    setIbgeTable(JSON.parse(cachedIbge));
+                } else {
+                    const data = await fetchIBGELifeExpectancy();
+                    setIbgeTable(data);
+                    localStorage.setItem('ibge_table_cache', JSON.stringify(data));
+                    localStorage.setItem('ibge_table_date', now.toString());
+                }
             } catch (e) {
-                console.error("Failed to load INPC indices", e);
-                // Fallback or just ignore (calculation will proceed without correction)
+                console.error("Failed to load indices or IBGE table", e);
             }
         };
         loadIndices();
@@ -669,6 +683,24 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         }
     };
 
+    const calculateUnifiedTime = () => {
+        let totalDays = 0;
+        data.bonds.forEach(bond => {
+            if (bond.useInCalculation && bond.startDate && bond.endDate) {
+                const start = bond.startDate.split('-').reverse().join('/');
+                const end = bond.endDate.split('-').reverse().join('/');
+                const time = calculateTime(start, end, bond.activityType, data.gender);
+                totalDays += (time.years * 365) + (time.months * 30) + time.days;
+            }
+        });
+        
+        const years = Math.floor(totalDays / 365);
+        const months = Math.floor((totalDays % 365) / 30);
+        const days = Math.floor((totalDays % 365) % 30);
+        
+        return `${years}a ${months}m ${days}d`;
+    };
+
     const generateReport = () => {
         // @ts-ignore
         const doc = new jsPDF();
@@ -1053,6 +1085,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         const newBond: CNISBond = {
             id: crypto.randomUUID(),
             seq: data.bonds.length + 1,
+            nit: '',
+            code: '',
             origin: 'Novo Período',
             startDate: '',
             endDate: '',
@@ -1649,7 +1683,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                                                                                     const start = new Date(y1, m1 - 1, 1); // Start of month
                                                                                                     const end = new Date(y2, m2 - 1, 1);   // Start of month
                                                                                                     
-                                                                                                    const newSc = [];
+                                                                                                    const newSc: { month: string; value: number; indicators: string[] }[] = [];
                                                                                                     let current = new Date(start);
                                                                                                     
                                                                                                     while (current <= end) {
