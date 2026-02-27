@@ -3,11 +3,14 @@ import { SocialSecurityData } from '../SocialSecurityCalc';
 import { analyzeBenefits, BenefitResult } from '../BenefitRules';
 import { CheckCircleIcon, XCircleIcon, CalculatorIcon, DocumentTextIcon } from '@heroicons/react/24/outline';
 
+import { IBGELifeExpectancy } from '../services/ibgeService';
+
 interface BenefitAnalysisModalProps {
     isOpen: boolean;
     onClose: () => void;
     data: SocialSecurityData;
     inpcIndices?: Map<string, number>;
+    ibgeTable?: IBGELifeExpectancy[];
 }
 
 interface BenefitCardProps {
@@ -150,14 +153,14 @@ const RMIDetailView = ({ details, onClose }: { details: NonNullable<BenefitResul
     );
 };
 
-const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onClose, data, inpcIndices }) => {
+const BenefitAnalysisModal: React.FC<BenefitAnalysisModalProps> = ({ isOpen, onClose, data, inpcIndices, ibgeTable }) => {
     if (!isOpen) return null;
 
     const [selectedCategory, setSelectedCategory] = useState<'aposentadorias' | 'auxilios' | 'dependentes'>('aposentadorias');
     const [selectedBenefitForDetail, setSelectedBenefitForDetail] = useState<BenefitResult | null>(null);
     
     // Run analysis
-    const result = useMemo(() => analyzeBenefits(data, inpcIndices), [data, inpcIndices]);
+    const result = useMemo(() => analyzeBenefits(data, inpcIndices, ibgeTable), [data, inpcIndices, ibgeTable]);
 
     // Filter benefits by category
     const filteredBenefits = useMemo(() => {
