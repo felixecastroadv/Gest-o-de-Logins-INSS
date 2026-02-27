@@ -173,8 +173,8 @@ export const calculateRMI = (
     customMinWage?: number,
     salaryLimitDate?: string
 ) => {
-    // 1. Flatten Salaries
-    let allSalaries: { date: Date, value: number, originalValue: number, correctionFactor: number, monthStr: string }[] = [];
+    // 1. Flatten and Group Salaries (Sum Concomitant)
+    const groupedSalaries = new Map<string, { date: Date, value: number, originalValue: number, correctionFactor: number, monthStr: string }>();
     
     let derMonthStr = "";
     const derDate = der ? new Date(der) : new Date();
@@ -244,21 +244,29 @@ export const calculateRMI = (
                     }
                 }
 
-                allSalaries.push({ 
-                    date, 
-                    value: correctedValue, 
-                    originalValue: s.value, 
-                    correctionFactor, 
-                    monthStr: s.month 
-                });
+                const existing = groupedSalaries.get(s.month);
+                if (existing) {
+                    existing.value += correctedValue;
+                    existing.originalValue += s.value;
+                } else {
+                    groupedSalaries.set(s.month, { 
+                        date, 
+                        value: correctedValue, 
+                        originalValue: s.value, 
+                        correctionFactor, 
+                        monthStr: s.month 
+                    });
+                }
             }
         });
     });
 
+    let allSalaries = Array.from(groupedSalaries.values());
+
     if (allSalaries.length === 0) return { rmi: 0, rmiDetails: undefined };
 
-    // Sort by value descending for Pre-Reform (80% rule)
-    allSalaries.sort((a, b) => b.value - a.value);
+    // Sort by value descending for picking highest (80% rule)
+    const sortedByValue = [...allSalaries].sort((a, b) => b.value - a.value);
 
     let average = 0;
     let calculationFormula = "";
@@ -268,14 +276,14 @@ export const calculateRMI = (
 
     if (ruleType.startsWith('Pre-Reform')) {
         // Average of 80% highest
-        const cutoff = Math.floor(allSalaries.length * 0.8);
-        const top80 = allSalaries.slice(0, cutoff);
+        const cutoff = Math.floor(sortedByValue.length * 0.8);
+        const top80 = sortedByValue.slice(0, cutoff);
         salariesUsed = top80;
         
         const sum = top80.reduce((acc, curr) => acc + curr.value, 0);
         average = sum / (top80.length || 1);
         
-        calculationFormula = `Média dos 80% maiores salários (${top80.length} de ${allSalaries.length})`;
+        calculationFormula = `Média dos 80% maiores salários (${top80.length} de ${sortedByValue.length})`;
 
         // Fator Previdenciário Calculation (Simplified)
         let fator = 1.0;
@@ -309,10 +317,10 @@ export const calculateRMI = (
         finalRMI = average * fator;
     } else {
         // Average of 100% (Post-Reform)
-        salariesUsed = allSalaries;
-        const sum = allSalaries.reduce((acc, curr) => acc + curr.value, 0);
-        average = sum / allSalaries.length;
-        calculationFormula = `Média de 100% dos salários (${allSalaries.length})`;
+        salariesUsed = sortedByValue;
+        const sum = sortedByValue.reduce((acc, curr) => acc + curr.value, 0);
+        average = sum / sortedByValue.length;
+        calculationFormula = `Média de 100% dos salários (${sortedByValue.length})`;
 
         // Apply Coefficients
         let coef = 1.0;
@@ -357,10 +365,13 @@ export const calculateRMI = (
         calculationFormula += ` [Piso Salário Mínimo Aplicado: ${currentMW.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}]`;
     }
 
+    // Sort salariesUsed chronologically (most recent to oldest) for display
+    const displaySalaries = [...salariesUsed].sort((a, b) => b.date.getTime() - a.date.getTime());
+
     return {
         rmi: finalRMI,
         rmiDetails: {
-            salaries: salariesUsed.map(s => ({
+            salaries: displaySalaries.map(s => ({
                 month: s.monthStr,
                 originalValue: s.originalValue,
                 correctionFactor: s.correctionFactor,
