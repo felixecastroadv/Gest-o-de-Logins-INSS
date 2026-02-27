@@ -328,8 +328,15 @@ export const calculateRMI = (
             coef = 1.0;
             calculationFormula += ` (Pedágio 100% - Integral)`;
         } else if (ruleType === 'Transition_50') {
-            coef = 0.7; // Placeholder Fator
-            calculationFormula += ` x Fator Previdenciário Estimado (0.7)`;
+            const Tc = totalYears;
+            const Id = ageYears || 60;
+            const Es = 83 - Id; // Approximation
+            const a = 0.31;
+            
+            const fator = ((Tc * a) / Es) * (1 + (Id + (Tc * a)) / 100);
+            coef = fator;
+            appliedFactor = fator;
+            calculationFormula += ` x Fator Previdenciário (${fator.toFixed(4)})`;
         } else if (ruleType === 'Disability') {
             let base = 0.60;
             const threshold = gender === 'M' ? 20 : 15;
@@ -758,7 +765,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
                 isEligible: true,
                 ruleType: 'Transition_50',
                 category: 'aposentadorias',
-                ...calculateRMI(data.bonds, 'Transition_50', data.gender, timeTotal.years, inpcIndices, der, undefined, data.customMinWage)
+                ...calculateRMI(data.bonds, 'Transition_50', data.gender, timeTotal.years, inpcIndices, der, age.years, data.customMinWage)
             });
         } else {
             benefits.push({
