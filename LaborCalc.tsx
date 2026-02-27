@@ -1039,16 +1039,22 @@ const calculateLaborResults = (calcData: LaborData) => {
         // Saldo de Salário, Aviso Prévio, 13º, Férias, Intrajornada, Horas Extras, DSR, Reflexos
         const includedCategories = ['Rescisórias', 'Horas Extras', 'Adicionais', 'Reflexos'];
         
-        const rescisorySum = results
-            .filter(r => includedCategories.includes(r.category))
-            .reduce((acc, curr) => acc + curr.value, 0);
+        const verbasParaMulta = results.filter(r => includedCategories.includes(r.category));
+        const rescisorySum = verbasParaMulta.reduce((acc, curr) => acc + curr.value, 0);
             
+        let composition = "Composição da Base de Cálculo:\n";
+        verbasParaMulta.forEach(v => {
+            let shortDesc = v.desc.split('(')[0].trim();
+            if (shortDesc.length > 40) shortDesc = shortDesc.substring(0, 37) + '...';
+            composition += `(+) ${shortDesc}: ${formatCurrency(v.value)}\n`;
+        });
+
         const fine467 = rescisorySum * 0.5;
         results.push({ 
             desc: `Multa Art. 467 (50% Incontroverso)`, 
             value: fine467, 
             category: 'Multas',
-            details: `Base de Cálculo (Verbas Rescisórias, H.E., Adicionais, Reflexos): ${formatCurrency(rescisorySum)}\nMulta (50%): ${formatCurrency(fine467)}`
+            details: `${composition}\nTotal da Base: ${formatCurrency(rescisorySum)}\nMulta (50%): ${formatCurrency(fine467)}`
         });
     }
 
