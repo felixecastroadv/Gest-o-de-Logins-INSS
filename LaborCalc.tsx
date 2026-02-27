@@ -59,6 +59,8 @@ interface LaborData {
     periods: {
       id: string;
       hoursPerMonth: number;
+      daysPerMonth?: number; // New: Dias trabalhados no mês
+      hoursPerDay?: number; // New: Horas noturnas por dia
       startDate: string;
       endDate: string;
     }[];
@@ -68,6 +70,7 @@ interface LaborData {
       periods: {
           id: string;
           hoursPerDay: number; // Quantidade (horas/dia suprimidas)
+          daysPerMonth?: number; // New: Dias trabalhados no mês
           startDate: string;
           endDate: string;
       }[];
@@ -686,15 +689,32 @@ const calculateLaborResults = (calcData: LaborData) => {
                     const result = calculateBenefitExact(pStart, pEnd, calcData.salaryHistory, salary, (sal, days) => {
                         const hourlyRate = sal / 220;
                         const nightRate = hourlyRate * 0.20;
+                        
+                        // If daysPerMonth is specified, we might want to adjust how we calculate the monthly value
+                        // But currently hoursPerMonth is the total.
+                        // If the user inputs daysPerMonth, the UI updates hoursPerMonth.
+                        // So we can stick to hoursPerMonth.
+                        // However, for partial months, we should be careful.
+                        // If hoursPerMonth is for a full month (e.g. 30 days), then for partial month we do (hoursPerMonth / 30) * days.
+                        
                         const monthlyVal = nightRate * period.hoursPerMonth;
                         return (monthlyVal / 30) * days;
                     });
                     
+                    const detailsStr = `Salário Hora: Base / 220\n` +
+                        `Adicional Noturno: 20%\n` +
+                        (period.hoursPerDay ? `Horas/Dia: ${period.hoursPerDay}\n` : '') +
+                        (period.daysPerMonth ? `Dias/Mês: ${period.daysPerMonth}\n` : '') +
+                        `Total Horas/Mês: ${period.hoursPerMonth}\n` +
+                        `Meses Calculados: ${result.months}\n` +
+                        `Total: ${formatCurrency(result.value)}\n\n` +
+                        `Memória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`;
+
                     results.push({ 
                         desc: `Adicional Noturno (${period.hoursPerMonth}h/mês - ${result.months} meses - Período ${idx + 1})`, 
                         value: result.value, 
                         category: 'Adicionais',
-                        details: `Salário Hora: Base / 220\nAdicional Noturno: 20%\nHoras/Mês: ${period.hoursPerMonth}\nMeses Calculados: ${result.months}\nTotal: ${formatCurrency(result.value)}\n\nMemória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`
+                        details: detailsStr
                     });
                     results.push({ 
                         desc: `Reflexos Ad. Noturno (Férias, 13º, FGTS, DSR) - Período ${idx + 1}`, 
@@ -716,17 +736,31 @@ const calculateLaborResults = (calcData: LaborData) => {
                     const result = calculateBenefitExact(pStart, pEnd, calcData.salaryHistory, salary, (sal, days) => {
                         const hourlyRate = sal / 220;
                         const intraRate = hourlyRate * 1.5;
-                        // Estimativa de dias trabalhados por mês: 22 (proporcional aos dias do mês se parcial)
-                        const proportionalWorkDays = (days / 30) * 22;
+                        
+                        // Use daysPerMonth if available, otherwise default to 22
+                        const workDaysPerMonth = period.daysPerMonth || 22;
+                        
+                        // Proportional work days for partial month
+                        // If days < 30, we assume proportional work days based on the ratio
+                        const proportionalWorkDays = (days / 30) * workDaysPerMonth;
+                        
                         const totalHours = period.hoursPerDay * proportionalWorkDays;
                         return intraRate * totalHours;
                     });
                     
+                    const detailsStr = `Salário Hora: Base / 220\n` +
+                        `Adicional (50%): 1.5x\n` +
+                        `Horas/Dia: ${period.hoursPerDay}\n` +
+                        `Dias Trabalhados/Mês: ${period.daysPerMonth || '22 (Padrão)'}\n` +
+                        `Meses Calculados: ${result.months}\n` +
+                        `Total: ${formatCurrency(result.value)}\n\n` +
+                        `Memória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`;
+
                     results.push({ 
                         desc: `Adicional Intrajornada (${period.hoursPerDay}h/dia - ${result.months} meses)`, 
                         value: result.value, 
                         category: 'Adicionais',
-                        details: `Salário Hora: Base / 220\nAdicional (50%): 1.5x\nHoras/Dia: ${period.hoursPerDay}\nDias Úteis/Mês (Est.): 22\nMeses Calculados: ${result.months}\nTotal: ${formatCurrency(result.value)}\n\nMemória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`
+                        details: detailsStr
                     });
                     results.push({ 
                         desc: `Reflexos Intrajornada (Férias, 13º, FGTS, DSR)`, 
@@ -1843,14 +1877,53 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                           </p>
                                           {data.adicionalNoturno.periods.length === 0 && <p className="text-xs text-slate-400 italic">Nenhum período adicionado.</p>}
                                           {data.adicionalNoturno.periods.map((period, idx) => (
-                                              <div key={period.id} className="grid grid-cols-1 md:grid-cols-4 gap-2 items-end bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 relative">
+                                              <div key={period.id} className="grid grid-cols-1 md:grid-cols-5 gap-2 items-end bg-white dark:bg-slate-800 p-2 rounded border border-slate-200 dark:border-slate-700 relative">
                                                   <button onClick={() => removeNightShiftPeriod(period.id)} className="absolute top-1 right-1 text-slate-400 hover:text-red-500"><TrashIcon className="h-3 w-3" /></button>
                                                   <div>
-                                                      <label className={STYLES.LABEL_TINY}>Horas/Mês (Média)</label>
+                                                      <label className={STYLES.LABEL_TINY}>Horas/Dia</label>
+                                                      <input 
+                                                          type="number" 
+                                                          className={STYLES.INPUT_TINY}
+                                                          value={period.hoursPerDay || ''}
+                                                          placeholder="Opcional"
+                                                          onChange={e => {
+                                                              const newPeriods = [...data.adicionalNoturno.periods];
+                                                              const val = Number(e.target.value);
+                                                              newPeriods[idx].hoursPerDay = val;
+                                                              // Auto-calc monthly if days is set
+                                                              if (newPeriods[idx].daysPerMonth) {
+                                                                  newPeriods[idx].hoursPerMonth = val * newPeriods[idx].daysPerMonth!;
+                                                              }
+                                                              setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, periods: newPeriods } }));
+                                                          }}
+                                                      />
+                                                  </div>
+                                                  <div>
+                                                      <label className={STYLES.LABEL_TINY}>Dias/Mês</label>
+                                                      <input 
+                                                          type="number" 
+                                                          className={STYLES.INPUT_TINY}
+                                                          value={period.daysPerMonth || ''}
+                                                          placeholder="Opcional"
+                                                          onChange={e => {
+                                                              const newPeriods = [...data.adicionalNoturno.periods];
+                                                              const val = Number(e.target.value);
+                                                              newPeriods[idx].daysPerMonth = val;
+                                                              // Auto-calc monthly if hours/day is set
+                                                              if (newPeriods[idx].hoursPerDay) {
+                                                                  newPeriods[idx].hoursPerMonth = newPeriods[idx].hoursPerDay! * val;
+                                                              }
+                                                              setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, periods: newPeriods } }));
+                                                          }}
+                                                      />
+                                                  </div>
+                                                  <div>
+                                                      <label className={STYLES.LABEL_TINY}>Total Horas/Mês</label>
                                                       <input 
                                                           type="number" 
                                                           className={STYLES.INPUT_TINY}
                                                           value={period.hoursPerMonth || ''}
+                                                          placeholder="Total"
                                                           onChange={e => {
                                                               const newPeriods = [...data.adicionalNoturno.periods];
                                                               newPeriods[idx].hoursPerMonth = Number(e.target.value);
@@ -1929,6 +2002,20 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                           onChange={e => {
                                                               const newPeriods = [...data.intrajornada.periods];
                                                               newPeriods[idx].hoursPerDay = Number(e.target.value);
+                                                              setData(prev => ({ ...prev, intrajornada: { ...prev.intrajornada, periods: newPeriods } }));
+                                                          }}
+                                                      />
+                                                  </div>
+                                                  <div>
+                                                      <label className={STYLES.LABEL_TINY}>Dias/Mês</label>
+                                                      <input 
+                                                          type="number" 
+                                                          className={STYLES.INPUT_TINY}
+                                                          value={period.daysPerMonth || ''}
+                                                          placeholder="Padrão: 22"
+                                                          onChange={e => {
+                                                              const newPeriods = [...data.intrajornada.periods];
+                                                              newPeriods[idx].daysPerMonth = Number(e.target.value);
                                                               setData(prev => ({ ...prev, intrajornada: { ...prev.intrajornada, periods: newPeriods } }));
                                                           }}
                                                       />
