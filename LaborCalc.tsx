@@ -1066,12 +1066,19 @@ const calculateLaborResults = (calcData: LaborData) => {
     // 13. Honorários Advocatícios
     const currentTotal = results.reduce((acc, curr) => acc + curr.value, 0);
     if (calcData.attorneyFees > 0) {
+        let composition = "Composição da Base de Cálculo (Total Bruto):\n";
+        results.forEach(v => {
+            let shortDesc = v.desc.split('(')[0].trim();
+            if (shortDesc.length > 40) shortDesc = shortDesc.substring(0, 37) + '...';
+            composition += `(+) ${shortDesc}: ${formatCurrency(v.value)}\n`;
+        });
+
         const feesValue = currentTotal * (calcData.attorneyFees / 100);
         results.push({ 
             desc: `Honorários Advocatícios (${calcData.attorneyFees}%)`, 
             value: feesValue, 
             category: 'Honorários',
-            details: `Base de Cálculo (Total Bruto Estimado): ${formatCurrency(currentTotal)}\nPercentual: ${calcData.attorneyFees}%\nValor: ${formatCurrency(feesValue)}`
+            details: `${composition}\nBase de Cálculo (Total Bruto Estimado): ${formatCurrency(currentTotal)}\nPercentual: ${calcData.attorneyFees}%\nValor: ${formatCurrency(feesValue)}`
         });
     }
 
