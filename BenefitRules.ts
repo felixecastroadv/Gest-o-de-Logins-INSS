@@ -195,25 +195,47 @@ export const calculateRMI = (
 
                 if (inpcIndices && derMonthStr) {
                     const contributionMonthStr = `${mes}/${ano}`;
-                    const startFactor = inpcIndices.get(contributionMonthStr);
                     
-                    // Find End Factor (Month prior to DER)
-                    const [derY, derM, derD] = der!.split('-').map(Number);
-                    let currentDerDate = new Date(derY, derM - 1, 1);
-                    currentDerDate.setMonth(currentDerDate.getMonth() - 1);
+                    // 1. Find End Factor (Month prior to DER)
+                    const [derY, derM] = der!.split('-').map(Number);
+                    let targetEndDate = new Date(derY, derM - 1, 1);
+                    targetEndDate.setMonth(targetEndDate.getMonth() - 1);
                     
-                    let endFactor = 0;
-                    for (let i = 0; i < 3; i++) {
-                         const searchStr = `${currentDerDate.getMonth() + 1}/${currentDerDate.getFullYear()}`;
-                         if (inpcIndices.has(searchStr)) {
-                             endFactor = inpcIndices.get(searchStr)!;
-                             break;
-                         }
-                         currentDerDate.setMonth(currentDerDate.getMonth() - 1);
+                    // Get latest available index in map
+                    let latestDate = new Date(1900, 0, 1);
+                    let latestFactor = 1.0;
+                    
+                    inpcIndices.forEach((val, key) => {
+                        const [km, ky] = key.split('/').map(Number);
+                        const kd = new Date(ky, km - 1, 1);
+                        if (kd > latestDate) {
+                            latestDate = kd;
+                            latestFactor = val;
+                        }
+                    });
+
+                    let endFactor = latestFactor;
+                    let actualEndMonthDate = latestDate;
+
+                    // Try to find the specific month prior to DER
+                    const searchStr = `${targetEndDate.getMonth() + 1}/${targetEndDate.getFullYear()}`;
+                    if (inpcIndices.has(searchStr)) {
+                        endFactor = inpcIndices.get(searchStr)!;
+                        actualEndMonthDate = targetEndDate;
                     }
 
-                    if (startFactor && endFactor) {
-                        correctionFactor = endFactor / startFactor;
+                    const startFactor = inpcIndices.get(contributionMonthStr);
+                    const contributionDate = new Date(ano, mes - 1, 1);
+
+                    if (startFactor) {
+                        // If contribution is after or equal to the month used for endFactor, factor is 1.0
+                        if (contributionDate >= actualEndMonthDate) {
+                            correctionFactor = 1.0;
+                        } else {
+                            correctionFactor = endFactor / startFactor;
+                            // Safety: correction factor should not be less than 1.0 for inflation
+                            if (correctionFactor < 1.0) correctionFactor = 1.0;
+                        }
                         correctedValue = s.value * correctionFactor;
                     }
                 }
@@ -229,7 +251,7 @@ export const calculateRMI = (
         });
     });
 
-    if (allSalaries.length === 0) return 0;
+    if (allSalaries.length === 0) return { rmi: 0, rmiDetails: undefined };
 
     // Sort by value descending for Pre-Reform (80% rule)
     allSalaries.sort((a, b) => b.value - a.value);
@@ -322,30 +344,15 @@ export const calculateRMI = (
     }
 
     // Apply Minimum Wage Floor (Piso Nacional)
-    // Except for Auxílio-Acidente (not implemented yet, but good to safeguard)
     const currentMW = customMinWage || getCurrentMinimumWage(der);
     let isFloorApplied = false;
     
-    // Check if benefit allows floor. Most do.
-    // Assuming all implemented here respect the floor.
     if (finalRMI < currentMW) {
         finalRMI = currentMW;
         isFloorApplied = true;
-        calculationFormula += ` [Piso Salário Mínimo Aplicado]`;
+        calculationFormula += ` [Piso Salário Mínimo Aplicado: ${currentMW.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}]`;
     }
 
-    // Return with details attached to the number object? No, return number but we need details.
-    // We will return a special object that can be cast to number but has properties? No, JS primitives.
-    // We updated the interface to include rmiDetails.
-    // But this function returns `number`. We need to change return type or attach it.
-    // Let's change return type to `BenefitResult['rmiDetails'] & { value: number }`?
-    // Or simpler: Update calls to extract value.
-    
-    // Since we can't easily change the return type everywhere without breaking calls,
-    // let's return the number, but we need a way to get the details.
-    // Actually, `calculateRMI` is only called inside `analyzeBenefits` to populate `BenefitResult`.
-    // So we can return an object `{ value: number, details: ... }`.
-    
     return {
         rmi: finalRMI,
         rmiDetails: {
@@ -1027,10 +1034,9 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             category: 'auxilios',
             ...(() => {
                 const r = calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der, undefined, data.customMinWage);
-                if (typeof r === 'number') return { rmi: 0, rmiDetails: undefined };
                 return {
                     rmi: r.rmi * 0.91,
-                    rmiDetails: { ...r.rmiDetails, finalRMI: r.rmi * 0.91, calculationFormula: r.rmiDetails.calculationFormula + ' x 0.91 (Auxílio)' }
+                    rmiDetails: r.rmiDetails ? { ...r.rmiDetails, finalRMI: r.rmi * 0.91, calculationFormula: r.rmiDetails.calculationFormula + ' x 0.91 (Auxílio)' } : undefined
                 };
             })()
         });
@@ -1055,10 +1061,9 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             category: 'auxilios',
             ...(() => {
                 const r = calculateRMI(data.bonds, 'Disability', data.gender, timeTotal.years, inpcIndices, der, undefined, data.customMinWage);
-                if (typeof r === 'number') return { rmi: 0, rmiDetails: undefined };
                 return {
                     rmi: r.rmi * 0.5,
-                    rmiDetails: { ...r.rmiDetails, finalRMI: r.rmi * 0.5, calculationFormula: r.rmiDetails.calculationFormula + ' x 0.5 (Acidente)' }
+                    rmiDetails: r.rmiDetails ? { ...r.rmiDetails, finalRMI: r.rmi * 0.5, calculationFormula: r.rmiDetails.calculationFormula + ' x 0.5 (Acidente)' } : undefined
                 };
             })()
         });
