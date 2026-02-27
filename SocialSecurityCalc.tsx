@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { jsPDF } from "jspdf";
+import autoTable from 'jspdf-autotable';
 import { 
   UserIcon, DocumentTextIcon, CalculatorIcon, 
   ArrowDownTrayIcon, TrashIcon, PlusIcon, 
@@ -15,6 +16,7 @@ import BenefitAnalysisModal from './Components/BenefitAnalysisModal';
 import SavedCalculationsModal from './Components/SavedCalculationsModal';
 import { fetchINPCData, processINPCIndices } from './services/bcbService';
 import { fetchIBGELifeExpectancy, IBGELifeExpectancy } from './src/services/ibgeService';
+import { analyzeBenefits } from './BenefitRules';
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
@@ -702,16 +704,15 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     };
 
     const generateReport = () => {
-        // @ts-ignore
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
-        const margin = 20;
+        const margin = 14;
         
         // Header
         doc.setFontSize(18);
         doc.text("Relatório de Análise Previdenciária", pageWidth / 2, 20, { align: "center" });
         
-        doc.setFontSize(12);
+        doc.setFontSize(11);
         doc.text(`Cliente: ${data.clientName || "Não informado"}`, margin, 35);
         doc.text(`CPF: ${data.cpf || "Não informado"}`, margin, 42);
         doc.text(`Data de Nascimento: ${data.birthDate ? data.birthDate.split('-').reverse().join('/') : "Não informada"}`, margin, 49);
@@ -721,48 +722,147 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         
         // Summary
         doc.setFontSize(14);
-        doc.text("Resumo do Tempo de Contribuição", margin, 70);
-        doc.setFontSize(12);
-        doc.text(`Tempo Total Calculado: ${calculateUnifiedTime()}`, margin, 80);
+        doc.setFont("helvetica", "bold");
+        doc.text("Resumo do Tempo de Contribuição e Dados do Segurado", margin, 70);
+        doc.setFont("helvetica", "normal");
+        
+        const analysisResult = analyzeBenefits(data, inpcIndices, ibgeTable);
+        
+        doc.setFontSize(11);
+        doc.text(`Tempo Total Calculado: ${analysisResult.totalTime.years} anos, ${analysisResult.totalTime.months} meses e ${analysisResult.totalTime.days} dias`, margin, 80);
+        doc.text(`Carência Total: ${analysisResult.totalCarencia} meses`, margin, 87);
+        doc.text(`Idade na DER: ${analysisResult.age.years} anos, ${analysisResult.age.months} meses e ${analysisResult.age.days} dias`, margin, 94);
+        doc.text(`Pontuação: ${analysisResult.points} pontos`, margin, 101);
+        doc.text(`Sexo: ${analysisResult.gender === 'M' ? 'Masculino' : 'Feminino'}`, margin, 108);
+        if (analysisResult.isTeacher) doc.text(`Professor(a): Sim`, margin, 115);
+        if (analysisResult.isPcd) doc.text(`Pessoa com Deficiência (PcD): Sim`, margin, 122);
         
         // Bonds Table
-        let y = 95;
+        let yPosBonds = analysisResult.isTeacher || analysisResult.isPcd ? 135 : 120;
         doc.setFontSize(14);
-        doc.text("Detalhamento dos Vínculos", margin, y);
-        y += 10;
+        doc.setFont("helvetica", "bold");
+        doc.text("Detalhamento dos Vínculos Utilizados", margin, yPosBonds);
+        doc.setFont("helvetica", "normal");
         
-        doc.setFontSize(10);
-        // Table Header
-        doc.text("Seq", margin, y);
-        doc.text("Origem", margin + 10, y);
-        doc.text("Início", margin + 80, y);
-        doc.text("Fim", margin + 105, y);
-        doc.text("Tempo", margin + 130, y);
-        doc.text("Carência", margin + 160, y);
-        
-        y += 5;
-        doc.line(margin, y, pageWidth - margin, y);
-        y += 5;
-        
-        data.bonds.forEach((bond, idx) => {
-            if (y > 280) {
-                doc.addPage();
-                y = 20;
-            }
-            
-            if (bond.useInCalculation) {
+        const bondsTableData = data.bonds
+            .filter(bond => bond.useInCalculation)
+            .map((bond, idx) => {
                 const time = calculateTime(bond.startDate, bond.endDate, bond.activityType, data.gender);
                 const timeStr = `${time.years}a ${time.months}m ${time.days}d`;
-                
-                doc.text((idx + 1).toString(), margin, y);
-                doc.text(bond.origin.substring(0, 35), margin + 10, y);
-                doc.text(bond.startDate ? bond.startDate.split('-').reverse().join('/') : '-', margin + 80, y);
-                doc.text(bond.endDate ? bond.endDate.split('-').reverse().join('/') : '-', margin + 105, y);
-                doc.text(timeStr, margin + 130, y);
-                doc.text(bond.sc.length.toString(), margin + 160, y);
-                
-                y += 7;
+                return [
+                    (idx + 1).toString(),
+                    bond.origin,
+                    bond.startDate ? bond.startDate.split('-').reverse().join('/') : '-',
+                    bond.endDate ? bond.endDate.split('-').reverse().join('/') : '-',
+                    timeStr,
+                    bond.sc.length.toString()
+                ];
+            });
+
+        autoTable(doc, {
+            startY: yPosBonds + 5,
+            head: [['Seq', 'Origem', 'Início', 'Fim', 'Tempo', 'Carência']],
+            body: bondsTableData,
+            theme: 'striped',
+            headStyles: { fillColor: [66, 66, 66] },
+            styles: { fontSize: 9 },
+            margin: { left: margin, right: margin }
+        });
+
+        // Benefit Analysis
+        doc.addPage();
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.text("Análise Profunda de Benefícios Previdenciários", pageWidth / 2, 20, { align: "center" });
+        doc.setFont("helvetica", "normal");
+        
+        let currentY = 35;
+
+        const addSection = (title: string, yPos: number) => {
+            if (yPos > 270) {
+                doc.addPage();
+                yPos = 20;
             }
+            doc.setFontSize(14);
+            doc.setFont("helvetica", "bold");
+            doc.text(title, margin, yPos);
+            doc.setFont("helvetica", "normal");
+            return yPos + 10;
+        };
+
+        const addText = (text: string, yPos: number, isBold = false, fontSize = 10) => {
+            if (yPos > 280) {
+                doc.addPage();
+                yPos = 20;
+            }
+            doc.setFontSize(fontSize);
+            if (isBold) doc.setFont("helvetica", "bold");
+            else doc.setFont("helvetica", "normal");
+            
+            const lines = doc.splitTextToSize(text, pageWidth - margin * 2);
+            doc.text(lines, margin, yPos);
+            return yPos + (lines.length * (fontSize * 0.5));
+        };
+
+        analysisResult.benefits.forEach((benefit) => {
+            currentY = addSection(benefit.benefitName, currentY);
+            
+            if (benefit.isEligible) {
+                currentY = addText("Status: ELEGÍVEL", currentY, true, 12);
+                currentY += 5;
+                
+                if (benefit.rmiDetails) {
+                    currentY = addText(`Fórmula de Cálculo: ${benefit.rmiDetails.calculationFormula}`, currentY);
+                    currentY += 3;
+                    currentY = addText(`Média dos Salários: ${formatCurrency(benefit.rmiDetails.average)}`, currentY);
+                    currentY += 3;
+                    currentY = addText(`Fator Aplicado: ${(benefit.rmiDetails.appliedFactor * 100).toFixed(2)}%`, currentY);
+                    currentY += 3;
+                    currentY = addText(`Renda Mensal Inicial (RMI): ${formatCurrency(benefit.rmiDetails.finalRMI)}`, currentY, true, 12);
+                    currentY += 10;
+
+                    // Salaries Table
+                    if (benefit.rmiDetails.salaries.length > 0) {
+                        currentY = addText("Salários de Contribuição Utilizados no Cálculo:", currentY, true);
+                        currentY += 5;
+
+                        const salariesData = benefit.rmiDetails.salaries.map(s => [
+                            s.month,
+                            formatCurrency(s.originalValue),
+                            s.correctionFactor.toFixed(6),
+                            formatCurrency(s.correctedValue),
+                            s.isLimit ? 'Sim' : 'Não'
+                        ]);
+
+                        autoTable(doc, {
+                            startY: currentY,
+                            head: [['Competência', 'Valor Original', 'Fator Correção', 'Valor Corrigido', 'Limitado ao Teto?']],
+                            body: salariesData,
+                            theme: 'grid',
+                            headStyles: { fillColor: [100, 100, 100] },
+                            styles: { fontSize: 8 },
+                            margin: { left: margin, right: margin }
+                        });
+                        
+                        // @ts-ignore
+                        currentY = doc.lastAutoTable.finalY + 15;
+                    }
+                } else if (benefit.rmi) {
+                    currentY = addText(`Renda Mensal Inicial (RMI) Estimada: ${formatCurrency(benefit.rmi)}`, currentY, true, 12);
+                    currentY += 10;
+                }
+            } else {
+                currentY = addText("Status: NÃO ELEGÍVEL", currentY, true, 12);
+                currentY += 5;
+                currentY = addText("Motivo / Requisitos Faltantes:", currentY, true);
+                currentY += 3;
+                currentY = addText(benefit.missingDetails || "Requisitos não preenchidos.", currentY);
+                currentY += 10;
+            }
+            
+            doc.setDrawColor(200, 200, 200);
+            doc.line(margin, currentY, pageWidth - margin, currentY);
+            currentY += 10;
         });
         
         doc.save(`Relatorio_Previdenciario_${data.clientName.replace(/\s+/g, '_')}.pdf`);
