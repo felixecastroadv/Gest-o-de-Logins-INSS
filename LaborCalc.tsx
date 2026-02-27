@@ -196,7 +196,8 @@ const INITIAL_LABOR_DATA: LaborData = {
 
 const parseDate = (dateStr: string) => {
   if (!dateStr) return null;
-  return new Date(dateStr);
+  // Usar T12:00:00 para evitar que o fuso horário mude a data para o dia anterior
+  return new Date(dateStr + 'T12:00:00');
 };
 
 const diffMonths = (d1: Date, d2: Date) => {
@@ -433,7 +434,7 @@ const calculateLaborResults = (calcData: LaborData) => {
     }
 
     // Reflexos do Aviso Prévio (se indenizado)
-    if (noticeDays > 0 && isIndemnified) {
+    if (noticeDays > 0 && isIndemnified && start && end) {
         // A projeção do aviso prévio integra o tempo de serviço para todos os efeitos legais (Lei 12.506/2011, Súmula 371 TST).
         // Calculamos a diferença de avos entre a data de saída real e a data projetada.
         const projectedEndDate = new Date(end.getTime() + (noticeDays * 24 * 60 * 60 * 1000));
@@ -1430,8 +1431,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       doc.text(`Cliente: ${dataToUse.employeeName || 'Não informado'}`, margin, y);
       doc.text(`Data Base: ${new Date().toLocaleDateString('pt-BR')}`, pageWidth - margin, y, { align: "right" });
       y += 6;
-      doc.text(`Admissão: ${dataToUse.startDate ? new Date(dataToUse.startDate).toLocaleDateString('pt-BR') : '-'}`, margin, y);
-      doc.text(`Demissão: ${dataToUse.endDate ? new Date(dataToUse.endDate).toLocaleDateString('pt-BR') : '-'}`, pageWidth - margin, y, { align: "right" });
+      doc.text(`Admissão: ${parseDate(dataToUse.startDate)?.toLocaleDateString('pt-BR') || '-'}`, margin, y);
+      doc.text(`Demissão: ${parseDate(dataToUse.endDate)?.toLocaleDateString('pt-BR') || '-'}`, pageWidth - margin, y, { align: "right" });
       y += 6;
       doc.text(`Salário Base: ${formatCurrency(dataToUse.baseSalary)}`, margin, y);
       doc.text(`Motivo: ${dataToUse.terminationReason.replace(/_/g, ' ').toUpperCase()}`, pageWidth - margin, y, { align: "right" });
