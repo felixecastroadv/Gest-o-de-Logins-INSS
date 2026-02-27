@@ -108,6 +108,7 @@ interface LaborData {
       daysPerMonth?: number; // Dias trabalhados por mês (apenas para diário)
       value: string; // Texto ou valor numérico
       parsedValue: number; // Valor numérico para soma
+      integratesSalary: boolean; // Se integra o salário para base de FGTS
   }[];
 
   // Estabilidade / Indenizações
@@ -918,7 +919,11 @@ const calculateLaborResults = (calcData: LaborData) => {
                     } else {
                          details = `Cálculo Anual:\nValor Anual: ${formatCurrency(val)}\nQuantidade: ${quantity} ano(s)\nTotal: ${formatCurrency(total)}`;
                     }
-                    results.push({ desc: customDesc || `CCT: ${right.name} (${quantity} ${unit})`, value: total, category: 'Convenção Coletiva', details });
+                    
+                    const category = right.integratesSalary ? 'Convenção Coletiva (Salarial)' : 'Convenção Coletiva (Indenizatória)';
+                    if (right.integratesSalary) details += `\n* Integra Salário para FGTS`;
+                    
+                    results.push({ desc: customDesc || `CCT: ${right.name} (${quantity} ${unit})`, value: total, category, details });
                 }
             }
         });
@@ -982,7 +987,7 @@ const calculateLaborResults = (calcData: LaborData) => {
     
     // FGTS sobre Verbas Rescisórias
     const verbasSalariais = results.filter(r => 
-        ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais', 'Convenção Coletiva'].includes(r.category) && 
+        ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais', 'Convenção Coletiva (Salarial)'].includes(r.category) && 
         !r.desc.includes('Férias') // Férias indenizadas não incide FGTS
     );
     
@@ -1237,7 +1242,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                   endYear: new Date().getFullYear(),
                   daysPerMonth: 0,
                   value: '', 
-                  parsedValue: 0 
+                  parsedValue: 0,
+                  integratesSalary: false
               }
           ]
       }));
@@ -2159,9 +2165,21 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                           />
                                       </div>
                                   </div>
-                                  <p className="text-[9px] text-slate-400 mt-1 ml-1">
-                                      {right.frequency === 'daily' ? 'Valor por dia' : right.frequency === 'monthly' ? 'Valor por mês' : 'Valor por ano'}
-                                  </p>
+                                  <div className="flex items-center gap-2 mt-2">
+                                      <input 
+                                          type="checkbox" 
+                                          id={`cct-integra-${right.id}`}
+                                          checked={right.integratesSalary || false}
+                                          onChange={e => updateCctRight(right.id, 'integratesSalary', e.target.checked)}
+                                          className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500"
+                                      />
+                                      <label htmlFor={`cct-integra-${right.id}`} className="text-[10px] text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+                                          Integra salário (Base FGTS)
+                                      </label>
+                                      <p className="text-[9px] text-slate-400 ml-auto">
+                                          {right.frequency === 'daily' ? 'Valor por dia' : right.frequency === 'monthly' ? 'Valor por mês' : 'Valor por ano'}
+                                      </p>
+                                  </div>
                               </div>
                           ))}
                       </div>
