@@ -735,25 +735,23 @@ const calculateLaborResults = (calcData: LaborData) => {
                 const pEnd = parseDate(period.endDate) || end;
                 
                 if (pStart && pEnd && period.hoursPerDay > 0) {
+                    const workDaysPerMonth = period.daysPerMonth || 26; // Default to 26 as per user request
+
                     const result = calculateBenefitExact(pStart, pEnd, calcData.salaryHistory, salary, (sal, days) => {
                         const hourlyRate = sal / 220;
                         const intraRate = hourlyRate * 1.5;
                         
-                        // Use daysPerMonth if available, otherwise default to 22
-                        const workDaysPerMonth = period.daysPerMonth || 22;
-                        
-                        // Proportional work days for partial month
-                        // If days < 30, we assume proportional work days based on the ratio
-                        const proportionalWorkDays = (days / 30) * workDaysPerMonth;
-                        
-                        const totalHours = period.hoursPerDay * proportionalWorkDays;
-                        return intraRate * totalHours;
+                        // User formula: (Sal/220) * Hours/Day * DaysWorked * 1.5
+                        // For partial months, 'days' is the number of calendar days. 
+                        // We assume these are 'effective work days' in the partial period context.
+                        const monthlyVal = intraRate * period.hoursPerDay * workDaysPerMonth;
+                        return (monthlyVal / workDaysPerMonth) * days;
                     });
                     
                     const detailsStr = `Salário Hora: Base / 220\n` +
                         `Adicional (50%): 1.5x\n` +
                         `Horas/Dia: ${period.hoursPerDay}\n` +
-                        `Dias Trabalhados/Mês: ${period.daysPerMonth || '22 (Padrão)'}\n` +
+                        `Dias Trabalhados/Mês: ${workDaysPerMonth}\n` +
                         `Meses Calculados: ${result.months}\n` +
                         `Total: ${formatCurrency(result.value)}\n\n` +
                         `Memória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`;
@@ -815,7 +813,8 @@ const calculateLaborResults = (calcData: LaborData) => {
                 const hourlyRate = sal / 220;
                 const otRate = hourlyRate * (1 + (perc / 100));
                 const monthlyVal = otRate * ot.hoursPerMonth;
-                return (monthlyVal / 30) * days;
+                // User formula for proportional: (MonthlyVal / 26) * DaysWorked
+                return (monthlyVal / 26) * days;
             });
             
             results.push({ 
@@ -1044,8 +1043,12 @@ const calculateLaborResults = (calcData: LaborData) => {
     }
 
     if (calcData.applyFine467) {
+        // User requested categories for Art. 467:
+        // Saldo de Salário, Aviso Prévio, 13º, Férias, Intrajornada, Horas Extras, DSR, Reflexos
+        const includedCategories = ['Rescisórias', 'Horas Extras', 'Adicionais', 'Reflexos'];
+        
         const rescisorySum = results
-            .filter(r => r.category === 'Rescisórias')
+            .filter(r => includedCategories.includes(r.category))
             .reduce((acc, curr) => acc + curr.value, 0);
             
         const fine467 = rescisorySum * 0.5;
@@ -1053,7 +1056,7 @@ const calculateLaborResults = (calcData: LaborData) => {
             desc: `Multa Art. 467 (50% Incontroverso)`, 
             value: fine467, 
             category: 'Multas',
-            details: `Base de Cálculo (Verbas Rescisórias): ${formatCurrency(rescisorySum)}\nMulta (50%): ${formatCurrency(fine467)}`
+            details: `Base de Cálculo (Verbas Rescisórias, H.E., Adicionais, Reflexos): ${formatCurrency(rescisorySum)}\nMulta (50%): ${formatCurrency(fine467)}`
         });
     }
 
