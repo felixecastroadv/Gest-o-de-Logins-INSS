@@ -10,7 +10,9 @@ import {
   PlusIcon,
   ArchiveBoxIcon,
   PencilSquareIcon,
-  UserIcon
+  UserIcon,
+  ChevronUpIcon,
+  ChevronDownIcon
 } from '@heroicons/react/24/outline';
 import { jsPDF } from "jspdf";
 import { ClientRecord, ContractRecord } from './types';
@@ -95,7 +97,12 @@ interface LaborData {
   cctRights: {
       id: string;
       name: string;
-      period: string; // Texto livre ou datas
+      frequency: 'daily' | 'monthly' | 'annual';
+      startDate: string;
+      endDate: string;
+      startYear: number;
+      endYear: number;
+      daysPerMonth?: number; // Dias trabalhados por mês (apenas para diário)
       value: string; // Texto ou valor numérico
       parsedValue: number; // Valor numérico para soma
   }[];
@@ -111,7 +118,17 @@ interface LaborData {
   applyFine477: boolean; // Atraso pagamento
   applyFine467: boolean; // Verbas incontroversas
   moralDamages: number;
-  unpaidFgtsMonths: number; // Quantos meses não foi depositado
+  
+  // FGTS
+  fgtsAllDeposited: boolean; // Se todos os depósitos foram feitos (Tab 1)
+  fgtsNoDeposits: boolean; // Se nenhum depósito foi feito (Tab 3)
+  unpaidFgtsMonths: number; // Quantos meses não foi depositado (Legacy/Manual)
+  fgtsSpecificMissingPeriods: { // Períodos específicos sem depósito
+      id: string;
+      startDate: string;
+      endDate: string;
+  }[];
+  
   unpaid13thPeriods: { id: string; year: number; month: number; }[]; // Anos de 13o não pagos (mês/ano)
   vacationPeriods: {
       id: string;
@@ -157,7 +174,10 @@ const INITIAL_LABOR_DATA: LaborData = {
   applyFine477: false,
   applyFine467: false,
   moralDamages: 0,
+  fgtsAllDeposited: false,
+  fgtsNoDeposits: false,
   unpaidFgtsMonths: 0,
+  fgtsSpecificMissingPeriods: [],
   unpaid13thPeriods: [],
   vacationPeriods: [],
   claim13thProportional: true,
@@ -239,6 +259,61 @@ const countMonths15DayRule = (start: Date, end: Date): number => {
     return months;
 };
 
+const calculateFgtsExact = (start: Date, end: Date, history: LaborData['salaryHistory'], currentSalary: number): { value: number, months: number } => {
+    let totalFgts = 0;
+    let totalMonths = 0;
+    // Normalize start to beginning of day
+    const s = new Date(start); s.setHours(0,0,0,0);
+    const e = new Date(end); e.setHours(0,0,0,0);
+    
+    let current = new Date(s.getFullYear(), s.getMonth(), 1);
+    
+    while (current <= e) {
+        const year = current.getFullYear();
+        const month = current.getMonth();
+        const monthStart = new Date(year, month, 1);
+        const monthEnd = new Date(year, month + 1, 0);
+        
+        const activeStart = s > monthStart ? s : monthStart;
+        const activeEnd = e < monthEnd ? e : monthEnd;
+        
+        if (activeStart <= activeEnd) {
+            let daysWorked = 30;
+            const isFullMonth = activeStart <= monthStart && activeEnd >= monthEnd;
+            
+            if (!isFullMonth) {
+                const diffTime = Math.abs(activeEnd.getTime() - activeStart.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                daysWorked = Math.min(diffDays, 30);
+            }
+            
+            // Get salary for this month (check 15th)
+            const checkDate = new Date(year, month, Math.min(15, monthEnd.getDate()));
+            const salary = getSalaryAtDate(checkDate, history, currentSalary);
+            
+            const monthlyBase = (salary / 30) * daysWorked;
+            totalFgts += monthlyBase * 0.08;
+            
+            // Count as a month if worked at least 15 days? Or just count any participation?
+            // User wants "months count". Usually 15 days rule applies for 13th/Vacation, but FGTS is daily.
+            // Let's count it as a month if there was any contribution.
+            if (totalFgts > 0) totalMonths++;
+        }
+        
+        current.setMonth(current.getMonth() + 1);
+    }
+    return { value: totalFgts, months: totalMonths };
+};
+
+// Helper to parse Brazilian currency string to number
+const parseBrazilianNumber = (val: string): number => {
+    if (!val) return 0;
+    // Remove all dots (thousand separators) and replace comma with dot (decimal)
+    const normalized = val.replace(/\./g, '').replace(',', '.');
+    const num = parseFloat(normalized);
+    return isNaN(num) ? 0 : num;
+};
+
 const calculateLaborResults = (calcData: LaborData) => {
     const results = [];
     const start = parseDate(calcData.startDate);
@@ -263,7 +338,12 @@ const calculateLaborResults = (calcData: LaborData) => {
             balance = (salary / 30) * days;
         }
         
-        results.push({ desc: `Saldo de Salário (${days} dias)`, value: balance, category: 'Rescisórias' });
+        results.push({ 
+            desc: `Saldo de Salário (${days} dias)`, 
+            value: balance, 
+            category: 'Rescisórias',
+            details: `Salário Base: ${formatCurrency(salary)}\nDias Trabalhados: ${days}\nCálculo: (${formatCurrency(salary)} / 30) * ${days} = ${formatCurrency(balance)}`
+        });
     }
 
     // 2. Aviso Prévio
@@ -277,7 +357,12 @@ const calculateLaborResults = (calcData: LaborData) => {
         const extraDays = Math.min(years * 3, 60); // Lei 12.506
         noticeDays = 30 + extraDays;
         noticeValue = (salary / 30) * noticeDays;
-        results.push({ desc: `Aviso Prévio Indenizado (${noticeDays} dias)`, value: noticeValue, category: 'Rescisórias' });
+        results.push({ 
+            desc: `Aviso Prévio Indenizado (${noticeDays} dias)`, 
+            value: noticeValue, 
+            category: 'Rescisórias',
+            details: `Salário Base: ${formatCurrency(salary)}\nDias de Aviso: ${noticeDays} (30 + ${noticeDays - 30} proporcionais)\nCálculo: (${formatCurrency(salary)} / 30) * ${noticeDays} = ${formatCurrency(noticeValue)}`
+        });
     }
 
     // Reflexos do Aviso Prévio (se indenizado)
@@ -322,14 +407,24 @@ const calculateLaborResults = (calcData: LaborData) => {
             if (startYear === endYear) {
                 const months = countMonths15DayRule(start, end);
                 const thirteenth = (salary / 12) * months;
-                results.push({ desc: `13º Salário Proporcional (${endYear}) - ${months}/12 avos`, value: thirteenth, category: 'Rescisórias' });
+                results.push({ 
+                    desc: `13º Salário Proporcional (${endYear}) - ${months}/12 avos`, 
+                    value: thirteenth, 
+                    category: 'Rescisórias',
+                    details: `Salário Base: ${formatCurrency(salary)}\nMeses Trabalhados: ${months}\nCálculo: (${formatCurrency(salary)} / 12) * ${months} = ${formatCurrency(thirteenth)}`
+                });
             } else {
                 // Proporcional do Ano de Saída (Janeiro até Data Saída)
                 const startOfEndYear = new Date(endYear, 0, 1);
                 const monthsExitYear = countMonths15DayRule(startOfEndYear, end);
                 if (monthsExitYear > 0) {
                     const thirteenthExit = (salary / 12) * monthsExitYear;
-                    results.push({ desc: `13º Salário Proporcional (${endYear}) - ${monthsExitYear}/12 avos`, value: thirteenthExit, category: 'Rescisórias' });
+                    results.push({ 
+                        desc: `13º Salário Proporcional (${endYear}) - ${monthsExitYear}/12 avos`, 
+                        value: thirteenthExit, 
+                        category: 'Rescisórias',
+                        details: `Salário Base: ${formatCurrency(salary)}\nMeses Trabalhados: ${monthsExitYear}\nCálculo: (${formatCurrency(salary)} / 12) * ${monthsExitYear} = ${formatCurrency(thirteenthExit)}`
+                    });
                 }
 
                 // Proporcional do Ano de Admissão (Data Admissão até Dezembro)
@@ -353,7 +448,12 @@ const calculateLaborResults = (calcData: LaborData) => {
                         const historicalSalary = getSalaryAtDate(refDate, calcData.salaryHistory, salary);
                         
                         const thirteenthAdmission = (historicalSalary / 12) * monthsAdmissionYear;
-                        results.push({ desc: `13º Salário Proporcional (${startYear}) - ${monthsAdmissionYear}/12 avos`, value: thirteenthAdmission, category: 'Rescisórias' });
+                        results.push({ 
+                            desc: `13º Salário Proporcional (${startYear}) - ${monthsAdmissionYear}/12 avos`, 
+                            value: thirteenthAdmission, 
+                            category: 'Rescisórias',
+                            details: `Salário Base (Histórico): ${formatCurrency(historicalSalary)}\nMeses Trabalhados: ${monthsAdmissionYear}\nCálculo: (${formatCurrency(historicalSalary)} / 12) * ${monthsAdmissionYear} = ${formatCurrency(thirteenthAdmission)}`
+                        });
                     }
                 }
             }
@@ -366,7 +466,12 @@ const calculateLaborResults = (calcData: LaborData) => {
                 const historicalSalary = getSalaryAtDate(refDate, calcData.salaryHistory, salary);
                 
                 const label = p.month ? `${String(p.month).padStart(2, '0')}/${p.year}` : `${p.year}`;
-                results.push({ desc: `13º Salário Vencido (${label})`, value: historicalSalary, category: 'Rescisórias' });
+                results.push({ 
+                    desc: `13º Salário Vencido (${label})`, 
+                    value: historicalSalary, 
+                    category: 'Rescisórias',
+                    details: `Salário Base (Histórico): ${formatCurrency(historicalSalary)}\nCálculo: Valor integral do salário da época.`
+                });
             });
         }
     }
@@ -412,9 +517,19 @@ const calculateLaborResults = (calcData: LaborData) => {
             
             if (vac.isDouble) {
                 vacValue = vacValue * 2;
-                results.push({ desc: `Férias Vencidas em Dobro + 1/3 (${periodLabel})`, value: vacValue, category: 'Rescisórias' });
+                results.push({ 
+                    desc: `Férias Vencidas em Dobro + 1/3 (${periodLabel})`, 
+                    value: vacValue, 
+                    category: 'Rescisórias',
+                    details: `Salário Base: ${formatCurrency(baseVal)}\nTerço Constitucional: ${formatCurrency(baseVal/3)}\nValor Simples: ${formatCurrency(baseVal + baseVal/3)}\nDobro: ${formatCurrency(vacValue)}`
+                });
             } else {
-                results.push({ desc: `Férias Vencidas + 1/3 (${periodLabel})`, value: vacValue, category: 'Rescisórias' });
+                results.push({ 
+                    desc: `Férias Vencidas + 1/3 (${periodLabel})`, 
+                    value: vacValue, 
+                    category: 'Rescisórias',
+                    details: `Salário Base: ${formatCurrency(baseVal)}\nTerço Constitucional: ${formatCurrency(baseVal/3)}\nCálculo: ${formatCurrency(baseVal)} + ${formatCurrency(baseVal/3)} = ${formatCurrency(vacValue)}`
+                });
             }
         });
         
@@ -433,7 +548,12 @@ const calculateLaborResults = (calcData: LaborData) => {
             if (effectiveMonths > 0) {
                 const vacProp = (salary / 12) * effectiveMonths;
                 const vacPropTotal = vacProp + (vacProp / 3);
-                results.push({ desc: `Férias Proporcionais + 1/3 (${effectiveMonths}/12)`, value: vacPropTotal, category: 'Rescisórias' });
+                results.push({ 
+                    desc: `Férias Proporcionais + 1/3 (${effectiveMonths}/12)`, 
+                    value: vacPropTotal, 
+                    category: 'Rescisórias',
+                    details: `Salário Base: ${formatCurrency(salary)}\nProporcional: ${effectiveMonths}/12 avos\nValor Férias: ${formatCurrency(vacProp)}\nTerço Constitucional: ${formatCurrency(vacProp/3)}\nTotal: ${formatCurrency(vacPropTotal)}`
+                });
             }
         }
     }
@@ -451,14 +571,24 @@ const calculateLaborResults = (calcData: LaborData) => {
             
             const monthlyVal = minimumWage * perc;
             const totalInsalub = monthlyVal * monthsWorked;
-            results.push({ desc: `Adicional Insalubridade (${perc * 100}% s/ Mínimo - ${monthsWorked} meses)`, value: totalInsalub, category: 'Adicionais' });
+            results.push({ 
+                desc: `Adicional Insalubridade (${perc * 100}% s/ Mínimo - ${monthsWorked} meses)`, 
+                value: totalInsalub, 
+                category: 'Adicionais',
+                details: `Base: Salário Mínimo (${formatCurrency(minimumWage)})\nPercentual: ${perc * 100}%\nValor Mensal: ${formatCurrency(monthlyVal)}\nMeses: ${monthsWorked}\nTotal: ${formatCurrency(totalInsalub)}`
+            });
             results.push({ desc: `Reflexos Insalubridade (Férias, 13º, FGTS)`, value: totalInsalub * 0.3, category: 'Reflexos' });
         }
 
         if (calcData.periculosidade && salary) {
             const monthlyVal = salary * 0.30;
             const totalPeric = monthlyVal * monthsWorked;
-            results.push({ desc: `Adicional Periculosidade (30% - ${monthsWorked} meses)`, value: totalPeric, category: 'Adicionais' });
+            results.push({ 
+                desc: `Adicional Periculosidade (30% - ${monthsWorked} meses)`, 
+                value: totalPeric, 
+                category: 'Adicionais',
+                details: `Base: Salário Base (${formatCurrency(salary)})\nPercentual: 30%\nValor Mensal: ${formatCurrency(monthlyVal)}\nMeses: ${monthsWorked}\nTotal: ${formatCurrency(totalPeric)}`
+            });
             results.push({ desc: `Reflexos Periculosidade (Férias, 13º, FGTS)`, value: totalPeric * 0.3, category: 'Reflexos' });
         }
 
@@ -475,7 +605,12 @@ const calculateLaborResults = (calcData: LaborData) => {
                     const monthlyVal = nightRate * period.hoursPerMonth;
                     const totalNight = monthlyVal * months;
                     
-                    results.push({ desc: `Adicional Noturno (${period.hoursPerMonth}h/mês - ${months} meses - Período ${idx + 1})`, value: totalNight, category: 'Adicionais' });
+                    results.push({ 
+                        desc: `Adicional Noturno (${period.hoursPerMonth}h/mês - ${months} meses - Período ${idx + 1})`, 
+                        value: totalNight, 
+                        category: 'Adicionais',
+                        details: `Salário Hora: ${formatCurrency(hourlyRate)}\nAdicional Noturno (20%): ${formatCurrency(nightRate)}\nHoras/Mês: ${period.hoursPerMonth}\nMeses: ${months}\nTotal: ${formatCurrency(totalNight)}`
+                    });
                     results.push({ desc: `Reflexos Ad. Noturno (Férias, 13º, FGTS, DSR) - Período ${idx + 1}`, value: totalNight * 0.35, category: 'Reflexos' });
                 }
             });
@@ -497,7 +632,12 @@ const calculateLaborResults = (calcData: LaborData) => {
                     const totalHours = period.hoursPerDay * 22 * months;
                     const totalIntra = intraRate * totalHours;
                     
-                    results.push({ desc: `Adicional Intrajornada (${period.hoursPerDay}h/dia - ${months} meses)`, value: totalIntra, category: 'Adicionais' });
+                    results.push({ 
+                        desc: `Adicional Intrajornada (${period.hoursPerDay}h/dia - ${months} meses)`, 
+                        value: totalIntra, 
+                        category: 'Adicionais',
+                        details: `Salário Hora: ${formatCurrency(hourlyRate)}\nAdicional (50%): ${formatCurrency(intraRate)}\nHoras Totais Estimadas: ${totalHours} (${period.hoursPerDay}h/dia * 22 dias * ${months} meses)\nTotal: ${formatCurrency(totalIntra)}`
+                    });
                     // Natureza indenizatória após Reforma Trabalhista (11/2017)? 
                     // Antes era salarial. O usuário pediu "reflexos" implicitamente ao pedir "adicional intrajornada"?
                     // Geralmente pede-se reflexos. Vamos adicionar reflexos como padrão, mas talvez devesse ser opcional.
@@ -516,7 +656,12 @@ const calculateLaborResults = (calcData: LaborData) => {
         if (gapStart && gapEnd && gap.floorSalary > gap.paidSalary) {
             const months = diffMonths(gapStart, gapEnd);
             const diffValue = (gap.floorSalary - gap.paidSalary) * months;
-            results.push({ desc: `Diferença Salarial (Período ${idx + 1}: ${months} meses)`, value: diffValue, category: 'Salários' });
+            results.push({ 
+                desc: `Diferença Salarial (Período ${idx + 1}: ${months} meses)`, 
+                value: diffValue, 
+                category: 'Salários',
+                details: `Piso Salarial: ${formatCurrency(gap.floorSalary)}\nSalário Pago: ${formatCurrency(gap.paidSalary)}\nDiferença Mensal: ${formatCurrency(gap.floorSalary - gap.paidSalary)}\nMeses: ${months}\nTotal: ${formatCurrency(diffValue)}`
+            });
             const reflex = diffValue * 0.3;
             results.push({ desc: `Reflexos s/ Diferença Salarial (Est. 30%)`, value: reflex, category: 'Reflexos' });
         }
@@ -535,7 +680,12 @@ const calculateLaborResults = (calcData: LaborData) => {
             const otRate = hourlyRate * (1 + (perc / 100));
             const totalOt = otRate * ot.hoursPerMonth * months;
             
-            results.push({ desc: `Horas Extras ${perc}% (${ot.hoursPerMonth}h/mês x ${months} meses)`, value: totalOt, category: 'Horas Extras' });
+            results.push({ 
+                desc: `Horas Extras ${perc}% (${ot.hoursPerMonth}h/mês x ${months} meses)`, 
+                value: totalOt, 
+                category: 'Horas Extras',
+                details: `Salário Hora: ${formatCurrency(hourlyRate)}\nPercentual: ${perc}%\nValor Hora Extra: ${formatCurrency(otRate)}\nHoras/Mês: ${ot.hoursPerMonth}\nMeses: ${months}\nTotal: ${formatCurrency(totalOt)}`
+            });
             
             if (ot.applyDsr) {
                 const dsr = totalOt * 0.1666;
@@ -568,67 +718,168 @@ const calculateLaborResults = (calcData: LaborData) => {
     // 9. Direitos CCT
     if (calcData.cctRights && calcData.cctRights.length > 0) {
         calcData.cctRights.forEach(right => {
-            if (right.parsedValue > 0) {
-                results.push({ desc: `CCT: ${right.name} (${right.period})`, value: right.parsedValue, category: 'Convenção Coletiva' });
+            const val = parseBrazilianNumber(right.value);
+            if (val > 0) {
+                let quantity = 0;
+                let unit = '';
+                let total = 0;
+
+                let customDesc = '';
+
+                if (right.frequency === 'daily') {
+                    const start = parseDate(right.startDate);
+                    const end = parseDate(right.endDate);
+                    if (start && end) {
+                        const diffTime = Math.abs(end.getTime() - start.getTime());
+                        const totalDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Inclusive
+                        
+                        if (right.daysPerMonth && right.daysPerMonth > 0) {
+                            // Calculate based on fixed days per month
+                            // Logic: (Total Days / 30) * Days Per Month
+                            const months = totalDays / 30;
+                            quantity = Math.round(months * right.daysPerMonth);
+                            unit = 'dias';
+                            total = val * quantity;
+                            customDesc = `CCT: ${right.name} (${months.toFixed(1)} meses x ${right.daysPerMonth} dias = ${quantity} dias)`;
+                        } else {
+                            // Default: pay every day
+                            quantity = totalDays;
+                            unit = 'dias';
+                            total = val * quantity;
+                        }
+                    }
+                } else if (right.frequency === 'monthly') {
+                    const start = parseDate(right.startDate);
+                    const end = parseDate(right.endDate);
+                    if (start && end) {
+                        quantity = diffMonths(start, end);
+                        unit = 'meses';
+                        total = val * quantity;
+                    }
+                } else if (right.frequency === 'annual') {
+                    if (right.startYear) {
+                        quantity = 1;
+                        unit = 'ano';
+                        total = val * quantity;
+                        customDesc = `CCT: ${right.name} (Ref. ${right.startYear})`;
+                    }
+                }
+
+                if (total > 0) {
+                    let details = '';
+                    if (right.frequency === 'daily') {
+                         details = `Cálculo Diário:\nValor Unitário: ${formatCurrency(val)}\nQuantidade: ${quantity} dias\nTotal: ${formatCurrency(total)}`;
+                         if (right.daysPerMonth) {
+                             details += `\n(Considerando ${right.daysPerMonth} dias trabalhados por mês)`;
+                         }
+                    } else if (right.frequency === 'monthly') {
+                         details = `Cálculo Mensal:\nValor Mensal: ${formatCurrency(val)}\nQuantidade: ${quantity} meses\nTotal: ${formatCurrency(total)}`;
+                    } else {
+                         details = `Cálculo Anual:\nValor Anual: ${formatCurrency(val)}\nQuantidade: ${quantity} ano(s)\nTotal: ${formatCurrency(total)}`;
+                    }
+                    results.push({ desc: customDesc || `CCT: ${right.name} (${quantity} ${unit})`, value: total, category: 'Convenção Coletiva', details });
+                }
             }
         });
     }
 
     // 10. FGTS + 40%
-    let totalFgtsBase = Number(calcData.hasFgtsBalance) || 0;
-    let isEstimated = false;
-    
-    // Se não tem saldo informado, estima com base no histórico ou salário atual
-    if (totalFgtsBase === 0 && start && end) {
-        const monthsWorked = diffMonths(start, end);
-        // Se tiver histórico, usa média ponderada
-        if (calcData.salaryHistory.length > 0) {
-            let estimatedFgts = 0;
-            let currentDate = new Date(start);
-            while (currentDate < end) {
-                // Acha salário vigente
-                const hist = calcData.salaryHistory.find(h => {
-                    const hStart = new Date(h.startDate);
-                    const hEnd = h.endDate ? new Date(h.endDate) : new Date();
-                    return currentDate >= hStart && currentDate <= hEnd;
-                });
-                const monthSalary = hist ? Number(hist.salary) : salary;
-                estimatedFgts += (monthSalary * 0.08);
-                currentDate.setMonth(currentDate.getMonth() + 1);
-            }
-            totalFgtsBase = estimatedFgts;
-        } else {
-             // Estima com salário atual
-             totalFgtsBase = (salary * 0.08) * monthsWorked;
+    let totalFgtsDeposited = 0;
+    let totalFgtsMissing = 0;
+    let missingMonthsCount = 0;
+    let depositedMonthsCount = 0;
+    let calculationDescription = "";
+
+    // A. FGTS Depositado
+    if (calcData.fgtsAllDeposited) {
+        if (calcData.hasFgtsBalance > 0) {
+            totalFgtsDeposited = calcData.hasFgtsBalance;
+            depositedMonthsCount = diffMonths(start || new Date(), end || new Date()); // Estimate
+        } else if (start && end) {
+            const result = calculateFgtsExact(start, end, calcData.salaryHistory, salary);
+            totalFgtsDeposited = result.value;
+            depositedMonthsCount = result.months;
         }
-        isEstimated = true;
+    } else {
+        totalFgtsDeposited = Number(calcData.hasFgtsBalance) || 0;
+        // Cannot estimate months from balance easily without history, assume 0 or user knows
     }
 
-    let unpaidFgts = 0;
-    if (calcData.unpaidFgtsMonths > 0 && salary) {
-        unpaidFgts = (salary * 0.08) * calcData.unpaidFgtsMonths;
-        results.push({ desc: `FGTS Não Depositado (${calcData.unpaidFgtsMonths} meses)`, value: unpaidFgts, category: 'FGTS' });
+    // B. FGTS Não Depositado
+    if (calcData.fgtsNoDeposits && start && end) {
+        const result = calculateFgtsExact(start, end, calcData.salaryHistory, salary);
+        totalFgtsMissing = result.value;
+        missingMonthsCount = result.months;
+        
+        totalFgtsDeposited = 0; 
+        depositedMonthsCount = 0;
+        calculationDescription = " (Período Integral)";
+    } else {
+        if (calcData.fgtsSpecificMissingPeriods.length > 0) {
+            calcData.fgtsSpecificMissingPeriods.forEach(p => {
+                const pStart = parseDate(p.startDate);
+                const pEnd = parseDate(p.endDate);
+                if (pStart && pEnd) {
+                    const result = calculateFgtsExact(pStart, pEnd, calcData.salaryHistory, salary);
+                    totalFgtsMissing += result.value;
+                    missingMonthsCount += result.months;
+                }
+            });
+        } else if (calcData.unpaidFgtsMonths > 0) {
+            totalFgtsMissing = (salary * 0.08) * calcData.unpaidFgtsMonths;
+            missingMonthsCount = calcData.unpaidFgtsMonths;
+        }
+    }
+
+    if (totalFgtsDeposited > 0) {
+         // Optional: Show deposited amount if needed, but usually we just show the missing or the fine base
+         // results.push({ desc: `FGTS Depositado (Saldo Informado)`, value: totalFgtsDeposited, category: 'FGTS' });
+    }
+
+    if (totalFgtsMissing > 0) {
+        results.push({ desc: `FGTS Não Depositado${calculationDescription} - ${missingMonthsCount} meses`, value: totalFgtsMissing, category: 'FGTS' });
     }
     
     const rescisaoFgtsBase = results
         .filter(r => ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais', 'Reflexos', 'Convenção Coletiva'].includes(r.category))
         .reduce((sum, item) => sum + item.value, 0);
+        
+    const fgtsOnRescisory = rescisaoFgtsBase * 0.08;
+    if (fgtsOnRescisory > 0) {
+        results.push({ desc: `FGTS sobre Verbas Rescisórias`, value: fgtsOnRescisory, category: 'FGTS' });
+    }
     
     // Base para multa de 40%:
-    // 1. Total depositado (ou estimado para todo o período)
-    // 2. FGTS não depositado (se o total não foi estimado)
-    // 3. FGTS sobre estabilidade (se houver)
-    // 4. FGTS sobre verbas rescisórias
-    let totalFgtsParaMulta = totalFgtsBase + stabilityFgts + (rescisaoFgtsBase * 0.08);
+    const totalFgtsParaMulta = totalFgtsDeposited + totalFgtsMissing + stabilityFgts + fgtsOnRescisory;
     
-    if (!isEstimated) {
-        // Se o saldo foi informado pelo usuário, somamos o que não foi depositado
-        totalFgtsParaMulta += unpaidFgts;
-    }
-
     if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta' || calcData.terminationReason === 'sem_anotacao') {
         const fine40 = totalFgtsParaMulta * 0.4;
-        results.push({ desc: `Multa 40% do FGTS (Base Est.: ${formatCurrency(totalFgtsParaMulta)})`, value: fine40, category: 'FGTS' });
+        
+        let baseDesc = "";
+        if (totalFgtsDeposited > 0) baseDesc += `Depositado ${formatCurrency(totalFgtsDeposited)} + `;
+        if (totalFgtsMissing > 0) baseDesc += `Devido ${formatCurrency(totalFgtsMissing)} + `;
+        if (fgtsOnRescisory > 0) baseDesc += `S/ Rescisão ${formatCurrency(fgtsOnRescisory)}`;
+        if (stabilityFgts > 0) baseDesc += ` + S/ Estab. ${formatCurrency(stabilityFgts)}`;
+        
+        // Clean up trailing " + "
+        if (baseDesc.endsWith(" + ")) baseDesc = baseDesc.slice(0, -3);
+        
+        // If it's just one component, simplify
+        if (!baseDesc.includes("+")) {
+             baseDesc = `Base Total: ${formatCurrency(totalFgtsParaMulta)}`;
+        } else {
+             baseDesc = `Base: ${baseDesc}`;
+        }
+            
+        const fineDetails = `Base de Cálculo da Multa de 40%:\n` +
+            (totalFgtsDeposited > 0 ? `(+) FGTS Depositado: ${formatCurrency(totalFgtsDeposited)}\n` : '') +
+            (totalFgtsMissing > 0 ? `(+) FGTS Não Depositado: ${formatCurrency(totalFgtsMissing)}\n` : '') +
+            (fgtsOnRescisory > 0 ? `(+) FGTS sobre Rescisão: ${formatCurrency(fgtsOnRescisory)}\n` : '') +
+            (stabilityFgts > 0 ? `(+) FGTS sobre Estabilidade: ${formatCurrency(stabilityFgts)}\n` : '') +
+            `(=) Base Total: ${formatCurrency(totalFgtsParaMulta)}\n` +
+            `Multa (40%): ${formatCurrency(fine40)}`;
+
+        results.push({ desc: `Multa 40% do FGTS (${baseDesc})`, value: fine40, category: 'FGTS', details: fineDetails });
     }
 
     // 11. Multas CLT
@@ -678,6 +929,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
   const [totalValue, setTotalValue] = useState<number>(0);
   const [showSavedList, setShowSavedList] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [expandedRows, setExpandedRows] = useState<number[]>([]);
 
   // --- Handlers ---
   const handleInputChange = (field: keyof LaborData, value: any) => {
@@ -785,11 +1037,47 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       }));
   };
 
+  const addFgtsPeriod = () => {
+      const newId = Math.random().toString(36).substr(2, 9);
+      setData(prev => ({
+          ...prev,
+          fgtsSpecificMissingPeriods: [...prev.fgtsSpecificMissingPeriods, { id: newId, startDate: prev.startDate, endDate: prev.endDate }]
+      }));
+  };
+
+  const removeFgtsPeriod = (id: string) => {
+      setData(prev => ({
+          ...prev,
+          fgtsSpecificMissingPeriods: prev.fgtsSpecificMissingPeriods.filter(p => p.id !== id)
+      }));
+  };
+
+  const updateFgtsPeriod = (id: string, field: 'startDate' | 'endDate', value: string) => {
+      setData(prev => ({
+          ...prev,
+          fgtsSpecificMissingPeriods: prev.fgtsSpecificMissingPeriods.map(p => p.id === id ? { ...p, [field]: value } : p)
+      }));
+  };
+
   const addCctRight = () => {
       const newId = Math.random().toString(36).substr(2, 9);
       setData(prev => ({
           ...prev,
-          cctRights: [...prev.cctRights, { id: newId, name: '', period: '', value: '', parsedValue: 0 }]
+          cctRights: [
+              ...prev.cctRights,
+              { 
+                  id: newId, 
+                  name: '', 
+                  frequency: 'monthly',
+                  startDate: '',
+                  endDate: '',
+                  startYear: new Date().getFullYear(),
+                  endYear: new Date().getFullYear(),
+                  daysPerMonth: 0,
+                  value: '', 
+                  parsedValue: 0 
+              }
+          ]
       }));
   };
 
@@ -807,9 +1095,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
               if (r.id === id) {
                   const updated = { ...r, [field]: value };
                   if (field === 'value') {
-                      const cleanVal = String(value).replace(/[R$\s%]/g, '').replace(',', '.');
-                      const parsed = parseFloat(cleanVal);
-                      updated.parsedValue = isNaN(parsed) ? 0 : parsed;
+                      updated.parsedValue = parseBrazilianNumber(String(value));
                   }
                   return updated;
               }
@@ -1035,12 +1321,55 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       doc.text("TOTAL ESTIMADO:", margin + 4, y);
       doc.text(formatCurrency(totalToUse), pageWidth - margin - 4, y, { align: "right" });
 
+      // Memória de Cálculo Detalhada
+      doc.addPage();
+      y = 30;
+      doc.setTextColor(0);
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("MEMÓRIA DE CÁLCULO DETALHADA", margin, y);
+      doc.setLineWidth(0.5);
+      doc.line(margin, y+2, pageWidth - margin, y+2);
+      y += 10;
+      
+      doc.setFontSize(10);
+
+      resultsToUse.forEach((item) => {
+          if (item.details) {
+              // Check if we need a new page
+              const detailsLines = doc.splitTextToSize(item.details, pageWidth - (margin * 2) - 10);
+              const neededHeight = (detailsLines.length * 4) + 15;
+              
+              if (y + neededHeight > pageHeight - 20) { 
+                  doc.addPage(); 
+                  y = 30; 
+              }
+              
+              doc.setFont("helvetica", "bold");
+              doc.setTextColor(30, 58, 138);
+              doc.text(item.desc, margin, y);
+              y += 5;
+              
+              doc.setFont("courier", "normal"); // Monospace for alignment
+              doc.setFontSize(9);
+              doc.setTextColor(50);
+              
+              doc.text(detailsLines, margin + 5, y);
+              
+              y += (detailsLines.length * 4) + 8; // Adjust spacing
+              
+              doc.setFont("helvetica", "normal");
+              doc.setFontSize(10);
+              doc.setTextColor(0);
+          }
+      });
+
       // Explicação Metodológica (Justificado)
-      y += 20;
-      if (y > pageHeight - 60) { doc.addPage(); y = 30; }
+      if (y > pageHeight - 60) { doc.addPage(); y = 30; } else { y += 10; }
 
       doc.setTextColor(0);
       doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
       doc.text("METODOLOGIA DE CÁLCULO", margin, y);
       doc.line(margin, y+2, pageWidth - margin, y+2);
       y += 8;
@@ -1190,8 +1519,25 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   </select>
                               </div>
                               <div>
-                                  <label className={STYLES.LABEL_TEXT}>Saldo FGTS (Para Multa 40%)</label>
-                                  <input type="number" className={STYLES.INPUT_FIELD} value={data.hasFgtsBalance} onChange={e => handleInputChange('hasFgtsBalance', e.target.value)} placeholder="Saldo em conta..." />
+                                  <label className={STYLES.LABEL_TEXT}>Saldo FGTS (Conta Vinculada)</label>
+                                  <input 
+                                    type="number" 
+                                    className={STYLES.INPUT_FIELD} 
+                                    value={data.hasFgtsBalance} 
+                                    onChange={e => handleInputChange('hasFgtsBalance', e.target.value)} 
+                                    placeholder="Saldo em conta..." 
+                                    disabled={data.fgtsNoDeposits}
+                                  />
+                                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                                      <input 
+                                        type="checkbox" 
+                                        checked={data.fgtsAllDeposited} 
+                                        onChange={e => handleInputChange('fgtsAllDeposited', e.target.checked)} 
+                                        className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                        disabled={data.fgtsNoDeposits}
+                                      />
+                                      <span className="text-xs text-slate-600 dark:text-slate-400">Todos os depósitos foram realizados?</span>
+                                  </label>
                               </div>
                           </div>
                       </div>
@@ -1512,8 +1858,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                           {data.cctRights.map((right, idx) => (
                               <div key={right.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative">
                                   <button onClick={() => removeCctRight(right.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                      <div className="md:col-span-1">
+                                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                      <div className={right.frequency === 'daily' ? "md:col-span-3" : "md:col-span-4"}>
                                           <label className={STYLES.LABEL_TINY}>Nome do Direito</label>
                                           <input 
                                               type="text" 
@@ -1523,28 +1869,81 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                               onChange={e => updateCctRight(right.id, 'name', e.target.value)}
                                           />
                                       </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Período / Referência</label>
-                                          <input 
-                                              type="text" 
-                                              className={STYLES.INPUT_TINY} 
-                                              placeholder="Ex: 2021/2022 ou Jan/23"
-                                              value={right.period}
-                                              onChange={e => updateCctRight(right.id, 'period', e.target.value)}
-                                          />
+                                      
+                                      <div className="md:col-span-2">
+                                          <label className={STYLES.LABEL_TINY}>Frequência</label>
+                                          <select 
+                                              className={STYLES.INPUT_TINY}
+                                              value={right.frequency}
+                                              onChange={e => updateCctRight(right.id, 'frequency', e.target.value)}
+                                          >
+                                              <option value="daily">Diário</option>
+                                              <option value="monthly">Mensal</option>
+                                              <option value="annual">Anual</option>
+                                          </select>
                                       </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Valor (R$ ou %)</label>
+
+                                      {right.frequency === 'daily' && (
+                                          <div className="md:col-span-1">
+                                              <label className={STYLES.LABEL_TINY}>Dias/Mês</label>
+                                              <input 
+                                                  type="number" 
+                                                  className={STYLES.INPUT_TINY} 
+                                                  placeholder="Ex: 22"
+                                                  value={right.daysPerMonth || ''}
+                                                  onChange={e => updateCctRight(right.id, 'daysPerMonth', Number(e.target.value))}
+                                              />
+                                          </div>
+                                      )}
+
+                                      {right.frequency === 'annual' ? (
+                                          <div className="md:col-span-4">
+                                              <label className={STYLES.LABEL_TINY}>Ano de Referência</label>
+                                              <input 
+                                                  type="number" 
+                                                  className={STYLES.INPUT_TINY} 
+                                                  placeholder="AAAA"
+                                                  value={right.startYear}
+                                                  onChange={e => updateCctRight(right.id, 'startYear', Number(e.target.value))}
+                                              />
+                                          </div>
+                                      ) : (
+                                          <>
+                                              <div className="md:col-span-2">
+                                                  <label className={STYLES.LABEL_TINY}>Início</label>
+                                                  <input 
+                                                      type="date" 
+                                                      className={STYLES.INPUT_TINY} 
+                                                      value={right.startDate}
+                                                      onChange={e => updateCctRight(right.id, 'startDate', e.target.value)}
+                                                  />
+                                              </div>
+                                              <div className="md:col-span-2">
+                                                  <label className={STYLES.LABEL_TINY}>Fim</label>
+                                                  <input 
+                                                      type="date" 
+                                                      className={STYLES.INPUT_TINY} 
+                                                      value={right.endDate}
+                                                      onChange={e => updateCctRight(right.id, 'endDate', e.target.value)}
+                                                  />
+                                              </div>
+                                          </>
+                                      )}
+
+                                      <div className="md:col-span-2">
+                                          <label className={STYLES.LABEL_TINY}>Valor (R$)</label>
                                           <input 
                                               type="text" 
                                               className={STYLES.INPUT_TINY} 
-                                              placeholder="Ex: 10% ou 150,00"
+                                              placeholder="0,00"
                                               value={right.value}
                                               onChange={e => updateCctRight(right.id, 'value', e.target.value)}
                                           />
-                                          <p className="text-[9px] text-slate-400 mt-1">Valor numérico será somado ao total.</p>
                                       </div>
                                   </div>
+                                  <p className="text-[9px] text-slate-400 mt-1 ml-1">
+                                      {right.frequency === 'daily' ? 'Valor por dia' : right.frequency === 'monthly' ? 'Valor por mês' : 'Valor por ano'}
+                                  </p>
                               </div>
                           ))}
                       </div>
@@ -1795,9 +2194,56 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                    </div>
                                </div>
                                <div className="space-y-4">
-                                   <div>
-                                       <label className={STYLES.LABEL_TEXT}>Meses de FGTS não depositado</label>
-                                       <input type="number" className={STYLES.INPUT_FIELD} value={data.unpaidFgtsMonths} onChange={e => handleInputChange('unpaidFgtsMonths', Number(e.target.value))} />
+                                   <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 text-sm">FGTS Não Depositado</h4>
+                                       
+                                       <label className="flex items-center gap-3 mb-4 cursor-pointer p-2 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={data.fgtsNoDeposits} 
+                                                onChange={e => handleInputChange('fgtsNoDeposits', e.target.checked)} 
+                                                className="w-5 h-5 text-red-600 rounded focus:ring-red-500" 
+                                            />
+                                            <span className="text-sm font-bold text-red-600 dark:text-red-400">Nenhum depósito realizado (Período Integral)</span>
+                                       </label>
+
+                                       {!data.fgtsNoDeposits && (
+                                           <div className="space-y-4">
+                                               <div>
+                                                   <div className="flex justify-between items-center mb-2">
+                                                       <label className={STYLES.LABEL_TINY}>Períodos sem depósito (Específicos)</label>
+                                                       <button onClick={addFgtsPeriod} className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold hover:bg-indigo-200 transition">+ Adicionar</button>
+                                                   </div>
+                                                   {data.fgtsSpecificMissingPeriods.length > 0 ? (
+                                                       <div className="space-y-2 mb-4">
+                                                           {data.fgtsSpecificMissingPeriods.map((period, idx) => (
+                                                               <div key={period.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
+                                                                   <div className="flex-1 grid grid-cols-2 gap-2">
+                                                                       <input type="date" className={STYLES.INPUT_TINY} value={period.startDate} onChange={e => updateFgtsPeriod(period.id, 'startDate', e.target.value)} />
+                                                                       <input type="date" className={STYLES.INPUT_TINY} value={period.endDate} onChange={e => updateFgtsPeriod(period.id, 'endDate', e.target.value)} />
+                                                                   </div>
+                                                                   <button onClick={() => removeFgtsPeriod(period.id)} className="text-slate-400 hover:text-red-500 p-1"><TrashIcon className="h-4 w-4" /></button>
+                                                               </div>
+                                                           ))}
+                                                       </div>
+                                                   ) : (
+                                                       <p className="text-xs text-slate-400 italic mb-4">Nenhum período específico adicionado.</p>
+                                                   )}
+                                               </div>
+
+                                               <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                                                   <label className={STYLES.LABEL_TINY}>Ou Quantidade de Meses (Simples)</label>
+                                                   <input 
+                                                       type="number" 
+                                                       className={STYLES.INPUT_FIELD} 
+                                                       value={data.unpaidFgtsMonths} 
+                                                       onChange={e => handleInputChange('unpaidFgtsMonths', Number(e.target.value))}
+                                                       placeholder="Ex: 5"
+                                                   />
+                                                   <p className="text-[10px] text-slate-400 mt-1">Use apenas se não quiser detalhar os períodos acima.</p>
+                                               </div>
+                                           </div>
+                                       )}
                                    </div>
                                    <div>
                                        <label className={STYLES.LABEL_TEXT}>Indenização por Danos Morais (Estimativa R$)</label>
