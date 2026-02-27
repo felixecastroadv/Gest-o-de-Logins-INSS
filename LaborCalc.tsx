@@ -308,8 +308,10 @@ const calculateFgtsExact = (start: Date, end: Date, history: LaborData['salaryHi
 // Helper to parse Brazilian currency string to number
 const parseBrazilianNumber = (val: string): number => {
     if (!val) return 0;
+    // Remove everything that is not digit, comma, dot or minus
+    let normalized = val.replace(/[^\d,.-]/g, '');
     // Remove all dots (thousand separators) and replace comma with dot (decimal)
-    const normalized = val.replace(/\./g, '').replace(',', '.');
+    normalized = normalized.replace(/\./g, '').replace(',', '.');
     const num = parseFloat(normalized);
     return isNaN(num) ? 0 : num;
 };
@@ -1727,7 +1729,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                       <input 
                                                           type="number" 
                                                           className={STYLES.INPUT_TINY}
-                                                          value={period.hoursPerMonth}
+                                                          value={period.hoursPerMonth || ''}
                                                           onChange={e => {
                                                               const newPeriods = [...data.adicionalNoturno.periods];
                                                               newPeriods[idx].hoursPerMonth = Number(e.target.value);
@@ -1740,7 +1742,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                       <input 
                                                           type="date" 
                                                           className={STYLES.INPUT_TINY}
-                                                          value={period.startDate}
+                                                          value={period.startDate || ''}
                                                           onChange={e => {
                                                               const newPeriods = [...data.adicionalNoturno.periods];
                                                               newPeriods[idx].startDate = e.target.value;
@@ -1753,7 +1755,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                       <input 
                                                           type="date" 
                                                           className={STYLES.INPUT_TINY}
-                                                          value={period.endDate}
+                                                          value={period.endDate || ''}
                                                           onChange={e => {
                                                               const newPeriods = [...data.adicionalNoturno.periods];
                                                               newPeriods[idx].endDate = e.target.value;
@@ -1802,7 +1804,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                       <input 
                                                           type="number" 
                                                           className={STYLES.INPUT_TINY}
-                                                          value={period.hoursPerDay}
+                                                          value={period.hoursPerDay || ''}
                                                           onChange={e => {
                                                               const newPeriods = [...data.intrajornada.periods];
                                                               newPeriods[idx].hoursPerDay = Number(e.target.value);
@@ -1815,7 +1817,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                       <input 
                                                           type="date" 
                                                           className={STYLES.INPUT_TINY}
-                                                          value={period.startDate}
+                                                          value={period.startDate || ''}
                                                           onChange={e => {
                                                               const newPeriods = [...data.intrajornada.periods];
                                                               newPeriods[idx].startDate = e.target.value;
@@ -1828,7 +1830,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                       <input 
                                                           type="date" 
                                                           className={STYLES.INPUT_TINY}
-                                                          value={period.endDate}
+                                                          value={period.endDate || ''}
                                                           onChange={e => {
                                                               const newPeriods = [...data.intrajornada.periods];
                                                               newPeriods[idx].endDate = e.target.value;
@@ -1903,7 +1905,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                   type="number" 
                                                   className={STYLES.INPUT_TINY} 
                                                   placeholder="AAAA"
-                                                  value={right.startYear}
+                                                  value={right.startYear || ''}
                                                   onChange={e => updateCctRight(right.id, 'startYear', Number(e.target.value))}
                                               />
                                           </div>
@@ -1914,7 +1916,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                   <input 
                                                       type="date" 
                                                       className={STYLES.INPUT_TINY} 
-                                                      value={right.startDate}
+                                                      value={right.startDate || ''}
                                                       onChange={e => updateCctRight(right.id, 'startDate', e.target.value)}
                                                   />
                                               </div>
@@ -1923,7 +1925,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                   <input 
                                                       type="date" 
                                                       className={STYLES.INPUT_TINY} 
-                                                      value={right.endDate}
+                                                      value={right.endDate || ''}
                                                       onChange={e => updateCctRight(right.id, 'endDate', e.target.value)}
                                                   />
                                               </div>
@@ -1936,7 +1938,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                               type="text" 
                                               className={STYLES.INPUT_TINY} 
                                               placeholder="0,00"
-                                              value={right.value}
+                                              value={right.value || ''}
                                               onChange={e => updateCctRight(right.id, 'value', e.target.value)}
                                           />
                                       </div>
@@ -1963,25 +1965,25 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                       <div>
                                           <label className={STYLES.LABEL_TINY}>Início</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.startDate} onChange={(e) => {
+                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.startDate || ''} onChange={(e) => {
                                               const newGaps = [...data.wageGap]; newGaps[idx].startDate = e.target.value; setData({...data, wageGap: newGaps});
                                           }} />
                                       </div>
                                       <div>
                                           <label className={STYLES.LABEL_TINY}>Fim</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.endDate} onChange={(e) => {
+                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.endDate || ''} onChange={(e) => {
                                               const newGaps = [...data.wageGap]; newGaps[idx].endDate = e.target.value; setData({...data, wageGap: newGaps});
                                           }} />
                                       </div>
                                       <div>
                                           <label className={STYLES.LABEL_TINY}>Salário Piso (Deveria ser)</label>
-                                          <input type="number" className={`${STYLES.INPUT_TINY} font-bold text-green-600`} value={gap.floorSalary} onChange={(e) => {
+                                          <input type="number" className={`${STYLES.INPUT_TINY} font-bold text-green-600`} value={gap.floorSalary || ''} onChange={(e) => {
                                               const newGaps = [...data.wageGap]; newGaps[idx].floorSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
                                           }} />
                                       </div>
                                       <div>
                                           <label className={STYLES.LABEL_TINY}>Salário Pago (Real)</label>
-                                          <input type="number" className={STYLES.INPUT_TINY} value={gap.paidSalary} onChange={(e) => {
+                                          <input type="number" className={STYLES.INPUT_TINY} value={gap.paidSalary || ''} onChange={(e) => {
                                               const newGaps = [...data.wageGap]; newGaps[idx].paidSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
                                           }} />
                                       </div>
@@ -2037,19 +2039,19 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                       </div>
                                       <div>
                                           <label className={STYLES.LABEL_TINY}>Horas/Mês (Média)</label>
-                                          <input type="number" className={STYLES.INPUT_TINY} value={ot.hoursPerMonth} onChange={(e) => {
+                                          <input type="number" className={STYLES.INPUT_TINY} value={ot.hoursPerMonth || ''} onChange={(e) => {
                                               const newOt = [...data.overtime]; newOt[idx].hoursPerMonth = Number(e.target.value); setData({...data, overtime: newOt});
                                           }} />
                                       </div>
                                       <div>
                                           <label className={STYLES.LABEL_TINY}>De</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.startDate} onChange={(e) => {
+                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.startDate || ''} onChange={(e) => {
                                               const newOt = [...data.overtime]; newOt[idx].startDate = e.target.value; setData({...data, overtime: newOt});
                                           }} />
                                       </div>
                                       <div>
                                           <label className={STYLES.LABEL_TINY}>Até</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.endDate} onChange={(e) => {
+                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.endDate || ''} onChange={(e) => {
                                               const newOt = [...data.overtime]; newOt[idx].endDate = e.target.value; setData({...data, overtime: newOt});
                                           }} />
                                       </div>
@@ -2118,7 +2120,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                                        <input 
                                                                            type="date" 
                                                                            className={STYLES.INPUT_TINY}
-                                                                           value={vac.startDate}
+                                                                           value={vac.startDate || ''}
                                                                            onChange={e => updateVacationPeriod(vac.id, 'startDate', e.target.value)}
                                                                        />
                                                                    </div>
@@ -2127,7 +2129,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                                                        <input 
                                                                            type="date" 
                                                                            className={STYLES.INPUT_TINY}
-                                                                           value={vac.endDate}
+                                                                           value={vac.endDate || ''}
                                                                            onChange={e => updateVacationPeriod(vac.id, 'endDate', e.target.value)}
                                                                        />
                                                                    </div>
