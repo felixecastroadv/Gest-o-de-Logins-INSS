@@ -990,11 +990,19 @@ const calculateLaborResults = (calcData: LaborData) => {
     const fgtsOnRescisory = baseFgtsRescisorio * 0.08;
     
     if (fgtsOnRescisory > 0) {
+        let composition = "Composição da Base de Cálculo:\n";
+        verbasSalariais.forEach(v => {
+            // Shorten description for cleaner list
+            let shortDesc = v.desc.split('(')[0].trim();
+            if (shortDesc.length > 40) shortDesc = shortDesc.substring(0, 37) + '...';
+            composition += `(+) ${shortDesc}: ${formatCurrency(v.value)}\n`;
+        });
+
         results.push({ 
             desc: `FGTS sobre Verbas Rescisórias`, 
             value: fgtsOnRescisory, 
             category: 'FGTS',
-            details: `Base de Cálculo (Verbas Salariais): ${formatCurrency(baseFgtsRescisorio)}\nAlíquota: 8%\nTotal: ${formatCurrency(fgtsOnRescisory)}`
+            details: `${composition}(=) Base Total: ${formatCurrency(baseFgtsRescisorio)}\nAlíquota: 8%\nTotal: ${formatCurrency(fgtsOnRescisory)}`
         });
     }
     
@@ -1031,7 +1039,7 @@ const calculateLaborResults = (calcData: LaborData) => {
 
     if (calcData.applyFine467) {
         const rescisorySum = results
-            .filter(r => r.category === 'Rescisórias' || r.desc.includes('Multa 40%'))
+            .filter(r => r.category === 'Rescisórias')
             .reduce((acc, curr) => acc + curr.value, 0);
             
         const fine467 = rescisorySum * 0.5;
@@ -1039,7 +1047,7 @@ const calculateLaborResults = (calcData: LaborData) => {
             desc: `Multa Art. 467 (50% Incontroverso)`, 
             value: fine467, 
             category: 'Multas',
-            details: `Base de Cálculo (Verbas Rescisórias + Multa 40%): ${formatCurrency(rescisorySum)}\nMulta (50%): ${formatCurrency(fine467)}`
+            details: `Base de Cálculo (Verbas Rescisórias): ${formatCurrency(rescisorySum)}\nMulta (50%): ${formatCurrency(fine467)}`
         });
     }
 
