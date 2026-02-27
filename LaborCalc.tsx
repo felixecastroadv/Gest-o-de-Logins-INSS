@@ -316,6 +316,61 @@ const parseBrazilianNumber = (val: string): number => {
     return isNaN(num) ? 0 : num;
 };
 
+// Helper to calculate benefits iterating month by month (proportional)
+const calculateBenefitExact = (
+    start: Date, 
+    end: Date, 
+    history: LaborData['salaryHistory'], 
+    currentSalary: number,
+    calcFn: (salary: number, daysWorked: number) => number
+): { value: number, months: number, memory: string[] } => {
+    let totalValue = 0;
+    let totalMonths = 0;
+    const memory: string[] = [];
+    
+    // Normalize
+    const s = new Date(start); s.setHours(0,0,0,0);
+    const e = new Date(end); e.setHours(0,0,0,0);
+    
+    let current = new Date(s.getFullYear(), s.getMonth(), 1);
+    
+    while (current <= e) {
+        const year = current.getFullYear();
+        const month = current.getMonth();
+        const monthStart = new Date(year, month, 1);
+        const monthEnd = new Date(year, month + 1, 0);
+        
+        const activeStart = s > monthStart ? s : monthStart;
+        const activeEnd = e < monthEnd ? e : monthEnd;
+        
+        if (activeStart <= activeEnd) {
+            let daysWorked = 30;
+            const isFullMonth = activeStart <= monthStart && activeEnd >= monthEnd;
+            
+            if (!isFullMonth) {
+                const diffTime = Math.abs(activeEnd.getTime() - activeStart.getTime());
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+                daysWorked = Math.min(diffDays, 30);
+            }
+            
+            // Get salary
+            const checkDate = new Date(year, month, Math.min(15, monthEnd.getDate()));
+            const salary = getSalaryAtDate(checkDate, history, currentSalary);
+            
+            const val = calcFn(salary, daysWorked);
+            
+            if (val > 0) {
+                totalValue += val;
+                totalMonths++;
+                memory.push(`${month + 1}/${year}: R$ ${formatCurrency(val)} (${daysWorked} dias)`);
+            }
+        }
+        current.setMonth(current.getMonth() + 1);
+    }
+    
+    return { value: totalValue, months: totalMonths, memory };
+};
+
 const calculateLaborResults = (calcData: LaborData) => {
     const results = [];
     const start = parseDate(calcData.startDate);
@@ -571,80 +626,102 @@ const calculateLaborResults = (calcData: LaborData) => {
             if (calcData.insalubridadeLevel === 'medio') perc = 0.20;
             if (calcData.insalubridadeLevel === 'maximo') perc = 0.40;
             
-            const monthlyVal = minimumWage * perc;
-            const totalInsalub = monthlyVal * monthsWorked;
-            results.push({ 
-                desc: `Adicional Insalubridade (${perc * 100}% s/ Mínimo - ${monthsWorked} meses)`, 
-                value: totalInsalub, 
-                category: 'Adicionais',
-                details: `Base: Salário Mínimo (${formatCurrency(minimumWage)})\nPercentual: ${perc * 100}%\nValor Mensal: ${formatCurrency(monthlyVal)}\nMeses: ${monthsWorked}\nTotal: ${formatCurrency(totalInsalub)}`
+            const result = calculateBenefitExact(start, end, calcData.salaryHistory, salary, (sal, days) => {
+                const monthlyVal = minimumWage * perc;
+                return (monthlyVal / 30) * days;
             });
-            results.push({ desc: `Reflexos Insalubridade (Férias, 13º, FGTS)`, value: totalInsalub * 0.3, category: 'Reflexos' });
+            
+            results.push({ 
+                desc: `Adicional Insalubridade (${perc * 100}% s/ Mínimo - ${result.months} meses)`, 
+                value: result.value, 
+                category: 'Adicionais',
+                details: `Base: Salário Mínimo (${formatCurrency(minimumWage)})\nPercentual: ${perc * 100}%\nMeses Calculados: ${result.months}\nTotal: ${formatCurrency(result.value)}\n\nMemória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`
+            });
+            results.push({ 
+                desc: `Reflexos Insalubridade (Férias, 13º, FGTS)`, 
+                value: result.value * 0.3, 
+                category: 'Reflexos',
+                details: `Base de Cálculo: ${formatCurrency(result.value)}\nReflexos Estimados (30%): Férias + 1/3, 13º Salário, FGTS + 40%`
+            });
         }
 
         if (calcData.periculosidade && salary) {
-            const monthlyVal = salary * 0.30;
-            const totalPeric = monthlyVal * monthsWorked;
-            results.push({ 
-                desc: `Adicional Periculosidade (30% - ${monthsWorked} meses)`, 
-                value: totalPeric, 
-                category: 'Adicionais',
-                details: `Base: Salário Base (${formatCurrency(salary)})\nPercentual: 30%\nValor Mensal: ${formatCurrency(monthlyVal)}\nMeses: ${monthsWorked}\nTotal: ${formatCurrency(totalPeric)}`
+            const result = calculateBenefitExact(start, end, calcData.salaryHistory, salary, (sal, days) => {
+                const monthlyVal = sal * 0.30;
+                return (monthlyVal / 30) * days;
             });
-            results.push({ desc: `Reflexos Periculosidade (Férias, 13º, FGTS)`, value: totalPeric * 0.3, category: 'Reflexos' });
+
+            results.push({ 
+                desc: `Adicional Periculosidade (30% - ${result.months} meses)`, 
+                value: result.value, 
+                category: 'Adicionais',
+                details: `Base: Salário Base (Evolução Salarial)\nPercentual: 30%\nMeses Calculados: ${result.months}\nTotal: ${formatCurrency(result.value)}\n\nMemória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`
+            });
+            results.push({ 
+                desc: `Reflexos Periculosidade (Férias, 13º, FGTS)`, 
+                value: result.value * 0.3, 
+                category: 'Reflexos',
+                details: `Base de Cálculo: ${formatCurrency(result.value)}\nReflexos Estimados (30%): Férias + 1/3, 13º Salário, FGTS + 40%`
+            });
         }
 
         if (calcData.adicionalNoturno.active && salary) {
-            const hourlyRate = salary / 220;
-            const nightRate = hourlyRate * 0.20;
-            
             calcData.adicionalNoturno.periods.forEach((period, idx) => {
                 const pStart = parseDate(period.startDate) || start;
                 const pEnd = parseDate(period.endDate) || end;
                 
                 if (pStart && pEnd && period.hoursPerMonth > 0) {
-                    const months = diffMonths(pStart, pEnd);
-                    const monthlyVal = nightRate * period.hoursPerMonth;
-                    const totalNight = monthlyVal * months;
+                    const result = calculateBenefitExact(pStart, pEnd, calcData.salaryHistory, salary, (sal, days) => {
+                        const hourlyRate = sal / 220;
+                        const nightRate = hourlyRate * 0.20;
+                        const monthlyVal = nightRate * period.hoursPerMonth;
+                        return (monthlyVal / 30) * days;
+                    });
                     
                     results.push({ 
-                        desc: `Adicional Noturno (${period.hoursPerMonth}h/mês - ${months} meses - Período ${idx + 1})`, 
-                        value: totalNight, 
+                        desc: `Adicional Noturno (${period.hoursPerMonth}h/mês - ${result.months} meses - Período ${idx + 1})`, 
+                        value: result.value, 
                         category: 'Adicionais',
-                        details: `Salário Hora: ${formatCurrency(hourlyRate)}\nAdicional Noturno (20%): ${formatCurrency(nightRate)}\nHoras/Mês: ${period.hoursPerMonth}\nMeses: ${months}\nTotal: ${formatCurrency(totalNight)}`
+                        details: `Salário Hora: Base / 220\nAdicional Noturno: 20%\nHoras/Mês: ${period.hoursPerMonth}\nMeses Calculados: ${result.months}\nTotal: ${formatCurrency(result.value)}\n\nMemória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`
                     });
-                    results.push({ desc: `Reflexos Ad. Noturno (Férias, 13º, FGTS, DSR) - Período ${idx + 1}`, value: totalNight * 0.35, category: 'Reflexos' });
+                    results.push({ 
+                        desc: `Reflexos Ad. Noturno (Férias, 13º, FGTS, DSR) - Período ${idx + 1}`, 
+                        value: result.value * 0.35, 
+                        category: 'Reflexos',
+                        details: `Base de Cálculo: ${formatCurrency(result.value)}\nReflexos Estimados (35%): DSR, Férias + 1/3, 13º Salário, FGTS + 40%`
+                    });
                 }
             });
         }
 
         // Intrajornada
         if (calcData.intrajornada && calcData.intrajornada.active && salary) {
-            const hourlyRate = salary / 220;
-            // Adicional de 50% sobre a hora suprimida (Art. 71 § 4º CLT)
-            const intraRate = hourlyRate * 1.5; 
-            
             calcData.intrajornada.periods.forEach((period, idx) => {
                 const pStart = parseDate(period.startDate) || start;
                 const pEnd = parseDate(period.endDate) || end;
                 
                 if (pStart && pEnd && period.hoursPerDay > 0) {
-                    const months = diffMonths(pStart, pEnd);
-                    // Estimativa de dias trabalhados por mês: 22
-                    const totalHours = period.hoursPerDay * 22 * months;
-                    const totalIntra = intraRate * totalHours;
+                    const result = calculateBenefitExact(pStart, pEnd, calcData.salaryHistory, salary, (sal, days) => {
+                        const hourlyRate = sal / 220;
+                        const intraRate = hourlyRate * 1.5;
+                        // Estimativa de dias trabalhados por mês: 22 (proporcional aos dias do mês se parcial)
+                        const proportionalWorkDays = (days / 30) * 22;
+                        const totalHours = period.hoursPerDay * proportionalWorkDays;
+                        return intraRate * totalHours;
+                    });
                     
                     results.push({ 
-                        desc: `Adicional Intrajornada (${period.hoursPerDay}h/dia - ${months} meses)`, 
-                        value: totalIntra, 
+                        desc: `Adicional Intrajornada (${period.hoursPerDay}h/dia - ${result.months} meses)`, 
+                        value: result.value, 
                         category: 'Adicionais',
-                        details: `Salário Hora: ${formatCurrency(hourlyRate)}\nAdicional (50%): ${formatCurrency(intraRate)}\nHoras Totais Estimadas: ${totalHours} (${period.hoursPerDay}h/dia * 22 dias * ${months} meses)\nTotal: ${formatCurrency(totalIntra)}`
+                        details: `Salário Hora: Base / 220\nAdicional (50%): 1.5x\nHoras/Dia: ${period.hoursPerDay}\nDias Úteis/Mês (Est.): 22\nMeses Calculados: ${result.months}\nTotal: ${formatCurrency(result.value)}\n\nMemória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`
                     });
-                    // Natureza indenizatória após Reforma Trabalhista (11/2017)? 
-                    // Antes era salarial. O usuário pediu "reflexos" implicitamente ao pedir "adicional intrajornada"?
-                    // Geralmente pede-se reflexos. Vamos adicionar reflexos como padrão, mas talvez devesse ser opcional.
-                    // Vou adicionar reflexos por padrão pois é "Calculadora Trabalhista" (pró-reclamante).
-                    results.push({ desc: `Reflexos Intrajornada (Férias, 13º, FGTS, DSR)`, value: totalIntra * 0.35, category: 'Reflexos' });
+                    results.push({ 
+                        desc: `Reflexos Intrajornada (Férias, 13º, FGTS, DSR)`, 
+                        value: result.value * 0.35, 
+                        category: 'Reflexos',
+                        details: `Base de Cálculo: ${formatCurrency(result.value)}\nReflexos Estimados (35%): DSR, Férias + 1/3, 13º Salário, FGTS + 40%`
+                    });
                 }
             });
         }
@@ -656,16 +733,25 @@ const calculateLaborResults = (calcData: LaborData) => {
         const gapEnd = parseDate(gap.endDate) || end;
         
         if (gapStart && gapEnd && gap.floorSalary > gap.paidSalary) {
-            const months = diffMonths(gapStart, gapEnd);
-            const diffValue = (gap.floorSalary - gap.paidSalary) * months;
-            results.push({ 
-                desc: `Diferença Salarial (Período ${idx + 1}: ${months} meses)`, 
-                value: diffValue, 
-                category: 'Salários',
-                details: `Piso Salarial: ${formatCurrency(gap.floorSalary)}\nSalário Pago: ${formatCurrency(gap.paidSalary)}\nDiferença Mensal: ${formatCurrency(gap.floorSalary - gap.paidSalary)}\nMeses: ${months}\nTotal: ${formatCurrency(diffValue)}`
+            const result = calculateBenefitExact(gapStart, gapEnd, calcData.salaryHistory, salary, (sal, days) => {
+                // Here we use the gap values directly, ignoring history salary as we have explicit paidSalary
+                const monthlyDiff = gap.floorSalary - gap.paidSalary;
+                return (monthlyDiff / 30) * days;
             });
-            const reflex = diffValue * 0.3;
-            results.push({ desc: `Reflexos s/ Diferença Salarial (Est. 30%)`, value: reflex, category: 'Reflexos' });
+
+            results.push({ 
+                desc: `Diferença Salarial (Período ${idx + 1}: ${result.months} meses)`, 
+                value: result.value, 
+                category: 'Salários',
+                details: `Piso Salarial: ${formatCurrency(gap.floorSalary)}\nSalário Pago: ${formatCurrency(gap.paidSalary)}\nDiferença Mensal: ${formatCurrency(gap.floorSalary - gap.paidSalary)}\nMeses Calculados: ${result.months}\nTotal: ${formatCurrency(result.value)}\n\nMemória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`
+            });
+            const reflex = result.value * 0.3;
+            results.push({ 
+                desc: `Reflexos s/ Diferença Salarial (Est. 30%)`, 
+                value: reflex, 
+                category: 'Reflexos',
+                details: `Base de Cálculo: ${formatCurrency(result.value)}\nReflexos Estimados (30%): Férias + 1/3, 13º Salário, FGTS`
+            });
         }
     });
 
@@ -675,23 +761,30 @@ const calculateLaborResults = (calcData: LaborData) => {
         const otEnd = parseDate(ot.endDate) || end;
         
         if (otStart && otEnd && ot.hoursPerMonth > 0) {
-            const months = diffMonths(otStart, otEnd);
             const perc = ot.percentage === -1 ? (ot.customPercentage || 50) : ot.percentage;
             
-            const hourlyRate = salary / 220;
-            const otRate = hourlyRate * (1 + (perc / 100));
-            const totalOt = otRate * ot.hoursPerMonth * months;
+            const result = calculateBenefitExact(otStart, otEnd, calcData.salaryHistory, salary, (sal, days) => {
+                const hourlyRate = sal / 220;
+                const otRate = hourlyRate * (1 + (perc / 100));
+                const monthlyVal = otRate * ot.hoursPerMonth;
+                return (monthlyVal / 30) * days;
+            });
             
             results.push({ 
-                desc: `Horas Extras ${perc}% (${ot.hoursPerMonth}h/mês x ${months} meses)`, 
-                value: totalOt, 
+                desc: `Horas Extras ${perc}% (${ot.hoursPerMonth}h/mês x ${result.months} meses)`, 
+                value: result.value, 
                 category: 'Horas Extras',
-                details: `Salário Hora: ${formatCurrency(hourlyRate)}\nPercentual: ${perc}%\nValor Hora Extra: ${formatCurrency(otRate)}\nHoras/Mês: ${ot.hoursPerMonth}\nMeses: ${months}\nTotal: ${formatCurrency(totalOt)}`
+                details: `Salário Hora: Base / 220\nPercentual: ${perc}%\nHoras/Mês: ${ot.hoursPerMonth}\nMeses Calculados: ${result.months}\nTotal: ${formatCurrency(result.value)}\n\nMemória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`
             });
             
             if (ot.applyDsr) {
-                const dsr = totalOt * 0.1666;
-                results.push({ desc: `DSR sobre H.E. (Lote ${idx+1})`, value: dsr, category: 'Horas Extras' });
+                const dsr = result.value * 0.1666;
+                results.push({ 
+                    desc: `DSR sobre H.E. (Lote ${idx+1})`, 
+                    value: dsr, 
+                    category: 'Horas Extras',
+                    details: `Base de Cálculo (Horas Extras): ${formatCurrency(result.value)}\nEstimativa DSR (1/6): 16,66%\nTotal: ${formatCurrency(dsr)}`
+                });
             }
         }
     });
@@ -791,6 +884,7 @@ const calculateLaborResults = (calcData: LaborData) => {
     let missingMonthsCount = 0;
     let depositedMonthsCount = 0;
     let calculationDescription = "";
+    let missingDetails = "";
 
     // A. FGTS Depositado
     if (calcData.fgtsAllDeposited) {
@@ -804,7 +898,6 @@ const calculateLaborResults = (calcData: LaborData) => {
         }
     } else {
         totalFgtsDeposited = Number(calcData.hasFgtsBalance) || 0;
-        // Cannot estimate months from balance easily without history, assume 0 or user knows
     }
 
     // B. FGTS Não Depositado
@@ -812,10 +905,8 @@ const calculateLaborResults = (calcData: LaborData) => {
         const result = calculateFgtsExact(start, end, calcData.salaryHistory, salary);
         totalFgtsMissing = result.value;
         missingMonthsCount = result.months;
-        
-        totalFgtsDeposited = 0; 
-        depositedMonthsCount = 0;
         calculationDescription = " (Período Integral)";
+        missingDetails = `Cálculo realizado mês a mês sobre o salário histórico.\nCompetências Calculadas: ${missingMonthsCount}\nTotal: ${formatCurrency(totalFgtsMissing)}`;
     } else {
         if (calcData.fgtsSpecificMissingPeriods.length > 0) {
             calcData.fgtsSpecificMissingPeriods.forEach(p => {
@@ -828,72 +919,82 @@ const calculateLaborResults = (calcData: LaborData) => {
                 }
             });
         } else if (calcData.unpaidFgtsMonths > 0) {
-            totalFgtsMissing = (salary * 0.08) * calcData.unpaidFgtsMonths;
-            missingMonthsCount = calcData.unpaidFgtsMonths;
+             totalFgtsMissing = (salary * 0.08) * calcData.unpaidFgtsMonths;
+             missingMonthsCount = calcData.unpaidFgtsMonths;
+             missingDetails = `Cálculo Estimado: ${calcData.unpaidFgtsMonths} meses * (${formatCurrency(salary)} * 8%)`;
         }
     }
 
-    if (totalFgtsDeposited > 0) {
-         // Optional: Show deposited amount if needed, but usually we just show the missing or the fine base
-         // results.push({ desc: `FGTS Depositado (Saldo Informado)`, value: totalFgtsDeposited, category: 'FGTS' });
-    }
-
     if (totalFgtsMissing > 0) {
-        results.push({ desc: `FGTS Não Depositado${calculationDescription} - ${missingMonthsCount} meses`, value: totalFgtsMissing, category: 'FGTS' });
+        results.push({ 
+            desc: `FGTS Não Depositado${calculationDescription} - ${missingMonthsCount} meses`, 
+            value: totalFgtsMissing, 
+            category: 'FGTS',
+            details: missingDetails
+        });
     }
     
-    const rescisaoFgtsBase = results
-        .filter(r => ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais', 'Reflexos', 'Convenção Coletiva'].includes(r.category))
-        .reduce((sum, item) => sum + item.value, 0);
-        
-    const fgtsOnRescisory = rescisaoFgtsBase * 0.08;
+    // FGTS sobre Verbas Rescisórias
+    const verbasSalariais = results.filter(r => 
+        ['Rescisórias', 'Salários', 'Horas Extras', 'Adicionais', 'Convenção Coletiva'].includes(r.category) && 
+        !r.desc.includes('Férias') // Férias indenizadas não incide FGTS
+    );
+    
+    const baseFgtsRescisorio = verbasSalariais.reduce((sum, item) => sum + item.value, 0);
+    const fgtsOnRescisory = baseFgtsRescisorio * 0.08;
+    
     if (fgtsOnRescisory > 0) {
-        results.push({ desc: `FGTS sobre Verbas Rescisórias`, value: fgtsOnRescisory, category: 'FGTS' });
+        results.push({ 
+            desc: `FGTS sobre Verbas Rescisórias`, 
+            value: fgtsOnRescisory, 
+            category: 'FGTS',
+            details: `Base de Cálculo (Verbas Salariais): ${formatCurrency(baseFgtsRescisorio)}\nAlíquota: 8%\nTotal: ${formatCurrency(fgtsOnRescisory)}`
+        });
     }
     
     // Base para multa de 40%:
     const totalFgtsParaMulta = totalFgtsDeposited + totalFgtsMissing + stabilityFgts + fgtsOnRescisory;
     
     if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta' || calcData.terminationReason === 'sem_anotacao') {
-        const fine40 = totalFgtsParaMulta * 0.4;
+        const multa40 = totalFgtsParaMulta * 0.40;
         
-        let baseDesc = "";
-        if (totalFgtsDeposited > 0) baseDesc += `Depositado ${formatCurrency(totalFgtsDeposited)} + `;
-        if (totalFgtsMissing > 0) baseDesc += `Devido ${formatCurrency(totalFgtsMissing)} + `;
-        if (fgtsOnRescisory > 0) baseDesc += `S/ Rescisão ${formatCurrency(fgtsOnRescisory)}`;
-        if (stabilityFgts > 0) baseDesc += ` + S/ Estab. ${formatCurrency(stabilityFgts)}`;
-        
-        // Clean up trailing " + "
-        if (baseDesc.endsWith(" + ")) baseDesc = baseDesc.slice(0, -3);
-        
-        // If it's just one component, simplify
-        if (!baseDesc.includes("+")) {
-             baseDesc = `Base Total: ${formatCurrency(totalFgtsParaMulta)}`;
-        } else {
-             baseDesc = `Base: ${baseDesc}`;
-        }
-            
-        const fineDetails = `Base de Cálculo da Multa de 40%:\n` +
-            (totalFgtsDeposited > 0 ? `(+) FGTS Depositado: ${formatCurrency(totalFgtsDeposited)}\n` : '') +
-            (totalFgtsMissing > 0 ? `(+) FGTS Não Depositado: ${formatCurrency(totalFgtsMissing)}\n` : '') +
-            (fgtsOnRescisory > 0 ? `(+) FGTS sobre Rescisão: ${formatCurrency(fgtsOnRescisory)}\n` : '') +
-            (stabilityFgts > 0 ? `(+) FGTS sobre Estabilidade: ${formatCurrency(stabilityFgts)}\n` : '') +
-            `(=) Base Total: ${formatCurrency(totalFgtsParaMulta)}\n` +
-            `Multa (40%): ${formatCurrency(fine40)}`;
+        let fineDetails = `Base de Cálculo da Multa de 40%:\n`;
+        if (totalFgtsDeposited > 0) fineDetails += `(+) FGTS Depositado: ${formatCurrency(totalFgtsDeposited)}\n`;
+        if (totalFgtsMissing > 0) fineDetails += `(+) FGTS Não Depositado: ${formatCurrency(totalFgtsMissing)}\n`;
+        if (fgtsOnRescisory > 0) fineDetails += `(+) FGTS sobre Rescisão: ${formatCurrency(fgtsOnRescisory)}\n`;
+        if (stabilityFgts > 0) fineDetails += `(+) FGTS sobre Estabilidade: ${formatCurrency(stabilityFgts)}\n`;
+        fineDetails += `(=) Base Total: ${formatCurrency(totalFgtsParaMulta)}\nMulta (40%): ${formatCurrency(multa40)}`;
 
-        results.push({ desc: `Multa 40% do FGTS (${baseDesc})`, value: fine40, category: 'FGTS', details: fineDetails });
+        results.push({ 
+            desc: `Multa 40% do FGTS (Base: ${formatCurrency(totalFgtsParaMulta)})`, 
+            value: multa40, 
+            category: 'FGTS',
+            details: fineDetails
+        });
     }
 
-    // 11. Multas CLT
+    // 11. Multas Art. 477 e 467
     if (calcData.applyFine477 && salary) {
-        results.push({ desc: `Multa Art. 477 (Atraso)`, value: salary, category: 'Multas' });
+        results.push({ 
+            desc: `Multa Art. 477 (Atraso)`, 
+            value: salary, 
+            category: 'Multas',
+            details: `Valor equivalente a um salário base do empregado.\nBase: ${formatCurrency(salary)}`
+        });
     }
-    
+
     if (calcData.applyFine467) {
-        const incontroverso = results
-            .filter(r => r.category === 'Rescisórias')
-            .reduce((sum, item) => sum + item.value, 0);
-        results.push({ desc: `Multa Art. 467 (50% Incontroverso)`, value: incontroverso * 0.5, category: 'Multas' });
+        const rescisorySum = results
+            .filter(r => r.category === 'Rescisórias' || r.desc.includes('Multa 40%'))
+            .reduce((acc, curr) => acc + curr.value, 0);
+            
+        const fine467 = rescisorySum * 0.5;
+        results.push({ 
+            desc: `Multa Art. 467 (50% Incontroverso)`, 
+            value: fine467, 
+            category: 'Multas',
+            details: `Base de Cálculo (Verbas Rescisórias + Multa 40%): ${formatCurrency(rescisorySum)}\nMulta (50%): ${formatCurrency(fine467)}`
+        });
     }
 
     // 12. Danos Morais
@@ -905,7 +1006,12 @@ const calculateLaborResults = (calcData: LaborData) => {
     const currentTotal = results.reduce((acc, curr) => acc + curr.value, 0);
     if (calcData.attorneyFees > 0) {
         const feesValue = currentTotal * (calcData.attorneyFees / 100);
-        results.push({ desc: `Honorários Advocatícios (${calcData.attorneyFees}%)`, value: feesValue, category: 'Honorários' });
+        results.push({ 
+            desc: `Honorários Advocatícios (${calcData.attorneyFees}%)`, 
+            value: feesValue, 
+            category: 'Honorários',
+            details: `Base de Cálculo (Total Bruto Estimado): ${formatCurrency(currentTotal)}\nPercentual: ${calcData.attorneyFees}%\nValor: ${formatCurrency(feesValue)}`
+        });
     }
 
     // 14. Deduções
