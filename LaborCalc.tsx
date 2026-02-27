@@ -333,7 +333,8 @@ const calculateBenefitExact = (
     end: Date, 
     history: LaborData['salaryHistory'], 
     currentSalary: number,
-    calcFn: (salary: number, daysWorked: number) => number
+    calcFn: (salary: number, daysWorked: number) => number,
+    fullMonthDays: number = 30
 ): { value: number, months: number, memory: string[] } => {
     let totalValue = 0;
     let totalMonths = 0;
@@ -355,13 +356,13 @@ const calculateBenefitExact = (
         const activeEnd = e < monthEnd ? e : monthEnd;
         
         if (activeStart <= activeEnd) {
-            let daysWorked = 30;
+            let daysWorked = fullMonthDays;
             const isFullMonth = activeStart <= monthStart && activeEnd >= monthEnd;
             
             if (!isFullMonth) {
                 const diffTime = Math.abs(activeEnd.getTime() - activeStart.getTime());
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-                daysWorked = Math.min(diffDays, 30);
+                daysWorked = Math.min(diffDays, fullMonthDays);
             }
             
             // Get salary
@@ -688,20 +689,13 @@ const calculateLaborResults = (calcData: LaborData) => {
                 const pEnd = parseDate(period.endDate) || end;
                 
                 if (pStart && pEnd && period.hoursPerMonth > 0) {
+                    const workDaysPerMonth = period.daysPerMonth || 26; // Default to 26 as per user request
                     const result = calculateBenefitExact(pStart, pEnd, calcData.salaryHistory, salary, (sal, days) => {
                         const hourlyRate = sal / 220;
                         const nightRate = hourlyRate * 0.20;
-                        
-                        // If daysPerMonth is specified, we might want to adjust how we calculate the monthly value
-                        // But currently hoursPerMonth is the total.
-                        // If the user inputs daysPerMonth, the UI updates hoursPerMonth.
-                        // So we can stick to hoursPerMonth.
-                        // However, for partial months, we should be careful.
-                        // If hoursPerMonth is for a full month (e.g. 30 days), then for partial month we do (hoursPerMonth / 30) * days.
-                        
                         const monthlyVal = nightRate * period.hoursPerMonth;
-                        return (monthlyVal / 30) * days;
-                    });
+                        return (monthlyVal / workDaysPerMonth) * days;
+                    }, workDaysPerMonth);
                     
                     const detailsStr = `Salário Hora: Base / 220\n` +
                         `Adicional Noturno: 20%\n` +
@@ -742,11 +736,9 @@ const calculateLaborResults = (calcData: LaborData) => {
                         const intraRate = hourlyRate * 1.5;
                         
                         // User formula: (Sal/220) * Hours/Day * DaysWorked * 1.5
-                        // For partial months, 'days' is the number of calendar days. 
-                        // We assume these are 'effective work days' in the partial period context.
                         const monthlyVal = intraRate * period.hoursPerDay * workDaysPerMonth;
                         return (monthlyVal / workDaysPerMonth) * days;
-                    });
+                    }, workDaysPerMonth);
                     
                     const detailsStr = `Salário Hora: Base / 220\n` +
                         `Adicional (50%): 1.5x\n` +
@@ -801,21 +793,21 @@ const calculateLaborResults = (calcData: LaborData) => {
         }
     });
 
-    // 7. Horas Extras
-    calcData.overtime.forEach((ot, idx) => {
-        const otStart = parseDate(ot.startDate) || start;
-        const otEnd = parseDate(ot.endDate) || end;
-        
-        if (otStart && otEnd && ot.hoursPerMonth > 0) {
-            const perc = ot.percentage === -1 ? (ot.customPercentage || 50) : ot.percentage;
+        calcData.overtime.forEach((ot, idx) => {
+            const otStart = parseDate(ot.startDate) || start;
+            const otEnd = parseDate(ot.endDate) || end;
+            const workDaysPerMonth = 26; // Standard work days as per user request for HE proportionality
             
-            const result = calculateBenefitExact(otStart, otEnd, calcData.salaryHistory, salary, (sal, days) => {
-                const hourlyRate = sal / 220;
-                const otRate = hourlyRate * (1 + (perc / 100));
-                const monthlyVal = otRate * ot.hoursPerMonth;
-                // User formula for proportional: (MonthlyVal / 26) * DaysWorked
-                return (monthlyVal / 26) * days;
-            });
+            if (otStart && otEnd && ot.hoursPerMonth > 0) {
+                const perc = ot.percentage === -1 ? (ot.customPercentage || 50) : ot.percentage;
+                
+                const result = calculateBenefitExact(otStart, otEnd, calcData.salaryHistory, salary, (sal, days) => {
+                    const hourlyRate = sal / 220;
+                    const otRate = hourlyRate * (1 + (perc / 100));
+                    const monthlyVal = otRate * ot.hoursPerMonth;
+                    // User formula for proportional: (MonthlyVal / workDaysPerMonth) * DaysWorked
+                    return (monthlyVal / workDaysPerMonth) * days;
+                }, workDaysPerMonth);
             
             results.push({ 
                 desc: `Horas Extras ${perc}% (${ot.hoursPerMonth}h/mês x ${result.months} meses)`, 
