@@ -229,22 +229,25 @@ const getSalaryAtDate = (date: Date, history: LaborData['salaryHistory'], curren
 
 const countMonths15DayRule = (start: Date, end: Date): number => {
     let months = 0;
-    let current = new Date(start);
+    // Normalize to start of day
+    const s = new Date(start); s.setHours(0,0,0,0);
+    const e = new Date(end); e.setHours(0,0,0,0);
     
-    // Iterate through months
-    while (current <= end) {
-        const year = current.getFullYear();
-        const month = current.getMonth();
+    let currentYear = s.getFullYear();
+    let currentMonth = s.getMonth();
+    
+    const endYear = e.getFullYear();
+    const endMonth = e.getMonth();
+    
+    while (currentYear < endYear || (currentYear === endYear && currentMonth <= endMonth)) {
+        const monthStart = new Date(currentYear, currentMonth, 1);
+        const monthEnd = new Date(currentYear, currentMonth + 1, 0);
         
-        const monthStart = new Date(year, month, 1);
-        const monthEnd = new Date(year, month + 1, 0);
+        const activeStart = s > monthStart ? s : monthStart;
+        const activeEnd = e < monthEnd ? e : monthEnd;
         
-        // Determine overlap of period with this month
-        const periodStartInMonth = current > monthStart ? current : monthStart;
-        const periodEndInMonth = end < monthEnd ? end : monthEnd;
-        
-        if (periodStartInMonth <= periodEndInMonth) {
-            const diffTime = Math.abs(periodEndInMonth.getTime() - periodStartInMonth.getTime());
+        if (activeStart <= activeEnd) {
+            const diffTime = Math.abs(activeEnd.getTime() - activeStart.getTime());
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // Inclusive
             
             if (diffDays >= 15) {
@@ -252,9 +255,12 @@ const countMonths15DayRule = (start: Date, end: Date): number => {
             }
         }
         
-        // Move to next month
-        current.setMonth(current.getMonth() + 1);
-        current.setDate(1); // Reset to 1st of next month
+        // Next month
+        currentMonth++;
+        if (currentMonth > 11) {
+            currentMonth = 0;
+            currentYear++;
+        }
     }
     return months;
 };
@@ -424,29 +430,35 @@ const calculateLaborResults = (calcData: LaborData) => {
 
     // Reflexos do Aviso Prévio (se indenizado)
     if (noticeDays > 0 && isIndemnified) {
-        // Reflexo em 13º (1/12 avos)
-        const reflex13th = (salary / 12); 
-        // Se o aviso projeta mais de 15 dias no mês, conta 1 avo.
-        // Simplificação: Aviso de 30 dias = 1 mês = 1/12. Aviso de 90 dias = 3 meses = 3/12.
-        // A projeção é tempo de serviço.
-        // Vamos calcular quantos meses "cheios" (ou >15 dias) a projeção adiciona.
-        // Mas a prática comum é: 1/12 por ano ou fração > 15 dias.
-        // O aviso prévio indenizado integra o tempo de serviço.
-        // Então, se a projeção cai num mês novo e dá > 15 dias, ganha mais 1 avo.
+        // A projeção do aviso prévio integra o tempo de serviço para todos os efeitos legais (Lei 12.506/2011, Súmula 371 TST).
+        // Calculamos a diferença de avos entre a data de saída real e a data projetada.
+        const projectedEndDate = new Date(end.getTime() + (noticeDays * 24 * 60 * 60 * 1000));
         
-        // Cálculo simplificado de reflexo financeiro direto:
-        // Reflexo 13º = (Valor Aviso / 12)? Não. É (Salário / 12) * (Meses Projeção).
-        const projectedMonths = Math.floor(noticeDays / 30); // Aproximado
-        const remainderDays = noticeDays % 30;
-        const totalReflexMonths = projectedMonths + (remainderDays >= 15 ? 1 : 0);
+        // Para 13º Salário: Conta-se do início do ano (ou admissão) até o fim.
+        const startOfYear = new Date(end.getFullYear(), 0, 1);
+        const effectiveStart = start > startOfYear ? start : startOfYear;
+        
+        const monthsNormal = countMonths15DayRule(effectiveStart, end);
+        const monthsProjected = countMonths15DayRule(effectiveStart, projectedEndDate);
+        const totalReflexMonths = Math.max(0, monthsProjected - monthsNormal);
         
         if (totalReflexMonths > 0) {
             const valReflex13 = (salary / 12) * totalReflexMonths;
-            results.push({ desc: `Reflexo Aviso Prévio em 13º (${totalReflexMonths}/12 avos)`, value: valReflex13, category: 'Rescisórias' });
+            results.push({ 
+                desc: `Reflexo Aviso Prévio em 13º (${totalReflexMonths}/12 avos)`, 
+                value: valReflex13, 
+                category: 'Rescisórias',
+                details: `Projeção: ${noticeDays} dias\nData Projetada: ${projectedEndDate.toLocaleDateString()}\nAvos Adicionais: ${totalReflexMonths} (Diferença entre projeção e data real)`
+            });
             
             const valReflexVac = (salary / 12) * totalReflexMonths;
             const valReflexVacTotal = valReflexVac + (valReflexVac / 3);
-            results.push({ desc: `Reflexo Aviso Prévio em Férias + 1/3 (${totalReflexMonths}/12 avos)`, value: valReflexVacTotal, category: 'Rescisórias' });
+            results.push({ 
+                desc: `Reflexo Aviso Prévio em Férias + 1/3 (${totalReflexMonths}/12 avos)`, 
+                value: valReflexVacTotal, 
+                category: 'Rescisórias',
+                details: `Projeção: ${noticeDays} dias\nData Projetada: ${projectedEndDate.toLocaleDateString()}\nAvos Adicionais: ${totalReflexMonths}`
+            });
             
             const valReflexFgts = noticeValue * 0.08;
             results.push({ desc: `Reflexo Aviso Prévio em FGTS (8%)`, value: valReflexFgts, category: 'FGTS' });
