@@ -14,7 +14,7 @@ import { formatCurrency } from './utils';
 import BenefitAnalysisModal from './Components/BenefitAnalysisModal';
 import SavedCalculationsModal from './Components/SavedCalculationsModal';
 import { fetchINPCData, processINPCIndices } from './services/bcbService';
-import { fetchIBGELifeExpectancy, IBGELifeExpectancy } from './services/ibgeService';
+import { fetchIBGELifeExpectancy, IBGELifeExpectancy } from './src/services/ibgeService';
 
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
