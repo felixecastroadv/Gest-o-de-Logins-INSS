@@ -1644,8 +1644,11 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                         className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
                                         disabled={data.fgtsNoDeposits}
                                       />
-                                      <span className="text-xs text-slate-600 dark:text-slate-400">Todos os depósitos foram realizados?</span>
+                                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">FGTS Totalmente Depositado (Período Integral)</span>
                                   </label>
+                                  <p className="text-[10px] text-slate-500 mt-1 ml-6 leading-tight">
+                                      Marque se o valor acima corresponde ao total devido de todo o contrato. Se desmarcado, o sistema considerará como valor parcial.
+                                  </p>
                               </div>
                           </div>
                       </div>
