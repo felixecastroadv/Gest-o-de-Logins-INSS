@@ -851,7 +851,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         doc.text(`Tempo Total Calculado: ${analysisResult.totalTime.years} anos, ${analysisResult.totalTime.months} meses e ${analysisResult.totalTime.days} dias`, margin, 80);
         doc.text(`Carência Total: ${analysisResult.totalCarencia} meses`, margin, 87);
         doc.text(`Idade na DER: ${analysisResult.age.years} anos, ${analysisResult.age.months} meses e ${analysisResult.age.days} dias`, margin, 94);
-        doc.text(`Pontuação: ${analysisResult.points} pontos`, margin, 101);
+        doc.text(`Pontuação: ${analysisResult.points.toFixed(2)} pontos`, margin, 101);
         doc.text(`Sexo: ${analysisResult.gender === 'M' ? 'Masculino' : 'Feminino'}`, margin, 108);
         if (analysisResult.isTeacher) doc.text(`Professor(a): Sim`, margin, 115);
         if (analysisResult.isPcd) doc.text(`Pessoa com Deficiência (PcD): Sim`, margin, 122);
