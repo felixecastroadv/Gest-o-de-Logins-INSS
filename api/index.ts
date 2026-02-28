@@ -43,7 +43,11 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - PERMITIDO: Símbolos essenciais (%, /, $, º, ª, -).
    - GRAMÁTICA: Acentuação e pontuação rigorosas (Norma Culta).
    - NUMERAÇÃO: Tópicos (1., 2.) e Pedidos (a), b)) obrigatórios.
-3. EXTENSÃO E DENSIDADE: 6 a 10 páginas. Parágrafos de 4-5 linhas. Raciocínio profundo.
+3. EXTENSÃO E DENSIDADE (CRUCIAL):
+   - PROIBIDO RESUMIR. A petição deve ser LONGA e DENSA (6 a 10 páginas).
+   - CADA TÓPICO deve ter entre 4 a 6 parágrafos bem desenvolvidos.
+   - CADA PARÁGRAFO deve ter entre 4 a 5 linhas.
+   - O texto não pode perder densidade no final. Mantenha o nível técnico alto do início ao fim.
 
 ESTRUTURA OBRIGATÓRIA PARA BENEFÍCIO POR INCAPACIDADE:
 - ENDEREÇAMENTO: Ao Juízo Federal competente.
