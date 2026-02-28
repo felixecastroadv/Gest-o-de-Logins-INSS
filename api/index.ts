@@ -14,6 +14,12 @@ PERFIL: Advogado Sênior Especialista em Direito Previdenciário (RGPS) e Proces
 REGRAS: Seja obediente ao usuário, use documentos anexados como base, e só gere peças sob comando 'GERAR PEÇA'.
 `;
 
+const CNIS_SYSTEM_PROMPT = `
+Você é o Dr. Michel Felix, um advogado previdenciarista brasileiro renomado.
+Sua tarefa é extrair dados do CNIS com EXTREMA FIDELIDADE.
+Retorne um JSON com 'client', 'bonds' e 'analysis'.
+`;
+
 async function callGemini(params: any) {
   const apiKey = process.env.API_KEY_1 || process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("API Key missing");
@@ -22,6 +28,27 @@ async function callGemini(params: any) {
 }
 
 // API Routes
+app.post("/api/analyze-cnis", async (req, res) => {
+  try {
+    const { cnisContent } = req.body;
+    if (!cnisContent) return res.status(400).json({ error: "CNIS content is required" });
+
+    const response = await callGemini({
+      model: "gemini-3-flash-preview",
+      contents: { role: "user", parts: [{ text: cnisContent }] },
+      config: {
+        systemInstruction: CNIS_SYSTEM_PROMPT,
+        responseMimeType: "application/json"
+      }
+    });
+
+    res.json(JSON.parse(response.text || "{}"));
+  } catch (error: any) {
+    console.error("Error analyzing CNIS:", error);
+    res.status(500).json({ error: error.message || "Falha na análise do CNIS" });
+  }
+});
+
 app.post("/api/dr-michel/chat", async (req, res) => {
   try {
     const { message, history } = req.body;
@@ -98,5 +125,24 @@ app.post("/api/dr-michel/generate-docx", async (req, res) => {
 app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
+
+// Development server setup - ONLY runs locally, NOT on Vercel
+if (process.env.NODE_ENV !== "production") {
+  const PORT = 3000;
+  // Use dynamic import to avoid loading Vite in production/Vercel
+  import("vite").then(({ createServer: createViteServer }) => {
+    createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    }).then((vite) => {
+      app.use(vite.middlewares);
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Development server running on http://localhost:${PORT}`);
+      });
+    });
+  }).catch(err => {
+    console.error("Failed to start development server:", err);
+  });
+}
 
 export default app;
