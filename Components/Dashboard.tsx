@@ -608,9 +608,7 @@ const Dashboard: React.FC<DashboardProps> = ({
              
              {/* CONTENT SWITCHER */}
              {currentView === 'dr_michel' ? (
-                 <DrMichelFelix 
-                    calculatorData={savedSocialCalculations[0]} // Pass the latest calculation as context
-                 />
+                 <DrMichelFelix />
              ) : currentView === 'labor_calc' ? (
                  <LaborCalc 
                     clients={records} 
