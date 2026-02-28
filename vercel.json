@@ -1,7 +1,13 @@
 {
-  "functions": {
-    "api/analyze-cnis.ts": {
-      "maxDuration": 300
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/server.ts"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
-  }
+  ]
 }
