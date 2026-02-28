@@ -6,8 +6,9 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-async function startServer() {
-  const app = express();
+const app = express();
+
+async function setupServer() {
   const PORT = 3000;
 
   // Increase payload limit for large PDF text content
@@ -105,14 +106,16 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
+    
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
   } else {
     // Production setup (serve static files)
     app.use(express.static("dist"));
   }
-
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
 }
 
-startServer();
+setupServer();
+
+export default app;
