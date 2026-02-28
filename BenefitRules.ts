@@ -555,7 +555,9 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
     });
     const totalCarencia = uniqueMonths.size;
 
-    const points = age.years + timeTotal.years + (timeTotal.months / 12);
+    const points = (age.years + timeTotal.years) + 
+                   ((age.months + timeTotal.months) / 12) + 
+                   ((age.days + timeTotal.days) / 365);
     
     // Check Insured Quality
     const { hasQuality, gracePeriodEnd } = checkInsuredQuality(data.bonds, der);
@@ -568,7 +570,9 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
     const reformDate = '2019-11-13';
     const timeAtReformTotal = calculateTimeForPeriod(data.bonds, reformDate, data.gender);
     const ageAtReform = calculateAge(data.birthDate, reformDate);
-    const pointsAtReform = ageAtReform.years + timeAtReformTotal.years + (timeAtReformTotal.months / 12);
+    const pointsAtReform = (ageAtReform.years + timeAtReformTotal.years) + 
+                           ((ageAtReform.months + timeAtReformTotal.months) / 12) + 
+                           ((ageAtReform.days + timeAtReformTotal.days) / 365);
     
     // Calculate Carência at Reform
     const uniqueMonthsReform = new Set<string>();
@@ -634,7 +638,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: false,
             ruleType: 'Pre-Reform-8696',
             category: 'aposentadorias',
-            missingDetails: `Em 13/11/2019: Pontos ${pointsAtReform.toFixed(1)}/${pointsReqPre}. Tempo ${timeAtReformTotal.years}/${timeReqPre}.`
+            missingDetails: `Em 13/11/2019: Pontos ${pointsAtReform.toFixed(2)}/${pointsReqPre}. Tempo ${timeAtReformTotal.years}/${timeReqPre}.`
         });
     }
 
@@ -934,7 +938,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: false,
             ruleType: 'Post-Reform',
             category: 'aposentadorias',
-            missingDetails: `Pontos: ${points.toFixed(1)}/${pointsReq}. Tempo: ${timeTotal.years}/${progTimeReq}.`
+            missingDetails: `Pontos: ${points.toFixed(2)}/${pointsReq}. Tempo: ${timeTotal.years}/${progTimeReq}.`
         });
     }
 
@@ -973,7 +977,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             isEligible: false,
             ruleType: 'Transition',
             category: 'aposentadorias',
-            missingDetails: `Tempo Especial (25): ${specialTime25.toFixed(1)}/25. Pontos: ${points.toFixed(1)}/${specialPointsReq25}.`
+            missingDetails: `Tempo Especial (25): ${specialTime25.toFixed(2)}/25. Pontos: ${points.toFixed(2)}/${specialPointsReq25}.`
         });
     }
 
