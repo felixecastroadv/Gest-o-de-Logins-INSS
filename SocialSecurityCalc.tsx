@@ -264,14 +264,23 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         return Math.ceil(diff / (1000 * 60 * 60 * 24)) + 1;
     };
 
+    // Helper to safely parse YYYY-MM-DD to local noon to avoid timezone drift
+    const parseDateLocal = (dateStr: string) => {
+        if (!dateStr) return new Date();
+        if (dateStr.length === 10 && dateStr.includes('-')) {
+            return new Date(dateStr + 'T12:00:00');
+        }
+        return new Date(dateStr);
+    };
+
     const calculateTime = (start: string, end: string, type: string, gender: string) => {
         // If start is missing, we can't calculate
         if (!start) return { years: 0, months: 0, days: 0, totalDays: 0 };
         
-        const startDate = new Date(start);
+        const startDate = parseDateLocal(start);
         // If end is missing, assume it's up to the DER (or Today if DER is missing)
         // But only if we consider it "Active". For now, let's use DER if provided, else Today.
-        let endDate = end ? new Date(end) : (data.der ? new Date(data.der) : new Date());
+        let endDate = end ? parseDateLocal(end) : (data.der ? parseDateLocal(data.der) : new Date());
         
         if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
              return { years: 0, months: 0, days: 0, totalDays: 0 };
@@ -334,15 +343,15 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         let maxDateMs = -Infinity;
 
         const processedBonds = activeBonds.map(b => {
-            const start = new Date(b.startDate);
+            const start = parseDateLocal(b.startDate);
             start.setHours(12, 0, 0, 0);
             
             let endStr = b.endDate || data.der || new Date().toISOString().split('T')[0];
-            let end = new Date(endStr);
+            let end = parseDateLocal(endStr);
             end.setHours(12, 0, 0, 0);
 
             if (data.der) {
-                const derDate = new Date(data.der);
+                const derDate = parseDateLocal(data.der);
                 derDate.setHours(12, 0, 0, 0);
                 if (end.getTime() > derDate.getTime()) {
                     end = derDate;
@@ -420,14 +429,14 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
 
             // Priority: Date Range (since SCs might be missing from AI)
             if (bond.startDate && bond.endDate) {
-                let current = new Date(bond.startDate);
+                let current = parseDateLocal(bond.startDate);
                 // Normalize to start of month and noon to avoid timezone issues
                 current.setDate(1);
                 current.setHours(12, 0, 0, 0);
                 
-                let end = new Date(bond.endDate);
+                let end = parseDateLocal(bond.endDate);
                 if (data.der) {
-                    const derDate = new Date(data.der);
+                    const derDate = parseDateLocal(data.der);
                     if (end > derDate) {
                         end = derDate;
                     }
@@ -452,7 +461,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     if (data.der) {
                         const [m, y] = s.month.split('/');
                         const scDate = new Date(parseInt(y), parseInt(m) - 1, 1, 12, 0, 0, 0);
-                        const derDate = new Date(data.der);
+                        const derDate = parseDateLocal(data.der);
                         derDate.setDate(1);
                         derDate.setHours(12, 0, 0, 0);
                         if (scDate <= derDate) {
@@ -476,8 +485,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         const bondTimes = data.bonds.map(bond => {
             let effectiveEndDate = bond.endDate;
             if (bond.endDate && data.der) {
-                const bondEnd = new Date(bond.endDate);
-                const derDate = new Date(data.der);
+                const bondEnd = parseDateLocal(bond.endDate);
+                const derDate = parseDateLocal(data.der);
                 if (bondEnd > derDate) {
                     effectiveEndDate = data.der;
                 }
@@ -498,13 +507,13 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             const bondMonths = new Set<string>();
             
             if (bond.startDate && bond.endDate) {
-                let current = new Date(bond.startDate);
+                let current = parseDateLocal(bond.startDate);
                 current.setDate(1);
                 current.setHours(12, 0, 0, 0);
                 
-                let end = new Date(bond.endDate);
+                let end = parseDateLocal(bond.endDate);
                 if (data.der) {
-                    const derDate = new Date(data.der);
+                    const derDate = parseDateLocal(data.der);
                     if (end > derDate) {
                         end = derDate;
                     }
@@ -525,7 +534,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     if (data.der) {
                         const [m, y] = s.month.split('/');
                         const scDate = new Date(parseInt(y), parseInt(m) - 1, 1, 12, 0, 0, 0);
-                        const derDate = new Date(data.der);
+                        const derDate = parseDateLocal(data.der);
                         derDate.setDate(1);
                         derDate.setHours(12, 0, 0, 0);
                         if (scDate <= derDate) {
@@ -559,20 +568,20 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             return bond.sc.map(s => ({ month: s.month, value: s.value, indicators: s.indicators || [], isMissing: false }));
         }
 
-        let current = new Date(bond.startDate);
+        let current = parseDateLocal(bond.startDate);
         // Normalize to start of month
         current.setDate(1);
         current.setHours(12, 0, 0, 0);
 
         let end: Date;
         if (bond.endDate) {
-            end = new Date(bond.endDate);
+            end = parseDateLocal(bond.endDate);
         } else {
             // If active, go up to today
             end = new Date();
         }
         if (data.der) {
-            const derDate = new Date(data.der);
+            const derDate = parseDateLocal(data.der);
             if (end > derDate) {
                 end = derDate;
             }
@@ -783,8 +792,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             if (bond.useInCalculation && bond.startDate && bond.endDate) {
                 let effectiveEndDate = bond.endDate;
                 if (data.der) {
-                    const bondEnd = new Date(bond.endDate);
-                    const derDate = new Date(data.der);
+                    const bondEnd = parseDateLocal(bond.endDate);
+                    const derDate = parseDateLocal(data.der);
                     if (bondEnd > derDate) {
                         effectiveEndDate = data.der;
                     }
@@ -861,8 +870,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 let isLimitedByDer = false;
                 
                 if (bond.endDate && data.der) {
-                    const bondEnd = new Date(bond.endDate);
-                    const derDate = new Date(data.der);
+                    const bondEnd = parseDateLocal(bond.endDate);
+                    const derDate = parseDateLocal(data.der);
                     if (bondEnd > derDate) {
                         effectiveEndDate = data.der;
                         isLimitedByDer = true;
@@ -1424,7 +1433,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             bonds: [...prev.bonds].sort((a, b) => {
                 if (!a.startDate) return 1;
                 if (!b.startDate) return -1;
-                return new Date(a.startDate).getTime() - new Date(b.startDate).getTime();
+                return parseDateLocal(a.startDate).getTime() - parseDateLocal(b.startDate).getTime();
             })
         }));
     };
@@ -1776,8 +1785,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                     data.bonds.map((bond, idx) => {
                                         let effectiveEndDate = bond.endDate;
                                         if (bond.endDate && data.der) {
-                                            const bondEnd = new Date(bond.endDate);
-                                            const derDate = new Date(data.der);
+                                            const bondEnd = parseDateLocal(bond.endDate);
+                                            const derDate = parseDateLocal(data.der);
                                             if (bondEnd > derDate) {
                                                 effectiveEndDate = data.der;
                                             }
