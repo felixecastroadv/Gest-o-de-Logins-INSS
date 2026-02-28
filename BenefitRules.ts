@@ -505,13 +505,32 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
     
     // Calculate Carência (Simplified: count unique months in bonds)
     const uniqueMonths = new Set<string>();
+    const derDate = new Date(der);
+    derDate.setDate(1);
+    derDate.setHours(12, 0, 0, 0);
+
     data.bonds.forEach(b => {
         if (!b.useInCalculation) return;
         if (b.sc.length > 0) {
-            b.sc.forEach(s => uniqueMonths.add(s.month));
+            b.sc.forEach(s => {
+                const [m, y] = s.month.split('/');
+                const scDate = new Date(parseInt(y), parseInt(m) - 1, 1, 12, 0, 0, 0);
+                if (scDate <= derDate) {
+                    uniqueMonths.add(s.month);
+                }
+            });
         } else if (b.startDate && b.endDate) {
             let start = new Date(b.startDate);
+            start.setDate(1);
+            start.setHours(12, 0, 0, 0);
+            
             let end = new Date(b.endDate);
+            if (end > new Date(der)) {
+                end = new Date(der);
+            }
+            end.setDate(1);
+            end.setHours(12, 0, 0, 0);
+
             // Limit loop to avoid crash on bad dates
             let safety = 0;
             while(start <= end && safety < 1200) { // 100 years
