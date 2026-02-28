@@ -174,6 +174,20 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
     setIsUploading(true);
     
     try {
+      let activeSessionId = currentSessionId;
+      
+      if (!activeSessionId) {
+        const newSession: ChatSession = {
+          id: Date.now().toString(),
+          title: 'Nova Conversa',
+          messages: [],
+          date: new Date().toLocaleDateString('pt-BR')
+        };
+        setSessions([newSession, ...sessions]);
+        setCurrentSessionId(newSession.id);
+        activeSessionId = newSession.id;
+      }
+
       const fileArray = Array.from(files);
       let combinedText = "";
 
@@ -186,7 +200,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
       };
       
       setSessions(prev => prev.map(s => 
-        s.id === sessionId ? { ...s, messages: [...s.messages, readingMsg] } : s
+        s.id === activeSessionId ? { ...s, messages: [...s.messages, readingMsg] } : s
       ));
 
       for (const file of fileArray) {
@@ -208,10 +222,9 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
       await handleSendMessage(uploadPrompt);
     } catch (error: any) {
       console.error("Erro ao processar arquivos:", error);
-      alert("Erro ao ler os arquivos PDF. Certifique-se de que não estão protegidos por senha.");
+      alert(`Erro ao ler os arquivos PDF: ${error.message || 'Erro desconhecido'}. Certifique-se de que não estão protegidos por senha.`);
     } finally {
-      setIsUploading(true); // Keeping it true for a moment to show progress, then false
-      setTimeout(() => setIsUploading(false), 500);
+      setIsUploading(false);
     }
   };
 
