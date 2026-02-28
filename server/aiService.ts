@@ -110,7 +110,7 @@ export async function chatWithDrMichel(message: string, history: any[], calculat
 
   try {
     const response = await callGemini({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash-latest",
       contents,
       config: {
         systemInstruction: DR_MICHEL_SYSTEM_PROMPT,
@@ -179,7 +179,7 @@ Sua tarefa é analisar o texto extraído de um CNIS (Cadastro Nacional de Inform
 export async function analyzeCNIS(cnisText: string) {
   try {
     const response = await callGemini({
-      model: "gemini-3-flash-preview",
+      model: "gemini-1.5-flash-latest",
       contents: {
         role: "user",
         parts: [{ text: cnisText }]
