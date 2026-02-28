@@ -26,18 +26,35 @@ Sua tarefa é extrair dados do CNIS com EXTREMA FIDELIDADE.
 Retorne um JSON com 'client', 'bonds' e 'analysis'.
 `;
 
-async function callGemini(params: any, retries = 3, delay = 1000) {
-  const apiKey = process.env.API_KEY_1 || process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("API Key missing");
+// Logic for API Key Rotation (Round-Robin)
+let currentKeyIndex = Math.floor(Math.random() * 10);
+
+function getApiKeys() {
+  const keys = Object.keys(process.env)
+    .filter(k => k.startsWith('API_KEY_'))
+    .map(k => process.env[k])
+    .filter(Boolean) as string[];
+  
+  if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
+  return [...new Set(keys)]; // Remove duplicates
+}
+
+async function callGemini(params: any, retries = 5) {
+  const keys = getApiKeys();
+  if (keys.length === 0) throw new Error("Nenhuma chave de API encontrada. Configure API_KEY_1, API_KEY_2, etc. na Vercel.");
+
+  // Select key using round-robin
+  const apiKey = keys[currentKeyIndex % keys.length];
   const ai = new GoogleGenAI({ apiKey });
   
   try {
     return await ai.models.generateContent(params);
   } catch (error: any) {
+    // If rate limit (429) is hit, rotate to next key and retry immediately
     if (error.message?.includes('429') && retries > 0) {
-      console.log(`Rate limit hit, retrying in ${delay}ms... (${retries} retries left)`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return callGemini(params, retries - 1, delay * 2);
+      currentKeyIndex++;
+      console.log(`Chave ${currentKeyIndex % keys.length} atingiu limite. Rotacionando... (${retries} tentativas restantes)`);
+      return callGemini(params, retries - 1);
     }
     throw error;
   }
