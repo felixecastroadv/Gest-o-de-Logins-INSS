@@ -36,6 +36,15 @@ export interface SimulationResult {
 }
 
 // Helper to calculate time up to a specific date
+// Helper to safely parse YYYY-MM-DD to local noon to avoid timezone drift
+export const parseDateLocal = (dateStr: string) => {
+    if (!dateStr) return new Date();
+    if (dateStr.length === 10 && dateStr.includes('-')) {
+        return new Date(dateStr + 'T12:00:00');
+    }
+    return new Date(dateStr);
+};
+
 export const calculateTimeForPeriod = (
     bonds: CNISBond[], 
     endDateStr: string, 
@@ -45,18 +54,18 @@ export const calculateTimeForPeriod = (
     
     if (activeBonds.length === 0) return { years: 0, months: 0, days: 0, totalDays: 0 };
 
-    const targetEndMs = new Date(endDateStr).setHours(12, 0, 0, 0);
+    const targetEndMs = parseDateLocal(endDateStr).setHours(12, 0, 0, 0);
 
     // 1. Determine Global Range
     let minDateMs = Infinity;
     let maxDateMs = -Infinity;
 
     const processedBonds = activeBonds.map(b => {
-        const start = new Date(b.startDate);
+        const start = parseDateLocal(b.startDate);
         start.setHours(12, 0, 0, 0);
         
         // End date is the bond end date OR the target calculation date, whichever is earlier
-        let bondEnd = b.endDate ? new Date(b.endDate) : new Date();
+        let bondEnd = b.endDate ? parseDateLocal(b.endDate) : new Date();
         bondEnd.setHours(12, 0, 0, 0);
 
         // Cap bond end at target date
@@ -140,8 +149,8 @@ export const calculateTimeForPeriod = (
 export const calculateAge = (birthDateStr: string, targetDateStr: string) => {
     if (!birthDateStr) return { years: 0, months: 0, days: 0 };
     
-    const birth = new Date(birthDateStr);
-    const target = new Date(targetDateStr);
+    const birth = parseDateLocal(birthDateStr);
+    const target = parseDateLocal(targetDateStr);
     
     if (isNaN(birth.getTime())) return { years: 0, months: 0, days: 0 };
 
@@ -182,7 +191,7 @@ export const calculateRMI = (
     const groupedSalaries = new Map<string, { date: Date, value: number, originalValue: number, correctionFactor: number, monthStr: string }>();
     
     let derMonthStr = "";
-    const derDate = der ? new Date(der) : new Date();
+    const derDate = der ? parseDateLocal(der) : new Date();
     const limitDate = salaryLimitDate ? new Date(salaryLimitDate) : new Date(2100, 0, 1);
 
     if (der) {
@@ -444,7 +453,7 @@ export const checkInsuredQuality = (bonds: CNISBond[], der: string): { hasQualit
         if (!b.endDate) {
             hasActiveBond = true; // Active bond means insured
         } else {
-            const end = new Date(b.endDate);
+            const end = parseDateLocal(b.endDate);
             if (end > lastBondEnd) lastBondEnd = end;
         }
     });
@@ -464,8 +473,8 @@ export const checkInsuredQuality = (bonds: CNISBond[], der: string): { hasQualit
         if (b.sc.length > 0) {
              b.sc.forEach(s => uniqueMonths.add(s.month));
         } else if (b.startDate && b.endDate) {
-             let start = new Date(b.startDate);
-             let end = new Date(b.endDate);
+             let start = parseDateLocal(b.startDate);
+             let end = parseDateLocal(b.endDate);
              let safety = 0;
              while(start <= end && safety < 1200) {
                  uniqueMonths.add(`${start.getMonth()+1}/${start.getFullYear()}`);
@@ -493,7 +502,7 @@ export const checkInsuredQuality = (bonds: CNISBond[], der: string): { hasQualit
     gracePeriodEnd.setMonth(gracePeriodEnd.getMonth() + 2); // +2 to be safe on "following month" logic? 
     // Let's stick to standard: End Date + Grace Months + 1.5 months (payment window)
     
-    const derDate = new Date(der);
+    const derDate = parseDateLocal(der);
     return { hasQuality: derDate <= gracePeriodEnd, gracePeriodEnd };
 };
 
@@ -505,28 +514,22 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
     
     // Calculate Carência (Simplified: count unique months in bonds)
     const uniqueMonths = new Set<string>();
-    const derDate = new Date(der);
+    const derDate = parseDateLocal(der);
     derDate.setDate(1);
     derDate.setHours(12, 0, 0, 0);
 
     data.bonds.forEach(b => {
         if (!b.useInCalculation) return;
-        if (b.sc.length > 0) {
-            b.sc.forEach(s => {
-                const [m, y] = s.month.split('/');
-                const scDate = new Date(parseInt(y), parseInt(m) - 1, 1, 12, 0, 0, 0);
-                if (scDate <= derDate) {
-                    uniqueMonths.add(s.month);
-                }
-            });
-        } else if (b.startDate && b.endDate) {
-            let start = new Date(b.startDate);
+        
+        // Priority: Date Range (since SCs might be missing from AI)
+        if (b.startDate && b.endDate) {
+            let start = parseDateLocal(b.startDate);
             start.setDate(1);
             start.setHours(12, 0, 0, 0);
             
-            let end = new Date(b.endDate);
-            if (end > new Date(der)) {
-                end = new Date(der);
+            let end = parseDateLocal(b.endDate);
+            if (end > parseDateLocal(der)) {
+                end = parseDateLocal(der);
             }
             end.setDate(1);
             end.setHours(12, 0, 0, 0);
@@ -534,10 +537,20 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             // Limit loop to avoid crash on bad dates
             let safety = 0;
             while(start <= end && safety < 1200) { // 100 years
-                uniqueMonths.add(`${start.getMonth()+1}/${start.getFullYear()}`);
+                const m = String(start.getMonth() + 1).padStart(2, '0');
+                const y = start.getFullYear();
+                uniqueMonths.add(`${m}/${y}`);
                 start.setMonth(start.getMonth() + 1);
                 safety++;
             }
+        } else if (b.sc.length > 0) {
+            b.sc.forEach(s => {
+                const [m, y] = s.month.split('/');
+                const scDate = new Date(parseInt(y), parseInt(m) - 1, 1, 12, 0, 0, 0);
+                if (scDate <= derDate) {
+                    uniqueMonths.add(s.month);
+                }
+            });
         }
     });
     const totalCarencia = uniqueMonths.size;
@@ -559,7 +572,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
     
     // Calculate Carência at Reform
     const uniqueMonthsReform = new Set<string>();
-    const reformDateObj = new Date(reformDate);
+    const reformDateObj = parseDateLocal(reformDate);
     data.bonds.forEach(b => {
         if (!b.useInCalculation) return;
         if (b.sc.length > 0) {
@@ -569,9 +582,9 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
                 if (d <= reformDateObj) uniqueMonthsReform.add(s.month);
             });
         } else if (b.startDate && b.endDate) {
-            let start = new Date(b.startDate);
-            let end = new Date(b.endDate);
-            if (end > reformDateObj) end = new Date(reformDateObj);
+            let start = parseDateLocal(b.startDate);
+            let end = parseDateLocal(b.endDate);
+            if (end > reformDateObj) end = parseDateLocal(reformDate);
             
             let safety = 0;
             while(start <= end && safety < 1200) {
@@ -653,9 +666,9 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
     
     data.bonds.forEach(b => {
         if (!b.useInCalculation || !b.startDate) return;
-        const start = new Date(b.startDate);
-        let end = b.endDate ? new Date(b.endDate) : new Date();
-        if (end > reformDateObj) end = new Date(reformDateObj);
+        const start = parseDateLocal(b.startDate);
+        let end = b.endDate ? parseDateLocal(b.endDate) : new Date();
+        if (end > reformDateObj) end = parseDateLocal(reformDate);
         if (start > reformDateObj) return;
 
         const diff = end.getTime() - start.getTime();
@@ -932,8 +945,8 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
     
     data.bonds.forEach(b => {
         if (!b.useInCalculation || !b.startDate) return;
-        const start = new Date(b.startDate);
-        const end = b.endDate ? new Date(b.endDate) : new Date();
+        const start = parseDateLocal(b.startDate);
+        const end = b.endDate ? parseDateLocal(b.endDate) : new Date();
         const diff = end.getTime() - start.getTime();
         const days = diff / (1000 * 60 * 60 * 24);
         const years = days / 365.25;
