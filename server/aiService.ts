@@ -2,40 +2,78 @@ import { GoogleGenAI } from "@google/genai";
 
 // Load balancing for Gemini API Keys
 const getGeminiKeys = () => {
-  const keys = process.env.GEMINI_KEYS ? process.env.GEMINI_KEYS.split(',').map(k => k.trim()) : [];
-  if (keys.length === 0 && process.env.GEMINI_API_KEY) {
-    keys.push(process.env.GEMINI_API_KEY);
+  const keys: string[] = [];
+  
+  // 1. Check for GEMINI_KEYS (comma separated)
+  if (process.env.GEMINI_KEYS) {
+    keys.push(...process.env.GEMINI_KEYS.split(',').map(k => k.trim()).filter(k => k));
   }
-  return keys;
+  
+  // 2. Check for individual API_KEY_X variables (1 to 20)
+  for (let i = 1; i <= 20; i++) {
+    const key = process.env[`API_KEY_${i}`];
+    if (key) keys.push(key.trim());
+  }
+  
+  // 3. Fallback to GEMINI_API_KEY
+  if (process.env.GEMINI_API_KEY) {
+    keys.push(process.env.GEMINI_API_KEY.trim());
+  }
+  
+  // Remove duplicates
+  return [...new Set(keys)];
 };
 
 let currentKeyIndex = 0;
 
 async function callGemini(params: any) {
   const keys = getGeminiKeys();
-  if (keys.length === 0) throw new Error("Nenhuma chave Gemini configurada (GEMINI_KEYS ou GEMINI_API_KEY)");
+  if (keys.length === 0) {
+    console.error("ERRO: Nenhuma chave Gemini encontrada no ambiente.");
+    throw new Error("Nenhuma chave Gemini configurada. Verifique as variáveis de ambiente (API_KEY_1, API_KEY_2, etc.).");
+  }
+
+  console.log(`Iniciando chamada Gemini. Total de chaves disponíveis: ${keys.length}`);
 
   // Try each key starting from the current index
   for (let i = 0; i < keys.length; i++) {
     const index = (currentKeyIndex + i) % keys.length;
     const apiKey = keys[index];
+    
+    // Mask key for logging
+    const maskedKey = apiKey.substring(0, 6) + "..." + apiKey.substring(apiKey.length - 4);
+    console.log(`Tentando chave Gemini [Índice ${index}]: ${maskedKey}`);
+
     const ai = new GoogleGenAI({ apiKey });
 
     try {
       const response = await ai.models.generateContent(params);
+      console.log(`Sucesso com a chave [Índice ${index}]`);
       currentKeyIndex = index; // Keep using this key if it works
       return response;
     } catch (error: any) {
-      console.error(`Erro com a chave Gemini ${index}:`, error.message);
-      // If it's a rate limit error (429), try the next key
-      if (error.message?.includes('429') || error.status === 429) {
+      const status = error.status || (error.message?.includes('429') ? 429 : 500);
+      console.error(`Falha na chave [Índice ${index}] (Status: ${status}):`, error.message);
+      
+      // If it's a rate limit error (429) or quota error, try the next key
+      if (status === 429 || error.message?.includes('quota') || error.message?.includes('limit')) {
+        console.log("Limite atingido. Rotacionando para a próxima chave...");
         continue;
       }
-      // For other errors, throw it
+      
+      // If it's an invalid key error, maybe try the next one too? 
+      // But usually we should stop if it's a fatal error.
+      // However, in a rotation system, one bad key shouldn't kill the whole app.
+      if (status === 401 || status === 403 || error.message?.includes('API key not valid')) {
+        console.warn("Chave inválida detectada. Tentando próxima...");
+        continue;
+      }
+
+      // For other unexpected errors, throw it
       throw error;
     }
   }
-  throw new Error("Todas as chaves Gemini atingiram o limite de taxa (Rate Limit).");
+  throw new Error("Todas as chaves Gemini falharam ou atingiram o limite de cota.");
 }
 
 const DR_MICHEL_SYSTEM_PROMPT = `
