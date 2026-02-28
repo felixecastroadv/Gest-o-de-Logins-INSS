@@ -883,22 +883,47 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                         currentY = addText("Salários de Contribuição Utilizados no Cálculo:", currentY, true);
                         currentY += 5;
 
-                        const salariesData = benefit.rmiDetails.salaries.map(s => [
-                            s.month,
-                            formatCurrency(s.originalValue),
-                            s.correctionFactor.toFixed(6),
-                            formatCurrency(s.correctedValue),
-                            s.isLimit ? 'Sim' : 'Não'
+                        let totalOriginal = 0;
+                        let totalCorrected = 0;
+
+                        const salariesData = benefit.rmiDetails.salaries.map((s, idx) => {
+                            totalOriginal += s.originalValue;
+                            totalCorrected += s.correctedValue;
+                            return [
+                                (idx + 1).toString(),
+                                s.month,
+                                formatCurrency(s.originalValue),
+                                s.correctionFactor.toFixed(6),
+                                formatCurrency(s.correctedValue),
+                                s.isLimit ? 'Sim' : 'Não'
+                            ];
+                        });
+
+                        // Add a total row at the end
+                        salariesData.push([
+                            '-',
+                            'TOTAL',
+                            formatCurrency(totalOriginal),
+                            '-',
+                            formatCurrency(totalCorrected),
+                            '-'
                         ]);
 
                         autoTable(doc, {
                             startY: currentY,
-                            head: [['Competência', 'Valor Original', 'Fator Correção', 'Valor Corrigido', 'Limitado ao Teto?']],
+                            head: [['Nº', 'Competência', 'Valor Original', 'Fator Correção', 'Valor Corrigido', 'Limitado ao Teto?']],
                             body: salariesData,
                             theme: 'grid',
                             headStyles: { fillColor: [100, 100, 100] },
                             styles: { fontSize: 8 },
-                            margin: { left: margin, right: margin }
+                            margin: { left: margin, right: margin },
+                            didParseCell: function (data) {
+                                // Make the last row bold
+                                if (data.row.index === salariesData.length - 1) {
+                                    data.cell.styles.fontStyle = 'bold';
+                                    data.cell.styles.fillColor = [240, 240, 240];
+                                }
+                            }
                         });
                         
                         // @ts-ignore
