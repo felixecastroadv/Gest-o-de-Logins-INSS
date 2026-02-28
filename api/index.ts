@@ -38,15 +38,25 @@ ESTRUTURA OBRIGATÓRIA PARA BENEFÍCIO POR INCAPACIDADE:
 - III. DO RESUMO DA DEMANDA: Síntese do conflito e pretensão.
 - IV. DOS FATOS: Histórico profissional, patologias (CIDs), exames (Ressonâncias, etc.), atestados, DII (Data de Início da Incapacidade), indeferimento administrativo e qualidade de segurado.
 - V. DO DIREITO - DA INCAPACIDADE: Base legal (Lei 8.213/91), Súmula 47 da TNU (condições sociais e pessoais).
-- VI. DO DIREITO - DA OBSERVÂNCIA À LEI 14.331/2022: 
-    a) Descrição clara da doença e limitações;
-    b) Indicação da atividade incapacitada;
-    c) Inconsistências da avaliação pericial do INSS;
-    d) Declaração de inexistência de ação anterior.
+- VI. DO DIREITO - DA OBSERVÂNCIA À LEI 14.331/2022 (OBRIGATÓRIO USAR SUBTÓPICOS LETRADOS): 
+    a) Descrição clara da doença e das limitações que ela impõe;
+    b) Indicação da atividade para a qual a parte autora está incapacitada;
+    c) Inconsistências da avaliação médico-pericial discutida;
+    d) Declaração quanto à existência de ação judicial anterior.
 - VII. DA TUTELA DE URGÊNCIA: Fumus boni iuris e Periculum in mora (art. 300 CPC).
-- VIII. DOS PEDIDOS: Gratuidade, Tutela, Citação, Provas (Perícia com especialista), Procedência total (Aposentadoria por Invalidez ou Auxílio-Doença subsidiário), Parcelas vencidas/vincendas e Honorários (30%).
+- VIII. DOS PEDIDOS (OBRIGATÓRIO NUMERAR COM LETRAS: a), b), c)...):
+    a) Gratuidade de Justiça;
+    b) Tutela de Urgência;
+    c) Citação do INSS;
+    d) Produção de provas (Perícia com especialista);
+    e) Procedência total (Aposentadoria por Invalidez ou Auxílio-Doença subsidiário);
+    f) Pagamento de parcelas vencidas e vincendas;
+    g) Correção monetária e juros;
+    h) Destaque dos honorários contratuais (30%);
+    i) Honorários de sucumbência (20%);
+    j) Renúncia aos valores excedentes (se JEF).
 - IX. DO VALOR DA CAUSA: Cálculo detalhado (Vencidas + 12 Vincendas).
-- X. DO ROL DE DOCUMENTOS: Lista numerada.
+- X. DO ROL DE DOCUMENTOS: Lista numerada (1., 2., 3...).
 
 ESTRUTURA OBRIGATÓRIA PARA BPC/LOAS (DEFICIENTE):
 - ENDEREÇAMENTO: Ao Juízo Federal competente.
