@@ -1,5 +1,91 @@
 import { GoogleGenAI } from "@google/genai";
 
+// Load balancing for Gemini API Keys
+const getGeminiKeys = () => {
+  const keys = process.env.GEMINI_KEYS ? process.env.GEMINI_KEYS.split(',').map(k => k.trim()) : [];
+  if (keys.length === 0 && process.env.GEMINI_API_KEY) {
+    keys.push(process.env.GEMINI_API_KEY);
+  }
+  return keys;
+};
+
+let currentKeyIndex = 0;
+
+async function callGemini(params: any) {
+  const keys = getGeminiKeys();
+  if (keys.length === 0) throw new Error("Nenhuma chave Gemini configurada (GEMINI_KEYS ou GEMINI_API_KEY)");
+
+  // Try each key starting from the current index
+  for (let i = 0; i < keys.length; i++) {
+    const index = (currentKeyIndex + i) % keys.length;
+    const apiKey = keys[index];
+    const ai = new GoogleGenAI({ apiKey });
+
+    try {
+      const response = await ai.models.generateContent(params);
+      currentKeyIndex = index; // Keep using this key if it works
+      return response;
+    } catch (error: any) {
+      console.error(`Erro com a chave Gemini ${index}:`, error.message);
+      // If it's a rate limit error (429), try the next key
+      if (error.message?.includes('429') || error.status === 429) {
+        continue;
+      }
+      // For other errors, throw it
+      throw error;
+    }
+  }
+  throw new Error("Todas as chaves Gemini atingiram o limite de taxa (Rate Limit).");
+}
+
+const DR_MICHEL_SYSTEM_PROMPT = `
+PERFIL: Advogado Sênior Especialista em Direito Previdenciário (RGPS) e Processo Civil, atuando desde a via administrativa (INSS) até os Tribunais Superiores (STJ/STF).
+
+REGRAS RÍGIDAS DE OPERAÇÃO:
+1. Fase de Instrução: Ao receber documentos de prova (CNIS, PPP, LTCAT, laudos), limite-se a extrair os dados e gerar um "Relatório de Evidências" (ex: identificar lacunas no CNIS, validar exposição a agentes nocivos no PPP).
+2. Gatilho de Ação: Você está EXPRESSAMENTE PROIBIDO de redigir a peça final até receber o comando exato: 'GERAR PEÇA'.
+3. Fidelidade Normativa e Proibição de Alucinações: Fundamentar teses exclusivamente na Lei 8.213/91, Lei 8.212/91, EC 103/2019 (Reforma da Previdência) e Instruções Normativas vigentes do INSS. Citar apenas Temas Repetitivos julgados e Súmulas consolidadas (TNU, STJ, STF). Nunca inventar teses, números de processos ou ementas fictícias.
+4. Escopo Processual: Expertise para redigir Requerimentos Administrativos, Recursos à JRPS, Petições Iniciais de Concessão/Revisão (JEF e Justiça Comum), Recursos Inominados e Recursos Especiais/Extraordinários, conectando as provas enviadas com os cálculos da calculadora.
+
+CONTEXTO DA CALCULADORA:
+Sempre que fornecido, use os dados da calculadora (tempo, carência, pontos) como a verdade absoluta para fundamentar suas peças.
+
+ESTILO DE RESPOSTA:
+- Use Markdown para formatação.
+- Seja técnico, formal e assertivo.
+- Se houver inconsistências, aponte-as claramente.
+`;
+
+export async function chatWithDrMichel(message: string, history: any[], calculatorData?: any) {
+  const contents = [
+    ...history.map((h: any) => ({
+      role: h.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: h.content }]
+    })),
+    {
+      role: 'user',
+      parts: [{ 
+        text: `[CONTEXTO CALCULADORA: ${JSON.stringify(calculatorData || {})}]\n\nUsuário: ${message}` 
+      }]
+    }
+  ];
+
+  try {
+    const response = await callGemini({
+      model: "gemini-3-flash-preview",
+      contents,
+      config: {
+        systemInstruction: DR_MICHEL_SYSTEM_PROMPT,
+      }
+    });
+
+    return { text: response.text };
+  } catch (error) {
+    console.error("Erro no chat do Dr. Michel:", error);
+    throw error;
+  }
+}
+
 const SYSTEM_PROMPT = `
 Você é o Dr. Michel Felix, um advogado previdenciarista brasileiro renomado, especialista em RGPS (Regime Geral de Previdência Social), tanto nas regras pré-reforma quanto pós-reforma (EC 103/2019). Você é especialista em concessão, revisão, restabelecimento, planejamento previdenciário e processo administrativo/judicial. Você domina o CPC/2015.
 
@@ -53,17 +139,8 @@ Sua tarefa é analisar o texto extraído de um CNIS (Cadastro Nacional de Inform
 `;
 
 export async function analyzeCNIS(cnisText: string) {
-  // Use API_KEY_2 as requested by the user (Plan B)
-  const apiKey = process.env.API_KEY_2 || process.env.GEMINI_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error("API_KEY_2 (or GEMINI_API_KEY) not found");
-  }
-
-  const ai = new GoogleGenAI({ apiKey });
-
   try {
-    const response = await ai.models.generateContent({
+    const response = await callGemini({
       model: "gemini-3-flash-preview",
       contents: {
         role: "user",
