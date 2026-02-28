@@ -34,9 +34,12 @@ async function startServer() {
       const { message, history, calculatorData } = req.body;
       const response = await chatWithDrMichel(message, history, calculatorData);
       res.json(response);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error in /api/dr-michel/chat:", error);
-      res.status(500).json({ error: "Failed to chat with Dr. Michel" });
+      res.status(500).json({ 
+        error: error.message || "Erro interno no servidor de IA",
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   });
 
