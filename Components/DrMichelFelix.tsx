@@ -140,7 +140,11 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
         let errorMessage = 'Falha na resposta da IA';
         try {
           const errorData = JSON.parse(errorText);
-          errorMessage = errorData.error || errorMessage;
+          if (response.status === 429 || (errorData.error && errorData.error.code === 429)) {
+            errorMessage = 'Limite de uso atingido (Quota Exceeded). Por favor, aguarde cerca de 1 minuto antes de tentar novamente. Se o problema persistir, considere usar uma chave de API paga.';
+          } else {
+            errorMessage = errorData.error?.message || errorData.error || errorMessage;
+          }
         } catch (e) {
           errorMessage = errorText || errorMessage;
         }
@@ -161,7 +165,15 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
       ));
     } catch (error: any) {
       console.error(error);
-      alert(`Erro do Dr. Michel: ${error.message}`);
+      const errorMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: `⚠️ ERRO: ${error.message}`,
+        timestamp: new Date().toISOString()
+      };
+      setSessions(prev => prev.map(s => 
+        s.id === sessionId ? { ...s, messages: [...s.messages, errorMsg] } : s
+      ));
     } finally {
       setIsLoading(false);
     }
