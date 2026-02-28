@@ -30,7 +30,23 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
 7. EVOLUÇÃO: Aprenda com as dicas e correções do usuário para refinar o estilo de redação a cada interação.
 
 ESTRUTURA OBRIGATÓRIA PARA BENEFÍCIO POR INCAPACIDADE:
-- Seguir os 10 tópicos detalhados no modelo anterior (Incapacidade).
+- ENDEREÇAMENTO: Ao Juízo Federal competente.
+- QUALIFICAÇÃO: Completa da parte autora.
+- TÍTULO: Ação Previdenciária de Concessão de Benefício por Incapacidade (Aposentadoria por Invalidez ou Auxílio-Doença).
+- I. DA GRATUIDADE DE JUSTIÇA: Fundamentação no CPC e CF.
+- II. DA OPÇÃO PELO JUÍZO 100% DIGITAL: Conforme Resoluções do CNJ.
+- III. DO RESUMO DA DEMANDA: Síntese do conflito e pretensão.
+- IV. DOS FATOS: Histórico profissional, patologias (CIDs), exames (Ressonâncias, etc.), atestados, DII (Data de Início da Incapacidade), indeferimento administrativo e qualidade de segurado.
+- V. DO DIREITO - DA INCAPACIDADE: Base legal (Lei 8.213/91), Súmula 47 da TNU (condições sociais e pessoais).
+- VI. DO DIREITO - DA OBSERVÂNCIA À LEI 14.331/2022: 
+    a) Descrição clara da doença e limitações;
+    b) Indicação da atividade incapacitada;
+    c) Inconsistências da avaliação pericial do INSS;
+    d) Declaração de inexistência de ação anterior.
+- VII. DA TUTELA DE URGÊNCIA: Fumus boni iuris e Periculum in mora (art. 300 CPC).
+- VIII. DOS PEDIDOS: Gratuidade, Tutela, Citação, Provas (Perícia com especialista), Procedência total (Aposentadoria por Invalidez ou Auxílio-Doença subsidiário), Parcelas vencidas/vincendas e Honorários (30%).
+- IX. DO VALOR DA CAUSA: Cálculo detalhado (Vencidas + 12 Vincendas).
+- X. DO ROL DE DOCUMENTOS: Lista numerada.
 
 ESTRUTURA OBRIGATÓRIA PARA BPC/LOAS (DEFICIENTE):
 - ENDEREÇAMENTO: Ao Juízo Federal competente.
