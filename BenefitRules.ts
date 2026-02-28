@@ -713,7 +713,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             benefitName: "0.6) Aposentadoria por Invalidez (Direito Adquirido)",
             isEligible: true, // Potential
             ruleType: 'Pre-Reform-Disability',
-            category: 'aposentadorias',
+            category: 'auxilios',
             ...calculateRMI(data.bonds, 'Pre-Reform-Disability', data.gender, timeAtReformTotal.years, inpcIndices, der, fractionalAge, data.customMinWage, reformDate, data.isTeacher, ibgeTable),
             missingDetails: "Requer comprovação de incapacidade permanente antes de 13/11/2019."
         });
@@ -722,7 +722,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             benefitName: "0.6) Aposentadoria por Invalidez (Direito Adquirido)",
             isEligible: false,
             ruleType: 'Pre-Reform-Disability',
-            category: 'aposentadorias',
+            category: 'auxilios',
             missingDetails: !hasQualityAtReform 
                 ? "Segurado sem qualidade em 13/11/2019." 
                 : `Carência em 13/11/2019: ${carenciaAtReform}/12.`
@@ -1069,7 +1069,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             benefitName: "1.13) Aposentadoria por Incapacidade Permanente",
             isEligible: true,
             ruleType: 'Disability',
-            category: 'aposentadorias',
+            category: 'auxilios',
             ...calculateRMI(data.bonds, 'Disability', data.gender, timeTotal.years, inpcIndices, der, fractionalAge, data.customMinWage, undefined, data.isTeacher, ibgeTable),
             missingDetails: "Requer perícia médica confirmando incapacidade permanente."
         });
@@ -1078,7 +1078,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
             benefitName: "1.13) Aposentadoria por Incapacidade Permanente",
             isEligible: false,
             ruleType: 'Disability',
-            category: 'aposentadorias',
+            category: 'auxilios',
             missingDetails: !hasQuality 
                 ? "Segurado sem qualidade (período de graça expirado)." 
                 : `Carência: ${totalCarencia}/12 meses.`
