@@ -14,8 +14,10 @@ import {
   CpuChipIcon as Bot,
   ClockIcon as History, 
   ChatBubbleLeftRightIcon as MessageSquare, 
-  TrashIcon as Trash2 
+  TrashIcon as Trash2,
+  ClipboardIcon as Copy
 } from '@heroicons/react/24/outline';
+import { CheckIcon as Check } from '@heroicons/react/24/solid';
 import { SocialSecurityData } from '../SocialSecurityCalc';
 import { initSupabase } from '../supabaseClient';
 import { extractTextFromPDF } from '../src/utils/pdfParser';
@@ -43,6 +45,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isUploading, setIsUploading] = useState(false);
@@ -82,6 +85,13 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
     };
     setSessions([newSession, ...sessions]);
     setCurrentSessionId(newSession.id);
+  };
+
+  const copyToClipboard = (text: string, msgId: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(msgId);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
   };
 
   const deleteSession = (id: string, e: React.MouseEvent) => {
@@ -418,14 +428,25 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
                     <div className="prose dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
                       {msg.content}
                     </div>
-                    {msg.role === 'assistant' && msg.content.includes('PETIÇÃO') && (
-                      <button 
-                        onClick={() => generateDocx(msg.content)}
-                        className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors shadow-sm"
-                      >
-                        <Download className="w-4 h-4" /> Baixar em Word (.docx)
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {msg.role === 'assistant' && (
+                        <button 
+                          onClick={() => copyToClipboard(msg.content, msg.id)}
+                          className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors"
+                          title="Copiar texto"
+                        >
+                          {copiedId === msg.id ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-400" />}
+                        </button>
+                      )}
+                      {msg.role === 'assistant' && msg.content.includes('PETIÇÃO') && (
+                        <button 
+                          onClick={() => generateDocx(msg.content)}
+                          className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors shadow-sm"
+                        >
+                          <Download className="w-4 h-4" /> Baixar em Word (.docx)
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
