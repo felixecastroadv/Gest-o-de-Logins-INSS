@@ -690,7 +690,17 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         data.bonds.forEach(bond => {
             if (bond.useInCalculation && bond.startDate && bond.endDate) {
                 const start = bond.startDate.split('-').reverse().join('/');
-                const end = bond.endDate.split('-').reverse().join('/');
+                
+                let effectiveEndDate = bond.endDate;
+                if (data.der) {
+                    const bondEnd = new Date(bond.endDate);
+                    const derDate = new Date(data.der);
+                    if (bondEnd > derDate) {
+                        effectiveEndDate = data.der;
+                    }
+                }
+                
+                const end = effectiveEndDate.split('-').reverse().join('/');
                 const time = calculateTime(start, end, bond.activityType, data.gender);
                 totalDays += (time.years * 365) + (time.months * 30) + time.days;
             }
@@ -758,13 +768,31 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         const bondsTableData = data.bonds
             .filter(bond => bond.useInCalculation)
             .map((bond, idx) => {
-                const time = calculateTime(bond.startDate, bond.endDate, bond.activityType, data.gender);
+                let effectiveEndDate = bond.endDate;
+                let isLimitedByDer = false;
+                
+                if (bond.endDate && data.der) {
+                    const bondEnd = new Date(bond.endDate);
+                    const derDate = new Date(data.der);
+                    if (bondEnd > derDate) {
+                        effectiveEndDate = data.der;
+                        isLimitedByDer = true;
+                    }
+                }
+
+                const time = calculateTime(bond.startDate, effectiveEndDate, bond.activityType, data.gender);
                 const timeStr = `${time.years}a ${time.months}m ${time.days}d`;
+                
+                let endDateStr = bond.endDate ? bond.endDate.split('-').reverse().join('/') : '-';
+                if (isLimitedByDer) {
+                    endDateStr = `${data.der.split('-').reverse().join('/')}*`;
+                }
+
                 return [
                     (idx + 1).toString(),
                     bond.origin,
                     bond.startDate ? bond.startDate.split('-').reverse().join('/') : '-',
-                    bond.endDate ? bond.endDate.split('-').reverse().join('/') : '-',
+                    endDateStr,
                     timeStr,
                     bond.sc.length.toString()
                 ];
@@ -779,6 +807,11 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             styles: { fontSize: 9 },
             margin: { left: margin, right: margin }
         });
+
+        // @ts-ignore
+        let finalY = doc.lastAutoTable.finalY + 5;
+        doc.setFontSize(8);
+        doc.text("* Data fim limitada à DER para fins de cálculo.", margin, finalY);
 
         // Benefit Analysis
         doc.addPage();
@@ -1584,7 +1617,15 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                     </tr>
                                 ) : (
                                     data.bonds.map((bond, idx) => {
-                                        const time = calculateTime(bond.startDate, bond.endDate, bond.activityType, data.gender);
+                                        let effectiveEndDate = bond.endDate;
+                                        if (bond.endDate && data.der) {
+                                            const bondEnd = new Date(bond.endDate);
+                                            const derDate = new Date(data.der);
+                                            if (bondEnd > derDate) {
+                                                effectiveEndDate = data.der;
+                                            }
+                                        }
+                                        const time = calculateTime(bond.startDate, effectiveEndDate, bond.activityType, data.gender);
                                         return (
                                             <React.Fragment key={bond.id}>
                                                 <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
