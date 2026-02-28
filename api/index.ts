@@ -1,5 +1,6 @@
 import express from "express";
 import { GoogleGenAI } from "@google/genai";
+import { Document, Packer, Paragraph, TextRun, AlignmentType } from "docx";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -33,7 +34,7 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     ];
 
     const response = await callGemini({
-      model: "gemini-1.5-flash-latest",
+      model: "gemini-3-flash-preview",
       contents,
       config: { systemInstruction: DR_MICHEL_SYSTEM_PROMPT }
     });
@@ -41,7 +42,56 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     res.json({ text: response.text });
   } catch (error: any) {
     console.error("Error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || "Erro na comunicação com a IA" });
+  }
+});
+
+app.post("/api/dr-michel/generate-docx", async (req, res) => {
+  try {
+    const { content } = req.body;
+    
+    const lines = content.split('\n');
+    const paragraphs = lines.map((line: string) => {
+      const isBold = line.startsWith('**') && line.endsWith('**');
+      const text = line.replace(/\*\*/g, '');
+      
+      return new Paragraph({
+        alignment: AlignmentType.JUSTIFIED,
+        spacing: { line: 360 },
+        children: [
+          new TextRun({
+            text: text,
+            size: 24,
+            font: "Times New Roman",
+            bold: isBold
+          }),
+        ],
+      });
+    });
+
+    const doc = new Document({
+      sections: [{
+        properties: {
+          page: {
+            margin: {
+              top: 1701,
+              left: 1701,
+              bottom: 1134,
+              right: 1134,
+            },
+          },
+        },
+        children: paragraphs,
+      }],
+    });
+
+    const buffer = await Packer.toBuffer(doc);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    res.setHeader('Content-Disposition', 'attachment; filename=peticao.docx');
+    res.send(buffer);
+  } catch (error: any) {
+    console.error("Error generating DOCX:", error);
+    res.status(500).json({ error: "Falha ao gerar documento Word" });
   }
 });
 
