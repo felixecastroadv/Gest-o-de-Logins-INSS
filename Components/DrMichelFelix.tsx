@@ -18,6 +18,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { SocialSecurityData } from '../SocialSecurityCalc';
 import { initSupabase } from '../supabaseClient';
+import { extractTextFromPDF } from '../src/utils/pdfParser';
 
 interface Message {
   id: string;
@@ -171,14 +172,47 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
     if (!files || files.length === 0) return;
 
     setIsUploading(true);
-    // In a real app, we would upload to Supabase Storage here.
-    // For now, we'll simulate the upload and inform the AI.
     
-    const fileNames = Array.from(files).map(f => f.name).join(', ');
-    const uploadPrompt = `Enviei os seguintes documentos para análise: ${fileNames}. Por favor, processe-os e gere o Relatório de Evidências conforme suas instruções de sistema.`;
-    
-    await handleSendMessage(uploadPrompt);
-    setIsUploading(false);
+    try {
+      const fileArray = Array.from(files);
+      let combinedText = "";
+
+      // Inform user we are reading the files
+      const readingMsg: Message = {
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `Estou lendo ${fileArray.length} arquivo(s). Por favor, aguarde um momento...`,
+        timestamp: new Date().toISOString()
+      };
+      
+      setSessions(prev => prev.map(s => 
+        s.id === sessionId ? { ...s, messages: [...s.messages, readingMsg] } : s
+      ));
+
+      for (const file of fileArray) {
+        if (file.type === 'application/pdf') {
+          const text = await extractTextFromPDF(file);
+          combinedText += `\n--- CONTEÚDO DO ARQUIVO: ${file.name} ---\n${text}\n`;
+        } else {
+          combinedText += `\n--- ARQUIVO ANEXADO: ${file.name} (Tipo não suportado para extração direta) ---\n`;
+        }
+      }
+
+      const uploadPrompt = `Enviei os seguintes documentos para análise: ${fileArray.map(f => f.name).join(', ')}. 
+      
+      Abaixo está o conteúdo extraído dos arquivos para sua análise e armazenamento:
+      ${combinedText}
+      
+      Por favor, processe estas informações e gere o Relatório de Evidências conforme suas instruções de sistema.`;
+      
+      await handleSendMessage(uploadPrompt);
+    } catch (error: any) {
+      console.error("Erro ao processar arquivos:", error);
+      alert("Erro ao ler os arquivos PDF. Certifique-se de que não estão protegidos por senha.");
+    } finally {
+      setIsUploading(true); // Keeping it true for a moment to show progress, then false
+      setTimeout(() => setIsUploading(false), 500);
+    }
   };
 
   const generateDocx = async (content: string) => {
