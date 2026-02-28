@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import { analyzeCNIS, chatWithDrMichel } from "../server/aiService";
 import { Document, Packer, Paragraph, TextRun, AlignmentType } from "docx";
 import dotenv from "dotenv";
@@ -94,26 +93,20 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-async function setupServer() {
+// Development server setup
+if (process.env.NODE_ENV !== "production") {
   const PORT = 3000;
-
-  // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
+  import("vite").then(({ createServer: createViteServer }) => {
+    createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
+    }).then((vite) => {
+      app.use(vite.middlewares);
+      app.listen(PORT, "0.0.0.0", () => {
+        console.log(`Server running on http://localhost:${PORT}`);
+      });
     });
-    app.use(vite.middlewares);
-    
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-    });
-  } else {
-    // Production setup (serve static files)
-    app.use(express.static("dist"));
-  }
+  });
 }
-
-setupServer();
 
 export default app;
