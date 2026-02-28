@@ -689,8 +689,6 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         let totalDays = 0;
         data.bonds.forEach(bond => {
             if (bond.useInCalculation && bond.startDate && bond.endDate) {
-                const start = bond.startDate.split('-').reverse().join('/');
-                
                 let effectiveEndDate = bond.endDate;
                 if (data.der) {
                     const bondEnd = new Date(bond.endDate);
@@ -700,8 +698,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     }
                 }
                 
-                const end = effectiveEndDate.split('-').reverse().join('/');
-                const time = calculateTime(start, end, bond.activityType, data.gender);
+                const time = calculateTime(bond.startDate, effectiveEndDate, bond.activityType, data.gender);
                 totalDays += (time.years * 365) + (time.months * 30) + time.days;
             }
         });
