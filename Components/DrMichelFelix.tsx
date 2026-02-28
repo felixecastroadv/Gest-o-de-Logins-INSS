@@ -1,9 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  Send, Paperclip, FileText, Briefcase, Search, Plus, 
-  ChevronLeft, ChevronRight, Download, Loader2, User, Bot,
-  History, MessageSquare, Trash2
-} from 'lucide-react';
+  PaperAirplaneIcon as Send, 
+  PaperClipIcon as Paperclip, 
+  DocumentTextIcon as FileText, 
+  BriefcaseIcon as Briefcase, 
+  MagnifyingGlassIcon as Search, 
+  PlusIcon as Plus, 
+  ChevronLeftIcon as ChevronLeft, 
+  ChevronRightIcon as ChevronRight, 
+  ArrowDownTrayIcon as Download, 
+  ArrowPathIcon as Loader2, 
+  UserIcon as User, 
+  CpuChipIcon as Bot,
+  ClockIcon as History, 
+  ChatBubbleLeftRightIcon as MessageSquare, 
+  TrashIcon as Trash2 
+} from '@heroicons/react/24/outline';
 import { SocialSecurityData } from '../SocialSecurityCalc';
 import { initSupabase } from '../supabaseClient';
 
