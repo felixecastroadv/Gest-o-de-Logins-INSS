@@ -20,6 +20,7 @@ import ContractModal from './ContractModal';
 import SettingsModal from './SettingsModal';
 import NotificationsModal from './NotificationsModal';
 import CopyButton from './CopyButton';
+import DrMichelFelix from './DrMichelFelix';
 
 const Dashboard: React.FC<DashboardProps> = ({ 
   user, 
@@ -33,7 +34,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSettingsSaved,
   onRestoreBackup
 }) => {
-  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc'>('clients');
+  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel'>('clients');
   const [showArchived, setShowArchived] = useState(false);
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
@@ -539,6 +540,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <CalculatorIcon className="h-6 w-6 lg:mr-3" />
                    <span className="hidden lg:block font-medium">Calc. Previdenciária</span>
                </button>
+
+               <button 
+                   onClick={() => setCurrentView('dr_michel')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'dr_michel' ? 'bg-purple-600 shadow-lg shadow-purple-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <StarIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Dr. Michel Felix (IA)</span>
+               </button>
            </div>
            
            <div className="p-4 border-t border-slate-800">
@@ -567,6 +576,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                      {currentView === 'clients' ? 'Painel de Processos' : 
                       currentView === 'contracts' ? 'Gestão de Contratos' :
                       currentView === 'labor_calc' ? 'Cálculos Trabalhistas' :
+                      currentView === 'dr_michel' ? 'Dr. Michel Felix - IA Jurídica' :
                       'Cálculos Previdenciários'}
                  </h2>
                  {isSyncing ? (
@@ -597,7 +607,11 @@ const Dashboard: React.FC<DashboardProps> = ({
         <main className="flex-1 overflow-y-auto p-6 scroll-smooth">
              
              {/* CONTENT SWITCHER */}
-             {currentView === 'labor_calc' ? (
+             {currentView === 'dr_michel' ? (
+                 <DrMichelFelix 
+                    calculatorData={savedSocialCalculations[0]} // Pass the latest calculation as context
+                 />
+             ) : currentView === 'labor_calc' ? (
                  <LaborCalc 
                     clients={records} 
                     contracts={contracts} 
