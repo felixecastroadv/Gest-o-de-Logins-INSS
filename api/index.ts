@@ -26,11 +26,21 @@ Sua tarefa é extrair dados do CNIS com EXTREMA FIDELIDADE.
 Retorne um JSON com 'client', 'bonds' e 'analysis'.
 `;
 
-async function callGemini(params: any) {
+async function callGemini(params: any, retries = 3, delay = 1000) {
   const apiKey = process.env.API_KEY_1 || process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("API Key missing");
   const ai = new GoogleGenAI({ apiKey });
-  return await ai.models.generateContent(params);
+  
+  try {
+    return await ai.models.generateContent(params);
+  } catch (error: any) {
+    if (error.message?.includes('429') && retries > 0) {
+      console.log(`Rate limit hit, retrying in ${delay}ms... (${retries} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return callGemini(params, retries - 1, delay * 2);
+    }
+    throw error;
+  }
 }
 
 // API Routes
