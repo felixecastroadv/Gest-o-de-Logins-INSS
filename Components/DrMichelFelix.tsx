@@ -132,13 +132,15 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ calculatorData }) => {
         body: JSON.stringify({
           message: messageText,
           history: sessions.find(s => s.id === sessionId)?.messages || [],
-          calculatorData: calculatorData // Inject calculator context
+          calculatorData: calculatorData
         })
       });
 
-      if (!response.ok) throw new Error('Falha na resposta da IA');
-      
       const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Falha na resposta da IA');
+      }
       
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -150,9 +152,9 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ calculatorData }) => {
       setSessions(prev => prev.map(s => 
         s.id === sessionId ? { ...s, messages: [...s.messages, assistantMsg] } : s
       ));
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert('Erro ao falar com o Dr. Michel. Tente novamente.');
+      alert(`Erro do Dr. Michel: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
