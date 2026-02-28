@@ -704,6 +704,17 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
     };
 
     const generateReport = () => {
+        const reportType = window.prompt(
+            "Qual o tipo de relatório você deseja gerar?\n\n" +
+            "1 - Somente Aposentadorias\n" +
+            "2 - Somente Benefícios por Incapacidade e Salário-Maternidade\n" +
+            "3 - Somente Benefícios aos Dependentes (Pensão e Auxílio-Reclusão)\n" +
+            "4 - Relatório Completo (Todos os Benefícios)",
+            "4"
+        );
+
+        if (!reportType) return; // User cancelled
+
         const doc = new jsPDF();
         const pageWidth = doc.internal.pageSize.getWidth();
         const margin = 14;
@@ -773,7 +784,13 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         doc.addPage();
         doc.setFontSize(16);
         doc.setFont("helvetica", "bold");
-        doc.text("Análise Profunda de Benefícios Previdenciários", pageWidth / 2, 20, { align: "center" });
+        
+        let reportTitle = "Análise Profunda de Benefícios Previdenciários";
+        if (reportType === "1") reportTitle = "Análise de Aposentadorias";
+        if (reportType === "2") reportTitle = "Análise de Benefícios por Incapacidade e Salário-Maternidade";
+        if (reportType === "3") reportTitle = "Análise de Benefícios aos Dependentes";
+        
+        doc.text(reportTitle, pageWidth / 2, 20, { align: "center" });
         doc.setFont("helvetica", "normal");
         
         let currentY = 35;
@@ -804,7 +821,14 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             return yPos + (lines.length * (fontSize * 0.5));
         };
 
-        analysisResult.benefits.forEach((benefit) => {
+        const filteredBenefits = analysisResult.benefits.filter(benefit => {
+            if (reportType === "1") return benefit.category === 'aposentadorias';
+            if (reportType === "2") return benefit.category === 'auxilios';
+            if (reportType === "3") return benefit.category === 'dependentes';
+            return true; // "4" or anything else returns all
+        });
+
+        filteredBenefits.forEach((benefit) => {
             currentY = addSection(benefit.benefitName, currentY);
             
             if (benefit.isEligible) {
