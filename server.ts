@@ -31,8 +31,8 @@ async function startServer() {
 
   app.post("/api/dr-michel/chat", async (req, res) => {
     try {
-      const { message, history, calculatorData } = req.body;
-      const response = await chatWithDrMichel(message, history, calculatorData);
+      const { message, history } = req.body;
+      const response = await chatWithDrMichel(message, history);
       res.json(response);
     } catch (error: any) {
       console.error("Error in /api/dr-michel/chat:", error);
