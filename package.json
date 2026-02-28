@@ -5,8 +5,8 @@
   "description": "Calculadora Previdenciária",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
-    "start": "node server.ts",
+    "dev": "tsx api/index.ts",
+    "start": "node api/index.ts",
     "build": "vite build",
     "lint": "tsc --noEmit",
     "preview": "vite preview"
