@@ -338,8 +338,16 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             start.setHours(12, 0, 0, 0);
             
             let endStr = b.endDate || data.der || new Date().toISOString().split('T')[0];
-            const end = new Date(endStr);
+            let end = new Date(endStr);
             end.setHours(12, 0, 0, 0);
+
+            if (data.der) {
+                const derDate = new Date(data.der);
+                derDate.setHours(12, 0, 0, 0);
+                if (end.getTime() > derDate.getTime()) {
+                    end = derDate;
+                }
+            }
 
             if (start.getTime() < minDateMs) minDateMs = start.getTime();
             if (end.getTime() > maxDateMs) maxDateMs = end.getTime();
@@ -417,7 +425,13 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 current.setDate(1);
                 current.setHours(12, 0, 0, 0);
                 
-                const end = new Date(bond.endDate);
+                let end = new Date(bond.endDate);
+                if (data.der) {
+                    const derDate = new Date(data.der);
+                    if (end > derDate) {
+                        end = derDate;
+                    }
+                }
                 end.setDate(1);
                 end.setHours(12, 0, 0, 0);
 
@@ -434,35 +448,107 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 }
             } else if (bond.sc && bond.sc.length > 0) {
                 // Fallback to SCs if dates are missing
-                bond.sc.forEach(s => uniqueMonths.add(s.month));
+                bond.sc.forEach(s => {
+                    if (data.der) {
+                        const [m, y] = s.month.split('/');
+                        const scDate = new Date(parseInt(y), parseInt(m) - 1, 1, 12, 0, 0, 0);
+                        const derDate = new Date(data.der);
+                        derDate.setDate(1);
+                        derDate.setHours(12, 0, 0, 0);
+                        if (scDate <= derDate) {
+                            uniqueMonths.add(s.month);
+                        }
+                    } else {
+                        uniqueMonths.add(s.month);
+                    }
+                });
             }
         });
 
         return uniqueMonths.size;
     };
 
-    // Helper to calculate carência for a single bond (for the table)
-    const calculateBondCarencia = (bond: CNISBond) => {
-        if (bond.startDate && bond.endDate) {
-            let current = new Date(bond.startDate);
-            current.setDate(1);
-            current.setHours(12, 0, 0, 0);
-            
-            const end = new Date(bond.endDate);
-            end.setDate(1);
-            end.setHours(12, 0, 0, 0);
-
-            let count = 0;
-            let safety = 0;
-            while (current <= end && safety < 1200) {
-                count++;
-                current.setMonth(current.getMonth() + 1);
-                safety++;
+    // Adjusted Bond Carência Calculation (Handles Concurrency)
+    const adjustedBondCarenciaMap = useMemo(() => {
+        const map = new Map<string, number>();
+        const countedMonths = new Set<string>();
+        
+        const bondTimes = data.bonds.map(bond => {
+            let effectiveEndDate = bond.endDate;
+            if (bond.endDate && data.der) {
+                const bondEnd = new Date(bond.endDate);
+                const derDate = new Date(data.der);
+                if (bondEnd > derDate) {
+                    effectiveEndDate = data.der;
+                }
             }
-            return count;
+            const time = calculateTime(bond.startDate, effectiveEndDate, bond.activityType, data.gender);
+            return { bond, totalDays: time.totalDays };
+        });
+
+        const sortedBonds = [...bondTimes].sort((a, b) => b.totalDays - a.totalDays);
+
+        for (const { bond } of sortedBonds) {
+            if (!bond.useInCalculation) {
+                map.set(bond.id, 0);
+                continue;
+            }
+            
+            let count = 0;
+            const bondMonths = new Set<string>();
+            
+            if (bond.startDate && bond.endDate) {
+                let current = new Date(bond.startDate);
+                current.setDate(1);
+                current.setHours(12, 0, 0, 0);
+                
+                let end = new Date(bond.endDate);
+                if (data.der) {
+                    const derDate = new Date(data.der);
+                    if (end > derDate) {
+                        end = derDate;
+                    }
+                }
+                end.setDate(1);
+                end.setHours(12, 0, 0, 0);
+
+                let safety = 0;
+                while (current <= end && safety < 1200) {
+                    const m = String(current.getMonth() + 1).padStart(2, '0');
+                    const y = current.getFullYear();
+                    bondMonths.add(`${m}/${y}`);
+                    current.setMonth(current.getMonth() + 1);
+                    safety++;
+                }
+            } else if (bond.sc && bond.sc.length > 0) {
+                bond.sc.forEach(s => {
+                    if (data.der) {
+                        const [m, y] = s.month.split('/');
+                        const scDate = new Date(parseInt(y), parseInt(m) - 1, 1, 12, 0, 0, 0);
+                        const derDate = new Date(data.der);
+                        derDate.setDate(1);
+                        derDate.setHours(12, 0, 0, 0);
+                        if (scDate <= derDate) {
+                            bondMonths.add(s.month);
+                        }
+                    } else {
+                        bondMonths.add(s.month);
+                    }
+                });
+            }
+            
+            for (const month of bondMonths) {
+                if (!countedMonths.has(month)) {
+                    countedMonths.add(month);
+                    count++;
+                }
+            }
+            
+            map.set(bond.id, count);
         }
-        return bond.sc.length;
-    };
+        
+        return map;
+    }, [data.bonds, data.der, data.gender]);
 
     // Helper to generate full monthly history including gaps
     const generateFullMonthlyHistory = (bond: CNISBond) => {
@@ -484,6 +570,12 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         } else {
             // If active, go up to today
             end = new Date();
+        }
+        if (data.der) {
+            const derDate = new Date(data.der);
+            if (end > derDate) {
+                end = derDate;
+            }
         }
         end.setDate(1);
         end.setHours(12, 0, 0, 0);
@@ -791,7 +883,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     bond.startDate ? bond.startDate.split('-').reverse().join('/') : '-',
                     endDateStr,
                     timeStr,
-                    bond.sc.length.toString()
+                    (adjustedBondCarenciaMap.get(bond.id) || 0).toString()
                 ];
             });
 
@@ -1743,7 +1835,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                                         </div>
                                                     </td>
                                                     <td className={STYLES.TABLE_CELL}>
-                                                        <div className="text-xs text-center">{calculateBondCarencia(bond)}</div>
+                                                        <div className="text-xs text-center">{adjustedBondCarenciaMap.get(bond.id) || 0}</div>
                                                     </td>
                                                     <td className={STYLES.TABLE_CELL}>
                                                         <div className="flex gap-1">
@@ -1897,7 +1989,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                                                                                 ) : (
                                                                                     <tr>
                                                                                         <td colSpan={3} className="px-2 py-4 text-center text-slate-400 italic">
-                                                                                            <p className="mb-2">Nenhum salário registrado. Carência calculada por data ({calculateBondCarencia(bond)} meses).</p>
+                                                                                            <p className="mb-2">Nenhum salário registrado. Carência calculada por data ({adjustedBondCarenciaMap.get(bond.id) || 0} meses).</p>
                                                                                             <button 
                                                                                                 onClick={() => {
                                                                                                     // Generate months between start and end date
