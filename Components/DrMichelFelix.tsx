@@ -35,10 +35,9 @@ interface ChatSession {
 }
 
 interface DrMichelFelixProps {
-  calculatorData?: SocialSecurityData;
 }
 
-const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ calculatorData }) => {
+const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [input, setInput] = useState('');
@@ -131,16 +130,23 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ calculatorData }) => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: messageText,
-          history: sessions.find(s => s.id === sessionId)?.messages || [],
-          calculatorData: calculatorData
+          history: sessions.find(s => s.id === sessionId)?.messages || []
         })
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || 'Falha na resposta da IA');
+        const errorText = await response.text();
+        let errorMessage = 'Falha na resposta da IA';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.error || errorMessage;
+        } catch (e) {
+          errorMessage = errorText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
+
+      const data = await response.json();
       
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
