@@ -372,13 +372,20 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
               ))}
               {isLoading && (
                 <div className="flex gap-4 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 animate-pulse">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-600/50 flex items-center justify-center">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
                     <Loader2 className="w-6 h-6 text-white animate-spin" />
                   </div>
                   <div className="flex-1 space-y-3">
-                    <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-24"></div>
-                    <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-full"></div>
-                    <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-3/4"></div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Dr. Michel Felix</span>
+                      <span className="text-[10px] text-slate-400">•</span>
+                      <span className="text-[10px] text-slate-400 font-medium uppercase tracking-widest animate-pulse">Analisando e fundamentando...</span>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-full"></div>
+                      <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-5/6"></div>
+                      <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-4/6"></div>
+                    </div>
                   </div>
                 </div>
               )}
