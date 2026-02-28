@@ -240,24 +240,43 @@ app.post("/api/analyze-cnis", async (req, res) => {
 app.post("/api/dr-michel/chat", async (req, res) => {
   try {
     const { message, history } = req.body;
+    
+    // REFORÇO DE CONTEXTO (ANTI-VÍCIO):
+    // Injetamos as regras críticas NOVAMENTE no final do histórico para garantir que a IA
+    // não siga padrões antigos (viciados) de mensagens anteriores.
+    const REINFORCEMENT_PROMPT = `
+    [LEMBRETE DO SISTEMA - PRIORIDADE MÁXIMA]
+    Dr. Michel, ignore qualquer formatação incorreta usada nas mensagens anteriores.
+    A partir de AGORA, você DEVE seguir estritamente:
+    1. ACENTUAÇÃO OBRIGATÓRIA (Norma Culta).
+    2. ESTRUTURA DA LEI 14.331/2022 com alíneas a), b), c), d).
+    3. PEDIDOS numerados com a), b), c)...
+    4. NENHUM markdown (*, #).
+    Siga isso AGORA.
+    `;
+
     const contents = [
       ...history.map((h: any) => ({
         role: h.role === 'assistant' ? 'model' : 'user',
         parts: [{ text: h.content }]
       })),
-      { role: 'user', parts: [{ text: message }] }
+      { role: 'user', parts: [{ text: message + "\n\n" + REINFORCEMENT_PROMPT }] }
     ];
 
     const response = await callGemini({
       model: "gemini-3-flash-preview",
-      contents,
-      config: { systemInstruction: DR_MICHEL_SYSTEM_PROMPT }
+      contents: contents,
+      config: {
+        systemInstruction: DR_MICHEL_SYSTEM_PROMPT,
+        temperature: 0.2, // Baixa temperatura para ser mais fiel às regras
+        maxOutputTokens: 8192,
+      }
     });
 
     res.json({ text: response.text });
   } catch (error: any) {
-    console.error("Error:", error);
-    res.status(500).json({ error: error.message || "Erro na comunicação com a IA" });
+    console.error("Error in chat:", error);
+    res.status(500).json({ error: error.message || "Falha no chat" });
   }
 });
 
