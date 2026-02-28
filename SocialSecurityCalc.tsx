@@ -964,7 +964,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             } catch (e) {
                 console.error("Error saving locally", e);
             }
-            alert("Cálculo salvo com sucesso!");
+            alert("Novo cálculo salvo com sucesso!");
         } else {
             // Fallback local save if no prop provided
              try {
@@ -977,11 +977,50 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                     data: data
                 };
                 localStorage.setItem('social_security_calculations', JSON.stringify([newCalc, ...calculations]));
-                alert("Cálculo salvo localmente com sucesso!");
+                alert("Novo cálculo salvo localmente com sucesso!");
             } catch (e) {
                 console.error("Error saving locally", e);
                 alert("Erro ao salvar localmente.");
             }
+        }
+    };
+
+    const handleUpdate = () => {
+        try {
+            const saved = localStorage.getItem('social_security_calculations');
+            if (!saved) {
+                alert("Nenhum cálculo salvo encontrado para atualizar. Use 'Salvar Novo Cálculo'.");
+                return;
+            }
+            
+            let calculations = JSON.parse(saved);
+            const clientCalcs = calculations.filter((c: any) => c.clientName === data.clientName);
+            
+            if (clientCalcs.length === 0) {
+                alert("Nenhum cálculo salvo encontrado para este cliente. Use 'Salvar Novo Cálculo'.");
+                return;
+            }
+            
+            // Update the most recent one for this client
+            const targetId = clientCalcs[0].id;
+            
+            calculations = calculations.map((c: any) => {
+                if (c.id === targetId) {
+                    return {
+                        ...c,
+                        date: new Date().toISOString(), // Update the date
+                        data: data
+                    };
+                }
+                return c;
+            });
+            
+            localStorage.setItem('social_security_calculations', JSON.stringify(calculations));
+            alert("Alterações salvas com sucesso no cálculo existente!");
+            
+        } catch (e) {
+            console.error("Error updating locally", e);
+            alert("Erro ao salvar alterações.");
         }
     };
 
@@ -1331,9 +1370,13 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                         <ArrowDownTrayIcon className="h-4 w-4" />
                         Exportar Relatório
                     </button>
+                    <button className={STYLES.BTN_SECONDARY} onClick={handleUpdate}>
+                        <CheckCircleIcon className="h-4 w-4" />
+                        Salvar Alterações
+                    </button>
                     <button className={STYLES.BTN_PRIMARY} onClick={handleSave}>
                         <CheckCircleIcon className="h-4 w-4" />
-                        Salvar Cálculo
+                        Salvar Novo Cálculo
                     </button>
                 </div>
             </div>
@@ -1962,11 +2005,18 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                             Analisar Requisitos e RMI
                         </button>
                         <button
+                            onClick={handleUpdate}
+                            className="bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded-lg shadow-md shadow-slate-500/20 transition-all flex items-center gap-2 text-sm"
+                        >
+                            <CheckCircleIcon className="h-5 w-5" />
+                            Salvar Alterações
+                        </button>
+                        <button
                             onClick={handleSave}
                             className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 px-4 rounded-lg shadow-md shadow-emerald-500/20 transition-all flex items-center gap-2 text-sm"
                         >
                             <CloudArrowUpIcon className="h-5 w-5" />
-                            Salvar Cálculo
+                            Salvar Novo Cálculo
                         </button>
                     </div>
                 </div>
