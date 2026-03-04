@@ -274,7 +274,7 @@ SUA ÚNICA FUNÇÃO É:
 
 app.post("/api/dr-michel/chat", async (req, res) => {
   try {
-    const { message, history } = req.body;
+    const { message, history, images } = req.body;
     
     // DETECÇÃO DE INTENÇÃO (TROCA DE CÉREBRO)
     const isStorageRequest = message.includes("INSTRUÇÃO OBRIGATÓRIA: Apenas armazene") || 
@@ -309,12 +309,28 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     Siga isso AGORA.
     `;
 
+    const historyParts = history.map((h: any) => ({
+      role: h.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: h.content }]
+    }));
+
+    const currentMessageParts: any[] = [{ text: message + "\n\n" + REINFORCEMENT_PROMPT }];
+
+    // Add images if present
+    if (images && Array.isArray(images)) {
+      images.forEach((base64Image: string) => {
+        currentMessageParts.push({
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: base64Image
+          }
+        });
+      });
+    }
+
     const contents = [
-      ...history.map((h: any) => ({
-        role: h.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: h.content }]
-      })),
-      { role: 'user', parts: [{ text: message + "\n\n" + REINFORCEMENT_PROMPT }] }
+      ...historyParts,
+      { role: 'user', parts: currentMessageParts }
     ];
 
     const response = await callGemini({
