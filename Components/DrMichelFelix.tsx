@@ -15,7 +15,9 @@ import {
   ClockIcon as History, 
   ChatBubbleLeftRightIcon as MessageSquare, 
   TrashIcon as Trash2,
-  ClipboardIcon as Copy
+  ClipboardIcon as Copy,
+  PencilIcon as Edit2,
+  XMarkIcon as XMark
 } from '@heroicons/react/24/outline';
 import { CheckIcon as Check } from '@heroicons/react/24/solid';
 import { SocialSecurityData } from '../SocialSecurityCalc';
@@ -49,6 +51,8 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [isUploading, setIsUploading] = useState(false);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +107,25 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
         setCurrentSessionId(updated.length > 0 ? updated[0].id : null);
       }
     }
+  };
+
+  const startEditing = (session: ChatSession, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingSessionId(session.id);
+    setEditTitle(session.title);
+  };
+
+  const saveTitle = (id: string, e?: React.MouseEvent | React.KeyboardEvent) => {
+    if (e) e.stopPropagation();
+    if (editTitle.trim()) {
+      setSessions(sessions.map(s => s.id === id ? { ...s, title: editTitle.trim() } : s));
+    }
+    setEditingSessionId(null);
+  };
+
+  const cancelEditing = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingSessionId(null);
   };
 
   const handleSendMessage = async (overrideInput?: string, images?: string[]) => {
@@ -328,18 +351,50 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
                 onClick={() => setCurrentSessionId(session.id)}
                 className={`group p-3 rounded-xl cursor-pointer border transition-all ${currentSessionId === session.id ? 'bg-white dark:bg-slate-800 border-emerald-500 shadow-md' : 'border-transparent hover:bg-white dark:hover:bg-slate-800/50 hover:border-slate-200 dark:hover:border-slate-700'}`}
               >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{session.title}</p>
-                    <p className="text-[10px] text-slate-400 mt-1">{session.date}</p>
+                {editingSessionId === session.id ? (
+                  <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="text"
+                      value={editTitle}
+                      onChange={(e) => setEditTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') saveTitle(session.id, e);
+                        if (e.key === 'Escape') cancelEditing(e);
+                      }}
+                      autoFocus
+                      className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-emerald-500 rounded px-2 py-1 text-sm outline-none"
+                    />
+                    <button onClick={(e) => saveTitle(session.id, e)} className="text-emerald-600 hover:text-emerald-700">
+                      <Check className="w-4 h-4" />
+                    </button>
+                    <button onClick={cancelEditing} className="text-red-500 hover:text-red-600">
+                      <XMark className="w-4 h-4" />
+                    </button>
                   </div>
-                  <button 
-                    onClick={(e) => deleteSession(session.id, e)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 transition-opacity"
-                  >
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
+                ) : (
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-200 truncate">{session.title}</p>
+                      <p className="text-[10px] text-slate-400 mt-1">{session.date}</p>
+                    </div>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={(e) => startEditing(session, e)}
+                        className="p-1 text-slate-400 hover:text-emerald-500"
+                        title="Renomear conversa"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button 
+                        onClick={(e) => deleteSession(session.id, e)}
+                        className="p-1 text-slate-400 hover:text-red-500"
+                        title="Excluir conversa"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
