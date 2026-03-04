@@ -17,10 +17,11 @@
     "@supabase/supabase-js": "^2.39.3",
     "docx": "^9.6.0",
     "dotenv": "^17.3.1",
-    "express": "^5.2.1",
+    "express": "^4.18.2",
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
-    "pdfjs-dist": "^5.4.624",
+    "lucide-react": "^0.575.0",
+    "pdfjs-dist": "^3.11.174",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
