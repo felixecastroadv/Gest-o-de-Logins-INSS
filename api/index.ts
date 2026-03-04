@@ -263,14 +263,40 @@ app.post("/api/analyze-cnis", async (req, res) => {
   }
 });
 
+const ARCHIVIST_SYSTEM_PROMPT = `
+VOCÊ É UM ARQUIVISTA DIGITAL EFICIENTE.
+SUA ÚNICA FUNÇÃO É:
+1. Receber textos/documentos.
+2. Confirmar o recebimento com uma frase curta.
+3. NÃO ANALISAR, NÃO RESUMIR, NÃO DAR OPINIÃO JURÍDICA.
+4. Responda apenas: "Recebido. Documento [Nome] armazenado. Aguardando próximo comando."
+`;
+
 app.post("/api/dr-michel/chat", async (req, res) => {
   try {
     const { message, history } = req.body;
     
-    // REFORÇO DE CONTEXTO (ANTI-VÍCIO):
-    // Injetamos as regras críticas NOVAMENTE no final do histórico para garantir que a IA
-    // não siga padrões antigos (viciados) de mensagens anteriores.
-    const REINFORCEMENT_PROMPT = `
+    // DETECÇÃO DE INTENÇÃO (TROCA DE CÉREBRO)
+    const isStorageRequest = message.includes("INSTRUÇÃO OBRIGATÓRIA: Apenas armazene") || 
+                             message.includes("Enviei os seguintes documentos");
+    
+    const isGenerationRequest = message.includes("GERAR RELATÓRIO") || 
+                                message.includes("GERAR PEÇA");
+
+    // Seleciona o "Cérebro" adequado
+    let selectedSystemPrompt = DR_MICHEL_SYSTEM_PROMPT;
+    let temperature = 0.2;
+
+    if (isStorageRequest && !isGenerationRequest) {
+      console.log("Modo Arquivista Ativado (Rápido)");
+      selectedSystemPrompt = ARCHIVIST_SYSTEM_PROMPT;
+      temperature = 0.1; // Temperatura mínima para resposta robótica e rápida
+    } else {
+      console.log("Modo Dr. Michel Ativado (Completo)");
+    }
+
+    // REFORÇO DE CONTEXTO (ANTI-VÍCIO) - Só necessário no modo Dr. Michel
+    const REINFORCEMENT_PROMPT = isStorageRequest ? "" : `
     [LEMBRETE DO SISTEMA - PRIORIDADE MÁXIMA]
     Dr. Michel, ignore qualquer formatação incorreta usada nas mensagens anteriores.
     A partir de AGORA, você DEVE seguir estritamente:
@@ -295,8 +321,8 @@ app.post("/api/dr-michel/chat", async (req, res) => {
       model: "gemini-3-flash-preview",
       contents: contents,
       config: {
-        systemInstruction: DR_MICHEL_SYSTEM_PROMPT,
-        temperature: 0.2, // Baixa temperatura para ser mais fiel às regras
+        systemInstruction: selectedSystemPrompt,
+        temperature: temperature,
         maxOutputTokens: 8192,
       }
     });
