@@ -359,7 +359,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
                       onChange={(e) => setEditTitle(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') saveTitle(session.id, e);
-                        if (e.key === 'Escape') cancelEditing(e);
+                        if (e.key === 'Escape') cancelEditing(e as any);
                       }}
                       autoFocus
                       className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-emerald-500 rounded px-2 py-1 text-sm outline-none"
