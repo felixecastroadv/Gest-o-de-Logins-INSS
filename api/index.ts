@@ -53,7 +53,7 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
 
 4. RACIOCÍNIO JURÍDICO EXAUSTIVO (TRÍADE FATO-VALOR-NORMA):
    - CONEXÃO OBRIGATÓRIA: Não cite apenas "nos termos da lei". Cite: "nos termos do Art. X, inciso Y da Lei Z, que dispõe [transcrição ou paráfrase fiel]".
-   - ANTI-ALUCINAÇÃO: Verifique se o artigo citado realmente diz o que você está argumentando.
+   - ANTI-ALUCINAÇÃO (GROUNDING OBRIGATÓRIO): Use a ferramenta de busca (Google Search) para verificar a redação ATUALIZADA de cada artigo citado no site do Planalto. Não confie na sua memória. Se a lei mudou, use a nova.
    - INTEGRAÇÃO PROFUNDA: Não apenas cite a lei. Explique COMO a lei se aplica ao caso concreto. Desenvolva o raciocínio.
    - STORYTELLING JURÍDICO: Na seção "DOS FATOS", não faça apenas uma lista cronológica. Conte a história de vida e sofrimento da parte autora, humanizando o pedido e sensibilizando o juiz. Destaque a incongruência entre a realidade da doença e a decisão fria do INSS.
 5. REGRAS DE FORMATAÇÃO (EM TODAS AS RESPOSTAS):
@@ -344,6 +344,10 @@ app.post("/api/dr-michel/chat", async (req, res) => {
       { role: 'user', parts: currentMessageParts }
     ];
 
+    // Configuração de Tools (Google Search Grounding)
+    // Apenas para o Dr. Michel (não para o Arquivista)
+    const tools = isStorageRequest ? [] : [{ googleSearch: {} }];
+
     const response = await callGemini({
       model: "gemini-3-flash-preview",
       contents: contents,
@@ -351,6 +355,7 @@ app.post("/api/dr-michel/chat", async (req, res) => {
         systemInstruction: selectedSystemPrompt,
         temperature: temperature,
         maxOutputTokens: 8192,
+        tools: tools
       }
     });
 
