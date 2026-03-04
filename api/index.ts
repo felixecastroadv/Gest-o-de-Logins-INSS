@@ -45,9 +45,10 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - NUMERAÇÃO: Tópicos (1., 2.) e Pedidos (a), b)) obrigatórios.
 3. EXTENSÃO E DENSIDADE (CRUCIAL - AUMENTO DE 25%):
    - A petição deve ser ROBUSTA, LONGA e DETALHADA (Mínimo de 8 a 12 páginas).
-   - PROIBIDO SER SINTÉTICO. Expanda cada argumento ao máximo.
-   - CADA TÓPICO deve ter entre 6 a 8 parágrafos bem desenvolvidos.
-   - CADA PARÁGRAFO deve ter entre 5 a 7 linhas.
+   - DISTRIBUIÇÃO INTELIGENTE DE CONTEÚDO:
+     - TÓPICOS PROCEDIMENTAIS (Gratuidade, Juízo Digital, Resumo): MÁXIMO de 1 a 2 parágrafos curtos. Seja direto.
+     - TÓPICOS DE MÉRITO (DOS FATOS e DO DIREITO): AQUI deve estar a densidade. Mínimo de 8 a 12 parágrafos por tópico.
+   - CADA PARÁGRAFO DE MÉRITO deve ter entre 5 a 7 linhas.
    - O texto não pode perder densidade no final. Mantenha o nível técnico alto do início ao fim.
 
 4. RACIOCÍNIO JURÍDICO EXAUSTIVO (TRÍADE FATO-VALOR-NORMA):
