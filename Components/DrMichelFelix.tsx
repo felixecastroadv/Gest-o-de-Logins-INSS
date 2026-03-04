@@ -105,9 +105,9 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
     }
   };
 
-  const handleSendMessage = async (overrideInput?: string) => {
+  const handleSendMessage = async (overrideInput?: string, images?: string[]) => {
     const messageText = overrideInput || input;
-    if (!messageText.trim() || isLoading) return;
+    if ((!messageText.trim() && (!images || images.length === 0)) || isLoading) return;
 
     let sessionId = currentSessionId;
     if (!sessionId) {
@@ -141,7 +141,8 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: messageText,
-          history: sessions.find(s => s.id === sessionId)?.messages || []
+          history: sessions.find(s => s.id === sessionId)?.messages || [],
+          images: images || []
         })
       });
 
@@ -214,6 +215,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
 
       const fileArray = Array.from(files);
       let combinedText = "";
+      const imagesToSend: string[] = [];
 
       // Inform user we are reading the files
       const readingMsg: Message = {
@@ -229,8 +231,13 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
 
       for (const file of fileArray) {
         if (file.type === 'application/pdf') {
-          const text = await extractTextFromPDF(file);
+          const { text, images, isScanned } = await extractTextFromPDF(file);
           combinedText += `\n--- CONTEÚDO DO ARQUIVO: ${file.name} ---\n${text}\n`;
+          
+          if (isScanned && images.length > 0) {
+            combinedText += `\n[AVISO: Este arquivo contém ${images.length} páginas digitalizadas/manuscritas que foram convertidas para imagem para análise visual]\n`;
+            imagesToSend.push(...images);
+          }
         } else {
           combinedText += `\n--- ARQUIVO ANEXADO: ${file.name} (Tipo não suportado para extração direta) ---\n`;
         }
@@ -243,7 +250,8 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
       
       INSTRUÇÃO OBRIGATÓRIA: Apenas armazene estas informações e confirme o recebimento. NÃO gere nenhum relatório agora. Aguarde meu comando "GERAR RELATÓRIO".`;
       
-      await handleSendMessage(uploadPrompt);
+      // Send message with images if any
+      await handleSendMessage(uploadPrompt, imagesToSend);
     } catch (error: any) {
       console.error("Erro ao processar arquivos:", error);
       alert(`Erro ao ler os arquivos PDF: ${error.message || 'Erro desconhecido'}. Certifique-se de que não estão protegidos por senha.`);
