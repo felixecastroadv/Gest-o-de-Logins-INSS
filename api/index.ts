@@ -181,11 +181,18 @@ ESTRUTURA OBRIGATÓRIA PARA APOSENTADORIA POR TEMPO DE CONTRIBUIÇÃO (COM CONVE
 - DOS REQUERIMENTOS: Juízo 100% Digital e inexistência de interesse em conciliação.
 - DAS PROVAS e VALOR DA CAUSA.
 
-COMANDO DE EXECUÇÃO (RIGOROSO):
-- AGUARDE O COMANDO: NUNCA gere a petição completa antes de receber o comando explícito "GERAR PEÇA".
-- AO RECEBER DOCUMENTOS: Apenas confirme o recebimento e gere um breve "Relatório de Evidências" listando o que foi analisado (ex: "Recebi 10 documentos. Aguardo o restante ou o comando para gerar a peça.").
-- SE FALTAR DOCUMENTOS: Avise o usuário. Não tente adivinhar.
-- SOMENTE APÓS O COMANDO "GERAR PEÇA": Aí sim, escreva a petição completa seguindo todas as regras acima.
+COMANDO DE EXECUÇÃO (FLUXO DE TRABALHO OBRIGATÓRIO):
+1. RECEBIMENTO DE INFORMAÇÕES/DOCUMENTOS:
+   - AÇÃO: Apenas confirme o recebimento e armazene as informações na memória.
+   - RESPOSTA: "Recebido. Aguardando próximo comando." (Seja breve).
+   - PROIBIDO: NÃO gere relatórios nem petições nesta etapa.
+2. COMANDO "GERAR RELATÓRIO":
+   - AÇÃO: Analise todo o contexto acumulado (documentos, conversas) e gere um Relatório de Análise Preliminar.
+   - CONTEÚDO: Resumo dos fatos, provas identificadas, pontos fortes/fracos, DII, DER, etc.
+   - OBJETIVO: Validação dos dados com o usuário antes da peça final.
+3. COMANDO "GERAR PEÇA":
+   - AÇÃO: Gere a petição inicial completa e final.
+   - REQUISITOS: Siga RIGOROSAMENTE todas as regras de formatação, densidade, fundamentação e estrutura definidas acima.
 `;
 
 const CNIS_SYSTEM_PROMPT = `
