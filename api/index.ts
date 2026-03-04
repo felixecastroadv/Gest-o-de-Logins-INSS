@@ -209,10 +209,16 @@ async function callGemini(params: any, retries = 5) {
   try {
     return await ai.models.generateContent(params);
   } catch (error: any) {
-    // If rate limit (429) is hit, rotate to next key and retry immediately
-    if (error.message?.includes('429') && retries > 0) {
-      currentKeyIndex++;
-      console.log(`Chave ${currentKeyIndex % keys.length} atingiu limite. Rotacionando... (${retries} tentativas restantes)`);
+    // Handle 429 (Rate Limit) and 503 (Service Unavailable)
+    const isOverloaded = error.message?.includes('429') || error.message?.includes('503');
+    
+    if (isOverloaded && retries > 0) {
+      currentKeyIndex++; // Rotate key
+      const delay = error.message?.includes('503') ? 5000 : 1000; // 5s for 503, 1s for 429
+      
+      console.log(`Erro ${error.message.includes('503') ? '503 (Alta Demanda)' : '429 (Limite)'}. Rotacionando chave e aguardando ${delay}ms... (${retries} tentativas restantes)`);
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
       return callGemini(params, retries - 1);
     }
     throw error;
