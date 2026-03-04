@@ -152,6 +152,8 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
           const errorData = JSON.parse(errorText);
           if (response.status === 429 || (errorData.error && errorData.error.code === 429)) {
             errorMessage = 'Limite de uso atingido (Quota Exceeded). Por favor, aguarde cerca de 1 minuto antes de tentar novamente. Se o problema persistir, considere usar uma chave de API paga.';
+          } else if (response.status === 503 || (errorData.error && errorData.error.code === 503)) {
+            errorMessage = 'O serviço de IA está temporariamente sobrecarregado (Erro 503). Por favor, aguarde alguns instantes e tente novamente.';
           } else {
             errorMessage = errorData.error?.message || errorData.error || errorMessage;
           }
