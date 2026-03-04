@@ -241,7 +241,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
       Abaixo está o conteúdo extraído dos arquivos para sua análise e armazenamento:
       ${combinedText}
       
-      Por favor, processe estas informações e gere o Relatório de Evidências conforme suas instruções de sistema.`;
+      INSTRUÇÃO OBRIGATÓRIA: Apenas armazene estas informações e confirme o recebimento. NÃO gere nenhum relatório agora. Aguarde meu comando "GERAR RELATÓRIO".`;
       
       await handleSendMessage(uploadPrompt);
     } catch (error: any) {
