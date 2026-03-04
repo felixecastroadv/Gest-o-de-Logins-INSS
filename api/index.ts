@@ -55,6 +55,10 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
 5. REGRAS DE FORMATAÇÃO (EM TODAS AS RESPOSTAS):
    - MESMO EM CORREÇÕES PONTUAIS: Nunca entregue um bloco de texto único. Mantenha a divisão em parágrafos (4-5 linhas) e o espaçamento entre eles.
    - SEPARADORES: Use uma linha em branco entre cada parágrafo.
+6. ROL DE DOCUMENTOS (RIGOROSO):
+   - Liste EXATAMENTE os nomes dos arquivos enviados pelo usuário no histórico da conversa.
+   - Não invente nomes genéricos (ex: "Documentos Pessoais"). Use o nome real do arquivo (ex: "RG.pdf", "Laudo_Medico.pdf").
+   - A quantidade de itens na lista deve ser igual à quantidade de arquivos enviados.
 
 ESTRUTURA OBRIGATÓRIA PARA BENEFÍCIO POR INCAPACIDADE:
 - ENDEREÇAMENTO: Ao Juízo Federal competente.
@@ -189,6 +193,8 @@ COMANDO DE EXECUÇÃO (FLUXO DE TRABALHO OBRIGATÓRIO):
 2. COMANDO "GERAR RELATÓRIO":
    - AÇÃO: Analise todo o contexto acumulado (documentos, conversas) e gere um Relatório de Análise Preliminar.
    - CONTEÚDO: Resumo dos fatos, provas identificadas, pontos fortes/fracos, DII, DER, etc.
+   - CITAÇÃO DE FONTE (OBRIGATÓRIO): Cada fato ou dado mencionado no relatório deve indicar explicitamente de qual documento foi extraído (ex: "Conforme Laudo X...", "Segundo o CNIS...").
+   - LISTA DE DOCUMENTOS PROCESSADOS (OBRIGATÓRIO): Ao final do relatório, crie uma seção "DOCUMENTOS ANALISADOS" listando todos os arquivos que foram lidos para esta análise. Isso serve de checklist para o usuário verificar se algo foi esquecido.
    - OBJETIVO: Validação dos dados com o usuário antes da peça final.
 3. COMANDO "GERAR PEÇA":
    - AÇÃO: Gere a petição inicial completa e final.
@@ -264,12 +270,13 @@ app.post("/api/analyze-cnis", async (req, res) => {
 });
 
 const ARCHIVIST_SYSTEM_PROMPT = `
-VOCÊ É UM ARQUIVISTA DIGITAL EFICIENTE.
+VOCÊ É UM SISTEMA DE ARMAZENAMENTO DE DADOS. NÃO É UMA IA DE CONVERSA.
 SUA ÚNICA FUNÇÃO É:
 1. Receber textos/documentos.
-2. Confirmar o recebimento com uma frase curta.
+2. Confirmar o recebimento.
 3. NÃO ANALISAR, NÃO RESUMIR, NÃO DAR OPINIÃO JURÍDICA.
-4. Responda apenas: "Recebido. Documento [Nome] armazenado. Aguardando próximo comando."
+4. SAÍDA OBRIGATÓRIA: Apenas a frase "Recebido. Documentos armazenados. Aguardando próximo comando."
+NÃO GERE MAIS NADA ALÉM DISSO.
 `;
 
 app.post("/api/dr-michel/chat", async (req, res) => {
