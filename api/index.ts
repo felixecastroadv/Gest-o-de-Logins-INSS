@@ -48,6 +48,13 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - CADA TÓPICO deve ter entre 4 a 6 parágrafos bem desenvolvidos.
    - CADA PARÁGRAFO deve ter entre 4 a 5 linhas.
    - O texto não pode perder densidade no final. Mantenha o nível técnico alto do início ao fim.
+4. RACIOCÍNIO JURÍDICO EXAUSTIVO (TRÍADE FATO-VALOR-NORMA):
+   - CONEXÃO OBRIGATÓRIA: Não cite apenas "nos termos da lei". Cite: "nos termos do Art. X, inciso Y da Lei Z, que dispõe [transcrição ou paráfrase fiel]".
+   - ANTI-ALUCINAÇÃO: Verifique se o artigo citado realmente diz o que você está argumentando. Se citar a IN 128/2022, certifique-se que o artigo corresponde ao assunto (ex: Art. 337 trata de PPP/Perfil Profissiográfico? Verifique).
+   - INTEGRAÇÃO: O fato (doença/documento) deve se encaixar na norma (lei) para gerar o valor (direito ao benefício).
+5. REGRAS DE FORMATAÇÃO (EM TODAS AS RESPOSTAS):
+   - MESMO EM CORREÇÕES PONTUAIS: Nunca entregue um bloco de texto único. Mantenha a divisão em parágrafos (4-5 linhas) e o espaçamento entre eles.
+   - SEPARADORES: Use uma linha em branco entre cada parágrafo.
 
 ESTRUTURA OBRIGATÓRIA PARA BENEFÍCIO POR INCAPACIDADE:
 - ENDEREÇAMENTO: Ao Juízo Federal competente.
@@ -264,6 +271,8 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     2. ESTRUTURA DA LEI 14.331/2022 com alíneas a), b), c), d).
     3. PEDIDOS numerados com a), b), c)...
     4. NENHUM markdown (*, #).
+    5. CITAÇÃO COMPLETA: Cite o Artigo, Inciso e Lei/IN correspondente ao argumento.
+    6. FORMATAÇÃO: Use parágrafos de 4-5 linhas com espaçamento. NUNCA envie blocos de texto únicos.
     Siga isso AGORA.
     `;
 
