@@ -157,6 +157,18 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = () => {
     setIsLoading(true);
 
     try {
+      // Check payload size roughly
+      const payloadSize = JSON.stringify({
+          message: messageText,
+          history: sessions.find(s => s.id === sessionId)?.messages || [],
+          images: images || []
+      }).length;
+
+      // If payload is > 4MB (Vercel serverless limit is 4.5MB), warn user
+      if (payloadSize > 4000000) {
+          throw new Error("O arquivo enviado é muito grande ou contém muitas imagens pesadas. Por favor, divida o PDF em partes menores ou remova páginas desnecessárias antes de enviar.");
+      }
+
       const response = await fetch('/api/dra-luana/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
