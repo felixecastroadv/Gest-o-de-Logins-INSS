@@ -263,7 +263,7 @@ app.post("/api/analyze-cnis", async (req, res) => {
     if (!cnisContent) return res.status(400).json({ error: "CNIS content is required" });
 
     const response = await callGemini({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-1.5-flash",
       contents: { role: "user", parts: [{ text: cnisContent }] },
       config: {
         systemInstruction: CNIS_SYSTEM_PROMPT,
@@ -349,12 +349,12 @@ app.post("/api/dr-michel/chat", async (req, res) => {
       { role: 'user', parts: currentMessageParts }
     ];
 
-    // Configuração de Tools (Google Search Grounding)
-    // Apenas para o Dr. Michel (não para o Arquivista)
-    const tools = isStorageRequest ? [] : [{ googleSearch: {} }];
+    // Configuração de Tools
+    // Desativado temporariamente para garantir estabilidade com o modelo 1.5 Flash
+    const tools: any[] = [];
 
     const response = await callGemini({
-      model: "gemini-3.1-pro-preview",
+      model: "gemini-1.5-flash",
       contents: contents,
       config: {
         systemInstruction: selectedSystemPrompt,
