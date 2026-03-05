@@ -118,23 +118,23 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
         let newProgress = 0;
         let newText = '';
 
-        if (seconds < 5) {
-          newProgress = (seconds / 5) * 15;
+        if (seconds < 10) {
+          newProgress = (seconds / 10) * 15;
           newText = 'Analisando o histórico e os documentos enviados...';
-        } else if (seconds < 15) {
-          newProgress = 15 + ((seconds - 5) / 10) * 20;
+        } else if (seconds < 30) {
+          newProgress = 15 + ((seconds - 10) / 20) * 20;
           newText = 'Pesquisando base legal e jurisprudência aplicável...';
-        } else if (seconds < 35) {
-          newProgress = 35 + ((seconds - 15) / 20) * 25;
+        } else if (seconds < 60) {
+          newProgress = 35 + ((seconds - 30) / 30) * 25;
           newText = 'Estruturando a argumentação jurídica...';
-        } else if (seconds < 75) {
-          newProgress = 60 + ((seconds - 35) / 40) * 25;
-          newText = 'Redigindo os tópicos da peça...';
         } else if (seconds < 120) {
-          newProgress = 85 + ((seconds - 75) / 45) * 10;
+          newProgress = 60 + ((seconds - 60) / 60) * 25;
+          newText = 'Redigindo os tópicos da peça...';
+        } else if (seconds < 180) {
+          newProgress = 85 + ((seconds - 120) / 60) * 10;
           newText = 'Revisando a formatação e a gramática...';
         } else {
-          newProgress = 95 + Math.min(((seconds - 120) / 60) * 4, 4); // max 99%
+          newProgress = 95 + Math.min(((seconds - 180) / 120) * 4, 4); // max 99%
           newText = 'Finalizando os últimos detalhes...';
         }
 
@@ -267,70 +267,18 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
         throw new Error(errorMessage);
       }
 
-      const assistantMsgId = (Date.now() + 1).toString();
+      const data = await response.json();
+      
       const assistantMsg: Message = {
-        id: assistantMsgId,
+        id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: '',
+        content: data.text,
         timestamp: new Date().toISOString()
       };
 
       setSessions(prev => prev.map(s => 
         s.id === sessionId ? { ...s, messages: [...s.messages, assistantMsg] } : s
       ));
-
-      const reader = response.body?.getReader();
-      const decoder = new TextDecoder();
-      let fullText = '';
-      
-      if (reader) {
-        let buffer = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n\n');
-          buffer = lines.pop() || '';
-          
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const dataStr = line.slice(6);
-              if (dataStr === '[DONE]') continue;
-              
-              let data;
-              try {
-                data = JSON.parse(dataStr);
-              } catch (e) {
-                continue;
-              }
-              
-              if (data.error) {
-                throw new Error(data.error);
-              }
-              
-              if (data.heartbeat) {
-                continue;
-              }
-              
-              if (data.text) {
-                fullText += data.text;
-                setSessions(prev => prev.map(s => {
-                  if (s.id === sessionId) {
-                    const newMessages = [...s.messages];
-                    const msgIndex = newMessages.findIndex(m => m.id === assistantMsgId);
-                    if (msgIndex !== -1) {
-                      newMessages[msgIndex] = { ...newMessages[msgIndex], content: fullText };
-                    }
-                    return { ...s, messages: newMessages };
-                  }
-                  return s;
-                }));
-              }
-            }
-          }
-        }
-      }
     } catch (error: any) {
       console.error(error);
       const errorMsg: Message = {
