@@ -1,7 +1,9 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Use CDN with dynamic version to ensure match with installed library
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+import * as pdfjsLib from 'pdfjs-dist';
+
+// Use UNPKG with the classic .js worker to avoid MIME/Module issues in some environments
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
 
 export interface PDFContent {
   text: string;
@@ -35,60 +37,43 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
     const images: string[] = [];
     let totalTextLength = 0;
 
-    // Limit image rendering to first 5 pages to avoid payload explosion
-    // If it's a huge document, we assume it's digital or user will split it.
-    const maxPagesToRender = 5; 
+    // DISABLE IMAGE RENDERING to prevent "Black Screen" crashes on complex PDFs
+    // The canvas rendering on main thread can freeze the browser.
+    const maxPagesToRender = 0; 
 
     for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      
-      // 1. Extract Text
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      
-      if (pageText.trim()) {
-        fullText += `--- Página ${i} ---\n${pageText}\n\n`;
-        totalTextLength += pageText.length;
-      }
-
-      // 2. Heuristic: If text is very short (< 50 chars), assume it's scanned/handwritten
-      // OR if the user explicitly wants to read handwritten notes (we can't know intent here, so we rely on density)
-      // For now, if density is low, we render.
-      const isLowDensity = pageText.length < 100;
-
-      if (isLowDensity && i <= maxPagesToRender) {
-        try {
-          const viewport = page.getViewport({ scale: 1.5 }); // 1.5 scale for decent OCR quality
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          
-          if (context) {
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            
-            await page.render({ 
-              canvasContext: context, 
-              viewport: viewport 
-            } as any).promise;
-            
-            // Convert to JPEG (Base64) - remove prefix for API
-            const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-            images.push(base64);
-          }
-        } catch (renderError) {
-          console.warn(`Erro ao renderizar página ${i} como imagem:`, renderError);
+      try {
+        const page = await pdf.getPage(i);
+        
+        // 1. Extract Text
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(' ');
+        
+        if (pageText.trim()) {
+          fullText += `--- Página ${i} ---\n${pageText}\n\n`;
+          totalTextLength += pageText.length;
         }
+
+        // Image rendering logic disabled for stability
+        /*
+        const isLowDensity = pageText.length < 100;
+        if (isLowDensity && i <= maxPagesToRender) {
+           // ... canvas code ...
+        }
+        */
+      } catch (pageError) {
+        console.warn(`Erro ao ler página ${i}:`, pageError);
+        fullText += `\n[Erro ao ler página ${i}]\n`;
       }
     }
 
-    const isScanned = images.length > 0;
+    const isScanned = false; // Always false since we disabled OCR
 
-    if (!fullText.trim() && images.length === 0) {
-       // If no text and rendering failed
+    if (!fullText.trim()) {
        return { 
-         text: "ERRO: O PDF parece vazio e não foi possível converter para imagem.", 
+         text: "AVISO: Não foi possível extrair texto deste PDF. Ele pode ser uma imagem digitalizada ou estar protegido.", 
          images: [], 
          isScanned: false 
        };
@@ -101,6 +86,11 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
     if (error.name === 'PasswordException') {
       throw new Error("O arquivo PDF está protegido por senha.");
     }
-    throw new Error(`Falha técnica ao extrair texto do PDF: ${error.message}`);
+    // Return a safe error message instead of throwing to prevent app crash
+    return {
+        text: `ERRO DE LEITURA: ${error.message || "Falha desconhecida ao processar PDF."}`,
+        images: [],
+        isScanned: false
+    };
   }
 }
