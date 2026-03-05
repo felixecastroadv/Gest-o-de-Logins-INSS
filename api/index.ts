@@ -224,7 +224,7 @@ function getApiKeys() {
   return [...new Set(keys)]; // Remove duplicates
 }
 
-async function callGemini(params: any, retries = 5) {
+async function callGemini(params: any, retries = 15) {
   const keys = getApiKeys();
   if (keys.length === 0) throw new Error("Nenhuma chave de API encontrada. Configure API_KEY_1, API_KEY_2, etc. na Vercel.");
 
@@ -240,12 +240,17 @@ async function callGemini(params: any, retries = 5) {
     
     if (isOverloaded && retries > 0) {
       currentKeyIndex++; // Rotate key
-      const delay = error.message?.includes('503') ? 5000 : 1000; // 5s for 503, 1s for 429
+      const delay = error.message?.includes('503') ? 2000 : 1000; // 2s for 503, 1s for 429
       
-      console.log(`Erro ${error.message.includes('503') ? '503 (Alta Demanda)' : '429 (Limite)'}. Rotacionando chave e aguardando ${delay}ms... (${retries} tentativas restantes)`);
+      console.log(`Erro ${error.message.includes('503') ? '503 (Alta Demanda)' : '429 (Limite)'}. Rotacionando chave (Total: ${keys.length}). Aguardando ${delay}ms... (${retries} tentativas restantes)`);
       
       await new Promise(resolve => setTimeout(resolve, delay));
       return callGemini(params, retries - 1);
+    }
+    
+    // Se esgotou as tentativas ou é outro erro
+    if (retries === 0) {
+      throw new Error(`Falha após várias tentativas. Chaves ativas detectadas: ${keys.length}. Erro original: ${error.message}`);
     }
     throw error;
   }
