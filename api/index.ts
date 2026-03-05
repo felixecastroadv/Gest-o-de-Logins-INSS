@@ -581,7 +581,20 @@ app.post("/api/dr-michel/chat", async (req, res) => {
       }
     });
 
-    res.json({ text: response.text });
+    let responseText = "";
+    try {
+      responseText = response.text || "";
+    } catch (e) {
+      console.warn("Could not access response.text, checking candidates...");
+      if (response.candidates && response.candidates.length > 0) {
+        const candidate = response.candidates[0];
+        if (candidate.content && candidate.content.parts) {
+           responseText = candidate.content.parts.map((p: any) => p.text || '').join('');
+        }
+      }
+    }
+
+    res.json({ text: responseText || "Desculpe, não consegui gerar uma resposta válida para esta solicitação." });
   } catch (error: any) {
     console.error("Error in chat:", error);
     res.status(500).json({ error: error.message || "Falha no chat" });
@@ -663,7 +676,20 @@ app.post("/api/dra-luana/chat", async (req, res) => {
       }
     });
 
-    res.json({ text: response.text });
+    let responseText = "";
+    try {
+      responseText = response.text || "";
+    } catch (e) {
+      console.warn("Could not access response.text, checking candidates...");
+      if (response.candidates && response.candidates.length > 0) {
+        const candidate = response.candidates[0];
+        if (candidate.content && candidate.content.parts) {
+           responseText = candidate.content.parts.map((p: any) => p.text || '').join('');
+        }
+      }
+    }
+
+    res.json({ text: responseText || "Desculpe, não consegui gerar uma resposta válida para esta solicitação." });
   } catch (error: any) {
     console.error("Error in chat (Dra. Luana):", error);
     res.status(500).json({ error: error.message || "Falha no chat" });
