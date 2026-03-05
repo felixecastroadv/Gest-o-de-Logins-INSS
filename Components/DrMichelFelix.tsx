@@ -239,6 +239,11 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
           throw new Error("O arquivo enviado é muito grande ou contém muitas imagens pesadas. Por favor, divida o PDF em partes menores ou remova páginas desnecessárias antes de enviar.");
       }
 
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => {
+        abortController.abort();
+      }, 300000); // 300 seconds
+
       const response = await fetch('/api/dr-michel/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -246,10 +251,12 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
           message: messageText,
           history: sessions.find(s => s.id === sessionId)?.messages || [],
           images: images || []
-        })
+        }),
+        signal: abortController.signal
       });
 
       if (!response.ok) {
+        clearTimeout(timeoutId);
         const errorText = await response.text();
         let errorMessage = 'Falha na resposta da IA';
         try {
@@ -267,12 +274,63 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
         throw new Error(errorMessage);
       }
 
-      const data = await response.json();
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
       
+      if (reader) {
+        let buffer = '';
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop() || '';
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const dataStr = line.slice(6);
+                if (dataStr === '[DONE]') continue;
+                
+                let data;
+                try {
+                  data = JSON.parse(dataStr);
+                } catch (e) {
+                  continue;
+                }
+                
+                if (data.error) {
+                  throw new Error(data.error);
+                }
+                
+                if (data.heartbeat) {
+                  continue;
+                }
+                
+                if (data.text) {
+                  fullText += data.text;
+                }
+              }
+            }
+          }
+        } catch (readError: any) {
+          if (readError.name === 'AbortError') {
+            console.log('Stream aborted after 300 seconds');
+            fullText += '\n\n[Aviso: Tempo limite de 5 minutos atingido. Geração pausada. Digite "continue" para prosseguir.]';
+          } else {
+            throw readError;
+          }
+        }
+      }
+
+      clearTimeout(timeoutId);
+
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.text,
+        content: fullText || "Desculpe, não consegui gerar uma resposta.",
         timestamp: new Date().toISOString()
       };
 
@@ -280,16 +338,28 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
         s.id === sessionId ? { ...s, messages: [...s.messages, assistantMsg] } : s
       ));
     } catch (error: any) {
-      console.error(error);
-      const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: `⚠️ ERRO: ${error.message}`,
-        timestamp: new Date().toISOString()
-      };
-      setSessions(prev => prev.map(s => 
-        s.id === sessionId ? { ...s, messages: [...s.messages, errorMsg] } : s
-      ));
+      if (error.name === 'AbortError') {
+        const assistantMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: '[Aviso: Tempo limite de 5 minutos atingido antes de receber dados. Tente novamente.]',
+          timestamp: new Date().toISOString()
+        };
+        setSessions(prev => prev.map(s => 
+          s.id === sessionId ? { ...s, messages: [...s.messages, assistantMsg] } : s
+        ));
+      } else {
+        console.error(error);
+        const errorMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `⚠️ ERRO: ${error.message}`,
+          timestamp: new Date().toISOString()
+        };
+        setSessions(prev => prev.map(s => 
+          s.id === sessionId ? { ...s, messages: [...s.messages, errorMsg] } : s
+        ));
+      }
     } finally {
       setIsLoading(false);
     }
