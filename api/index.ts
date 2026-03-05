@@ -680,16 +680,37 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    const heartbeat = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ heartbeat: true })}\n\n`);
+    }, 5000);
 
     try {
       for await (const chunk of responseStream) {
-        if (chunk.text) {
-          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+        let text = "";
+        try {
+          text = chunk.text || "";
+        } catch (e) {
+          // ignore
+        }
+        
+        if (!text && chunk.candidates && chunk.candidates.length > 0) {
+          const candidate = chunk.candidates[0];
+          if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+            text = `\n\n[Aviso: Geração interrompida. Motivo: ${candidate.finishReason}]`;
+          }
+        }
+
+        if (text) {
+          res.write(`data: ${JSON.stringify({ text: text })}\n\n`);
         }
       }
+      clearInterval(heartbeat);
       res.write(`data: [DONE]\n\n`);
       res.end();
     } catch (streamError: any) {
+      clearInterval(heartbeat);
       console.error("Stream error:", streamError);
       res.write(`data: ${JSON.stringify({ error: streamError.message || "Erro durante a geração do texto." })}\n\n`);
       res.end();
@@ -787,16 +808,37 @@ app.post("/api/dra-luana/chat", async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    const heartbeat = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ heartbeat: true })}\n\n`);
+    }, 5000);
 
     try {
       for await (const chunk of responseStream) {
-        if (chunk.text) {
-          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
+        let text = "";
+        try {
+          text = chunk.text || "";
+        } catch (e) {
+          // ignore
+        }
+        
+        if (!text && chunk.candidates && chunk.candidates.length > 0) {
+          const candidate = chunk.candidates[0];
+          if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+            text = `\n\n[Aviso: Geração interrompida. Motivo: ${candidate.finishReason}]`;
+          }
+        }
+
+        if (text) {
+          res.write(`data: ${JSON.stringify({ text: text })}\n\n`);
         }
       }
+      clearInterval(heartbeat);
       res.write(`data: [DONE]\n\n`);
       res.end();
     } catch (streamError: any) {
+      clearInterval(heartbeat);
       console.error("Stream error (Dra. Luana):", streamError);
       res.write(`data: ${JSON.stringify({ error: streamError.message || "Erro durante a geração do texto." })}\n\n`);
       res.end();
