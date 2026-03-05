@@ -499,7 +499,9 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = () => {
                       </span>
                     </div>
                     <div className="prose dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                      {msg.content}
+                      {msg.role === 'user' && msg.content.length > 3000 
+                        ? msg.content.substring(0, 800) + '\n\n[... Conteúdo longo ocultado na tela para evitar travamentos. A IA leu o texto completo ...]' 
+                        : msg.content}
                     </div>
                     <div className="flex items-center gap-2">
                       {msg.role === 'assistant' && (
