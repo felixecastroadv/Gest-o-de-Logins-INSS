@@ -263,7 +263,7 @@ app.post("/api/analyze-cnis", async (req, res) => {
     if (!cnisContent) return res.status(400).json({ error: "CNIS content is required" });
 
     const response = await callGemini({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-pro-preview",
       contents: { role: "user", parts: [{ text: cnisContent }] },
       config: {
         systemInstruction: CNIS_SYSTEM_PROMPT,
@@ -354,7 +354,7 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     const tools = isStorageRequest ? [] : [{ googleSearch: {} }];
 
     const response = await callGemini({
-      model: "gemini-3-flash-preview",
+      model: "gemini-3.1-pro-preview",
       contents: contents,
       config: {
         systemInstruction: selectedSystemPrompt,
