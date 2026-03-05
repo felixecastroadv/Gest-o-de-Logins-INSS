@@ -1,8 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Use local worker for better reliability and to match SocialSecurityCalc
-const PDFJS_VERSION = '3.11.174';
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+// Use CDN with dynamic version to ensure match with installed library
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 export interface PDFContent {
   text: string;
@@ -20,8 +19,9 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
     
     const loadingTask = pdfjsLib.getDocument({ 
       data: arrayBuffer,
-      cMapUrl: `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/cmaps/`,
+      cMapUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/cmaps/`,
       cMapPacked: true,
+      standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/standard_fonts/`,
     });
     
     // Add timeout to prevent hanging
