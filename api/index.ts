@@ -605,7 +605,7 @@ app.post("/api/dr-michel/chat", async (req, res) => {
       config: {
         systemInstruction: selectedSystemPrompt,
         temperature: temperature,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 16384,
         tools: tools,
         safetySettings: [
           { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
@@ -715,7 +715,7 @@ app.post("/api/dra-luana/chat", async (req, res) => {
       config: {
         systemInstruction: selectedSystemPrompt,
         temperature: temperature,
-        maxOutputTokens: 8192,
+        maxOutputTokens: 16384,
         tools: tools,
         safetySettings: [
           { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
