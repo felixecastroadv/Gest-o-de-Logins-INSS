@@ -215,9 +215,9 @@ Retorne um JSON com 'client', 'bonds' e 'analysis'.
 let currentKeyIndex = Math.floor(Math.random() * 10);
 
 const MODEL_HIERARCHY = [
-  "gemini-3.1-pro-preview",
-  "gemini-3-flash-preview",
-  "gemini-1.5-flash"
+  "gemini-2.0-flash-exp", // Versão 2.0 (Experimental/Preview) - Mais avançada real
+  "gemini-1.5-pro",       // Versão 1.5 Pro - Alta inteligência
+  "gemini-1.5-flash"      // Versão 1.5 Flash - Alta velocidade e estabilidade
 ];
 
 function getApiKeys() {
