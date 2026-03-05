@@ -661,7 +661,7 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     // Apenas para o Dr. Michel (não para o Arquivista)
     const tools = isStorageRequest ? [] : [{ googleSearch: {} }];
 
-    const response = await callGemini({
+    const responseStream = await callGeminiStream({
       model: "gemini-3-flash-preview",
       contents: contents,
       config: {
@@ -678,32 +678,48 @@ app.post("/api/dr-michel/chat", async (req, res) => {
       }
     });
 
-    let responseText = "";
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    const heartbeat = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ heartbeat: true })}\n\n`);
+    }, 5000);
+
     try {
-      responseText = response.text || "";
-    } catch (e) {
-      console.warn("Could not access response.text, checking candidates...", e);
-    }
+      for await (const chunk of responseStream) {
+        let text = "";
+        try {
+          text = chunk.text || "";
+        } catch (e) {
+          // ignore
+        }
+        
+        if (!text && chunk.candidates && chunk.candidates.length > 0) {
+          const candidate = chunk.candidates[0];
+          if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+            text = `\n\n[Aviso: Geração interrompida. Motivo: ${candidate.finishReason}]`;
+          }
+        }
 
-    if (!responseText) {
-      console.warn("Response text is empty. Full response:", JSON.stringify(response, null, 2));
-      if (response.candidates && response.candidates.length > 0) {
-        const candidate = response.candidates[0];
-        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-           responseText = `[Aviso: A resposta foi interrompida ou bloqueada. Motivo: ${candidate.finishReason}].\n\n`;
+        if (text) {
+          res.write(`data: ${JSON.stringify({ text: text })}\n\n`);
         }
-        if (candidate.content && candidate.content.parts) {
-           responseText += candidate.content.parts.map((p: any) => p.text || '').join('');
-        }
-      } else if (response.promptFeedback) {
-        responseText = `[Aviso: O prompt foi bloqueado. Motivo: ${response.promptFeedback.blockReason}].\n\n`;
       }
+      clearInterval(heartbeat);
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    } catch (streamError: any) {
+      clearInterval(heartbeat);
+      console.error("Stream error:", streamError);
+      res.write(`data: ${JSON.stringify({ error: streamError.message || "Erro durante a geração do texto." })}\n\n`);
+      res.end();
     }
-
-    res.json({ text: responseText || "Desculpe, não consegui gerar uma resposta válida para esta solicitação." });
   } catch (error: any) {
     console.error("Error in chat:", error);
-    res.status(500).json({ error: error.message || "Falha no chat" });
+    res.write(`data: ${JSON.stringify({ error: error.message || "Falha no chat" })}\n\n`);
+    res.end();
   }
 });
 
@@ -772,7 +788,7 @@ app.post("/api/dra-luana/chat", async (req, res) => {
     // Configuração de Tools (Google Search Grounding)
     const tools = isStorageRequest ? [] : [{ googleSearch: {} }];
 
-    const response = await callGemini({
+    const responseStream = await callGeminiStream({
       model: "gemini-3-flash-preview",
       contents: contents,
       config: {
@@ -789,32 +805,48 @@ app.post("/api/dra-luana/chat", async (req, res) => {
       }
     });
 
-    let responseText = "";
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    const heartbeat = setInterval(() => {
+      res.write(`data: ${JSON.stringify({ heartbeat: true })}\n\n`);
+    }, 5000);
+
     try {
-      responseText = response.text || "";
-    } catch (e) {
-      console.warn("Could not access response.text, checking candidates...", e);
-    }
+      for await (const chunk of responseStream) {
+        let text = "";
+        try {
+          text = chunk.text || "";
+        } catch (e) {
+          // ignore
+        }
+        
+        if (!text && chunk.candidates && chunk.candidates.length > 0) {
+          const candidate = chunk.candidates[0];
+          if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+            text = `\n\n[Aviso: Geração interrompida. Motivo: ${candidate.finishReason}]`;
+          }
+        }
 
-    if (!responseText) {
-      console.warn("Response text is empty. Full response:", JSON.stringify(response, null, 2));
-      if (response.candidates && response.candidates.length > 0) {
-        const candidate = response.candidates[0];
-        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-           responseText = `[Aviso: A resposta foi interrompida ou bloqueada. Motivo: ${candidate.finishReason}].\n\n`;
+        if (text) {
+          res.write(`data: ${JSON.stringify({ text: text })}\n\n`);
         }
-        if (candidate.content && candidate.content.parts) {
-           responseText += candidate.content.parts.map((p: any) => p.text || '').join('');
-        }
-      } else if (response.promptFeedback) {
-        responseText = `[Aviso: O prompt foi bloqueado. Motivo: ${response.promptFeedback.blockReason}].\n\n`;
       }
+      clearInterval(heartbeat);
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    } catch (streamError: any) {
+      clearInterval(heartbeat);
+      console.error("Stream error (Dra. Luana):", streamError);
+      res.write(`data: ${JSON.stringify({ error: streamError.message || "Erro durante a geração do texto." })}\n\n`);
+      res.end();
     }
-
-    res.json({ text: responseText || "Desculpe, não consegui gerar uma resposta válida para esta solicitação." });
   } catch (error: any) {
     console.error("Error in chat (Dra. Luana):", error);
-    res.status(500).json({ error: error.message || "Falha no chat" });
+    res.write(`data: ${JSON.stringify({ error: error.message || "Falha no chat" })}\n\n`);
+    res.end();
   }
 });
 
