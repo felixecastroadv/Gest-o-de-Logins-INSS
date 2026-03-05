@@ -215,20 +215,28 @@ Retorne um JSON com 'client', 'bonds' e 'analysis'.
 let currentKeyIndex = Math.floor(Math.random() * 10);
 
 const MODEL_HIERARCHY = [
-  "gemini-2.0-flash-exp", // 1º: Experimental (Se disponível)
-  "gemini-1.5-flash",     // 2º: Padrão Flash (Alta cota)
-  "gemini-1.5-pro",       // 3º: Padrão Pro
-  "gemini-pro"            // 4º: Legado (1.0)
+  "gemini-3.1-pro-preview",
+  "gemini-3-flash-preview"
 ];
 
 function getApiKeys() {
-  const keys = Object.keys(process.env)
-    .filter(k => k.startsWith('API_KEY_'))
+  const envKeys = Object.keys(process.env);
+  const keyVars = envKeys.filter(k => k.startsWith('API_KEY_'));
+  
+  const keys = keyVars
     .map(k => process.env[k])
     .filter(Boolean) as string[];
   
   if (process.env.GEMINI_API_KEY) keys.push(process.env.GEMINI_API_KEY);
-  return [...new Set(keys)]; // Remove duplicates
+  
+  const uniqueKeys = [...new Set(keys)]; // Remove duplicates
+  
+  // Log para depuração (apenas no servidor)
+  console.log(`[DEBUG] Chaves encontradas (${uniqueKeys.length}):`, 
+    uniqueKeys.map(k => k.substring(0, 5) + '...').join(', ')
+  );
+  
+  return uniqueKeys;
 }
 
 async function callGemini(params: any, retries = 20, modelIndex = 0, failuresOnCurrentModel = 0) {
