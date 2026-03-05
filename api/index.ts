@@ -215,10 +215,10 @@ Retorne um JSON com 'client', 'bonds' e 'analysis'.
 let currentKeyIndex = Math.floor(Math.random() * 10);
 
 const MODEL_HIERARCHY = [
-  "gemini-2.0-flash-exp",    // 1º: Mais nova, rápida e inteligente
-  "gemini-1.5-flash-latest", // 2º: Alta cota (1.500/dia) e estável
-  "gemini-1.5-pro-latest",   // 3º: Inteligente, mas cota baixa (50/dia)
-  "gemini-1.0-pro"           // 4º: Último recurso (Legado)
+  "gemini-2.0-flash-exp", // 1º: Experimental (Se disponível)
+  "gemini-1.5-flash",     // 2º: Padrão Flash (Alta cota)
+  "gemini-1.5-pro",       // 3º: Padrão Pro
+  "gemini-pro"            // 4º: Legado (1.0)
 ];
 
 function getApiKeys() {
@@ -231,7 +231,7 @@ function getApiKeys() {
   return [...new Set(keys)]; // Remove duplicates
 }
 
-async function callGemini(params: any, retries = 15, modelIndex = 0, failuresOnCurrentModel = 0) {
+async function callGemini(params: any, retries = 20, modelIndex = 0, failuresOnCurrentModel = 0) {
   const keys = getApiKeys();
   if (keys.length === 0) throw new Error("Nenhuma chave de API encontrada. Configure API_KEY_1, API_KEY_2, etc. na Vercel.");
 
@@ -244,59 +244,63 @@ async function callGemini(params: any, retries = 15, modelIndex = 0, failuresOnC
   const currentModel = MODEL_HIERARCHY[safeModelIndex];
   
   // Override model in params
-  // IMPORTANTE: Se estivermos em fallback (não for o primeiro modelo), removemos as 'tools' (Google Search)
-  // para evitar erros de compatibilidade e garantir que o modelo básico funcione.
   const finalParams = { ...params, model: currentModel };
   
-  if (modelIndex > 0 && finalParams.config && finalParams.config.tools) {
-    console.log(`Fallback: Removendo tools para o modelo ${currentModel} para garantir estabilidade.`);
-    delete finalParams.config.tools;
+  // Fallback: Remove tools if not on the primary model or if retrying heavily
+  if (modelIndex > 0 || failuresOnCurrentModel > 1) {
+    if (finalParams.config && finalParams.config.tools) {
+      delete finalParams.config.tools;
+    }
   }
 
   try {
     return await ai.models.generateContent(finalParams);
   } catch (error: any) {
-    // Handle 429 (Rate Limit), 503 (Service Unavailable), and 404 (Model Not Found)
-    const isOverloaded = error.message?.includes('429') || error.message?.includes('503');
-    const isNotFound = error.message?.includes('404') || error.message?.includes('not found');
+    const errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error));
+    const errorMessage = error.message || errorStr;
+    
+    // Detect Error Types
+    const isOverloaded = errorMessage.includes('429') || errorMessage.includes('503') || errorMessage.includes('RESOURCE_EXHAUSTED');
+    const isNotFound = errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('NOT_FOUND');
     
     if ((isOverloaded || isNotFound) && retries > 0) {
-      currentKeyIndex++; // Rotate key
+      currentKeyIndex++; // Rotate key immediately
       
       let nextModelIndex = modelIndex;
       let nextFailures = failuresOnCurrentModel + 1;
       let delay = 1000;
 
       if (isNotFound) {
-         // If model not found, switch immediately
+         // 404: Switch model immediately
          nextModelIndex++;
          nextFailures = 0;
-         delay = 0;
-         console.log(`Modelo ${currentModel} não encontrado (404). Trocando para ${MODEL_HIERARCHY[Math.min(nextModelIndex, MODEL_HIERARCHY.length - 1)]}...`);
+         delay = 500; // Small delay
+         console.log(`[Tentativa ${20 - retries}] Modelo ${currentModel} não encontrado (404). Trocando para ${MODEL_HIERARCHY[Math.min(nextModelIndex, MODEL_HIERARCHY.length - 1)]}...`);
       } else {
-         // If overloaded
-         delay = error.message?.includes('503') ? 2000 : 1000;
+         // 429/503: Retry logic
+         delay = errorMessage.includes('503') ? 2000 : 1000;
          
          // Switch model after 3 failures on the same model
          if (nextFailures >= 3 && nextModelIndex < MODEL_HIERARCHY.length - 1) {
              nextModelIndex++;
              nextFailures = 0;
-             console.log(`Muitas falhas (${failuresOnCurrentModel}) no modelo ${currentModel}. Trocando para ${MODEL_HIERARCHY[nextModelIndex]}...`);
+             console.log(`[Tentativa ${20 - retries}] Muitas falhas (${failuresOnCurrentModel}) no modelo ${currentModel}. Trocando para ${MODEL_HIERARCHY[nextModelIndex]}...`);
          } else {
-             console.log(`Erro ${error.message.includes('503') ? '503' : '429'} no modelo ${currentModel}. Tentativa ${nextFailures} neste modelo. Rotacionando chave...`);
+             console.log(`[Tentativa ${20 - retries}] Erro de Cota/Sobrecarga no modelo ${currentModel}. Rotacionando chave...`);
          }
       }
       
-      if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise(resolve => setTimeout(resolve, delay));
       return callGemini(params, retries - 1, nextModelIndex, nextFailures);
     }
     
-    // Se esgotou as tentativas ou é outro erro
+    // Critical Failure
     if (retries === 0) {
-      throw new Error(`FALHA CRÍTICA: Todas as tentativas falharam.
+      throw new Error(`FALHA CRÍTICA APÓS 20 TENTATIVAS.
       Último modelo: ${currentModel}.
-      Erro: ${error.message}.
-      DICA: Se você usa várias chaves (API_KEY_1, API_KEY_2...), certifique-se de que elas foram criadas em PROJETOS GOOGLE CLOUD DIFERENTES. Chaves no mesmo projeto compartilham a mesma cota.`);
+      Erro Original: ${errorMessage}.
+      Chaves ativas: ${keys.length}.
+      Verifique se suas chaves estão em PROJETOS DIFERENTES no Google Cloud.`);
     }
     throw error;
   }
