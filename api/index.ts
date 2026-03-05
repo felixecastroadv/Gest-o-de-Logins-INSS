@@ -215,9 +215,10 @@ Retorne um JSON com 'client', 'bonds' e 'analysis'.
 let currentKeyIndex = Math.floor(Math.random() * 10);
 
 const MODEL_HIERARCHY = [
-  "gemini-2.0-flash-exp", // Versão 2.0 (Experimental/Preview) - Mais avançada real
-  "gemini-1.5-pro",       // Versão 1.5 Pro - Alta inteligência
-  "gemini-1.5-flash"      // Versão 1.5 Flash - Alta velocidade e estabilidade
+  "gemini-2.0-flash-exp",    // 1º: Mais nova, rápida e inteligente
+  "gemini-1.5-flash-latest", // 2º: Alta cota (1.500/dia) e estável
+  "gemini-1.5-pro-latest",   // 3º: Inteligente, mas cota baixa (50/dia)
+  "gemini-1.0-pro"           // 4º: Último recurso (Legado)
 ];
 
 function getApiKeys() {
@@ -243,7 +244,14 @@ async function callGemini(params: any, retries = 15, modelIndex = 0, failuresOnC
   const currentModel = MODEL_HIERARCHY[safeModelIndex];
   
   // Override model in params
+  // IMPORTANTE: Se estivermos em fallback (não for o primeiro modelo), removemos as 'tools' (Google Search)
+  // para evitar erros de compatibilidade e garantir que o modelo básico funcione.
   const finalParams = { ...params, model: currentModel };
+  
+  if (modelIndex > 0 && finalParams.config && finalParams.config.tools) {
+    console.log(`Fallback: Removendo tools para o modelo ${currentModel} para garantir estabilidade.`);
+    delete finalParams.config.tools;
+  }
 
   try {
     return await ai.models.generateContent(finalParams);
@@ -285,7 +293,10 @@ async function callGemini(params: any, retries = 15, modelIndex = 0, failuresOnC
     
     // Se esgotou as tentativas ou é outro erro
     if (retries === 0) {
-      throw new Error(`Falha após várias tentativas. Último modelo tentado: ${currentModel}. Erro original: ${error.message}`);
+      throw new Error(`FALHA CRÍTICA: Todas as tentativas falharam.
+      Último modelo: ${currentModel}.
+      Erro: ${error.message}.
+      DICA: Se você usa várias chaves (API_KEY_1, API_KEY_2...), certifique-se de que elas foram criadas em PROJETOS GOOGLE CLOUD DIFERENTES. Chaves no mesmo projeto compartilham a mesma cota.`);
     }
     throw error;
   }
