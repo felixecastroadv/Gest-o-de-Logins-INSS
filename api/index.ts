@@ -285,7 +285,8 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - NUMERAÇÃO: Tópicos (I., II.) e Pedidos (a), b)) obrigatórios.
 3. EXTENSÃO E DENSIDADE (CRUCIAL - PROIBIDO RESUMIR):
    - A petição deve ser ROBUSTA, LONGA e DETALHADA (Mínimo de 3000 a 6000 palavras, cerca de 8 a 15 páginas).
-   - PROIBIDO RESUMIR: Nunca encurte a petição para caber em uma única resposta. Se o texto for muito longo e o limite de caracteres da sua resposta estiver acabando, PARE ONDE ESTIVER e escreva: "[A petição é muito extensa. Por favor, digite 'continue' para eu gerar o restante]". O usuário pedirá para continuar.
+   - PROIBIDO RESUMIR: Escreva a petição completa, com toda a densidade exigida. Não abrevie, não pule tópicos e não tente "encurtar" a peça para caber em uma única resposta. 
+   - GERE O MÁXIMO DE TEXTO POSSÍVEL: Não se preocupe com o tamanho da mensagem. Se a petição for muito longa e o sistema cortar a sua resposta no meio de uma frase, NÃO TEM PROBLEMA. O usuário simplesmente digitará "continue" e você retomará exatamente de onde parou. O seu único objetivo é garantir a profundidade e a extensão máxima.
    - DISTRIBUIÇÃO INTELIGENTE DE CONTEÚDO:
      - TÓPICOS PROCEDIMENTAIS (Gratuidade, Resumo): MÁXIMO de 1 a 2 parágrafos curtos. Seja direto.
      - TÓPICOS DE MÉRITO (DOS FATOS e DO DIREITO): AQUI deve estar a densidade. Mínimo de 8 a 12 parágrafos por tópico.
