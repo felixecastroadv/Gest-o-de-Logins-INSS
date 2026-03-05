@@ -523,23 +523,23 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = () => {
                       </span>
                     </div>
                     <div className="prose dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                      {msg.role === 'user' && msg.content.length > 3000 
-                        ? msg.content.substring(0, 800) + '\n\n[... Conteúdo longo ocultado na tela para evitar travamentos. A IA leu o texto completo ...]' 
-                        : msg.content}
+                      {msg.role === 'user' && (msg.content || '').length > 3000 
+                        ? (msg.content || '').substring(0, 800) + '\n\n[... Conteúdo longo ocultado na tela para evitar travamentos. A IA leu o texto completo ...]' 
+                        : (msg.content || '')}
                     </div>
                     <div className="flex items-center gap-2">
                       {msg.role === 'assistant' && (
                         <button 
-                          onClick={() => copyToClipboard(msg.content, msg.id)}
+                          onClick={() => copyToClipboard(msg.content || '', msg.id)}
                           className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded transition-colors"
                           title="Copiar texto"
                         >
                           {copiedId === msg.id ? <Check className="w-4 h-4 text-rose-600" /> : <Copy className="w-4 h-4 text-slate-400" />}
                         </button>
                       )}
-                      {msg.role === 'assistant' && (msg.content.includes('PETIÇÃO') || msg.content.includes('RECLAMAÇÃO')) && (
+                      {msg.role === 'assistant' && ((msg.content || '').includes('PETIÇÃO') || (msg.content || '').includes('RECLAMAÇÃO')) && (
                         <button 
-                          onClick={() => generateDocx(msg.content)}
+                          onClick={() => generateDocx(msg.content || '')}
                           className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors shadow-sm"
                         >
                           <Download className="w-4 h-4" /> Baixar em Word (.docx)
