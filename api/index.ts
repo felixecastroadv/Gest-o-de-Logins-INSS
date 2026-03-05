@@ -214,6 +214,12 @@ Retorne um JSON com 'client', 'bonds' e 'analysis'.
 // Logic for API Key Rotation (Round-Robin)
 let currentKeyIndex = Math.floor(Math.random() * 10);
 
+const MODEL_HIERARCHY = [
+  "gemini-3.1-pro-preview",
+  "gemini-3-flash-preview",
+  "gemini-1.5-flash"
+];
+
 function getApiKeys() {
   const keys = Object.keys(process.env)
     .filter(k => k.startsWith('API_KEY_'))
@@ -224,7 +230,7 @@ function getApiKeys() {
   return [...new Set(keys)]; // Remove duplicates
 }
 
-async function callGemini(params: any, retries = 15) {
+async function callGemini(params: any, retries = 15, modelIndex = 0, failuresOnCurrentModel = 0) {
   const keys = getApiKeys();
   if (keys.length === 0) throw new Error("Nenhuma chave de API encontrada. Configure API_KEY_1, API_KEY_2, etc. na Vercel.");
 
@@ -232,25 +238,54 @@ async function callGemini(params: any, retries = 15) {
   const apiKey = keys[currentKeyIndex % keys.length];
   const ai = new GoogleGenAI({ apiKey });
   
+  // Select model from hierarchy
+  const safeModelIndex = Math.min(modelIndex, MODEL_HIERARCHY.length - 1);
+  const currentModel = MODEL_HIERARCHY[safeModelIndex];
+  
+  // Override model in params
+  const finalParams = { ...params, model: currentModel };
+
   try {
-    return await ai.models.generateContent(params);
+    return await ai.models.generateContent(finalParams);
   } catch (error: any) {
-    // Handle 429 (Rate Limit) and 503 (Service Unavailable)
+    // Handle 429 (Rate Limit), 503 (Service Unavailable), and 404 (Model Not Found)
     const isOverloaded = error.message?.includes('429') || error.message?.includes('503');
+    const isNotFound = error.message?.includes('404') || error.message?.includes('not found');
     
-    if (isOverloaded && retries > 0) {
+    if ((isOverloaded || isNotFound) && retries > 0) {
       currentKeyIndex++; // Rotate key
-      const delay = error.message?.includes('503') ? 2000 : 1000; // 2s for 503, 1s for 429
       
-      console.log(`Erro ${error.message.includes('503') ? '503 (Alta Demanda)' : '429 (Limite)'}. Rotacionando chave (Total: ${keys.length}). Aguardando ${delay}ms... (${retries} tentativas restantes)`);
+      let nextModelIndex = modelIndex;
+      let nextFailures = failuresOnCurrentModel + 1;
+      let delay = 1000;
+
+      if (isNotFound) {
+         // If model not found, switch immediately
+         nextModelIndex++;
+         nextFailures = 0;
+         delay = 0;
+         console.log(`Modelo ${currentModel} não encontrado (404). Trocando para ${MODEL_HIERARCHY[Math.min(nextModelIndex, MODEL_HIERARCHY.length - 1)]}...`);
+      } else {
+         // If overloaded
+         delay = error.message?.includes('503') ? 2000 : 1000;
+         
+         // Switch model after 3 failures on the same model
+         if (nextFailures >= 3 && nextModelIndex < MODEL_HIERARCHY.length - 1) {
+             nextModelIndex++;
+             nextFailures = 0;
+             console.log(`Muitas falhas (${failuresOnCurrentModel}) no modelo ${currentModel}. Trocando para ${MODEL_HIERARCHY[nextModelIndex]}...`);
+         } else {
+             console.log(`Erro ${error.message.includes('503') ? '503' : '429'} no modelo ${currentModel}. Tentativa ${nextFailures} neste modelo. Rotacionando chave...`);
+         }
+      }
       
-      await new Promise(resolve => setTimeout(resolve, delay));
-      return callGemini(params, retries - 1);
+      if (delay > 0) await new Promise(resolve => setTimeout(resolve, delay));
+      return callGemini(params, retries - 1, nextModelIndex, nextFailures);
     }
     
     // Se esgotou as tentativas ou é outro erro
     if (retries === 0) {
-      throw new Error(`Falha após várias tentativas. Chaves ativas detectadas: ${keys.length}. Erro original: ${error.message}`);
+      throw new Error(`Falha após várias tentativas. Último modelo tentado: ${currentModel}. Erro original: ${error.message}`);
     }
     throw error;
   }
