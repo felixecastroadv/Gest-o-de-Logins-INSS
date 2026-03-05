@@ -421,7 +421,32 @@ async function callGemini(params: any, retries = 20, modelIndex = 0, failuresOnC
   }
 
   try {
-    return await ai.models.generateContent(finalParams);
+    const response = await ai.models.generateContent(finalParams);
+    
+    let responseText = "";
+    try {
+      responseText = response.text || "";
+    } catch (e) {
+      // Ignore
+    }
+    
+    if (!responseText) {
+      let isSafetyBlock = false;
+      if (response.candidates && response.candidates.length > 0) {
+        const candidate = response.candidates[0];
+        if (candidate.finishReason === 'SAFETY' || candidate.finishReason === 'BLOCKLIST' || candidate.finishReason === 'PROHIBITED_CONTENT') {
+           isSafetyBlock = true;
+        }
+      } else if (response.promptFeedback && response.promptFeedback.blockReason) {
+        isSafetyBlock = true;
+      }
+      
+      if (!isSafetyBlock) {
+        throw new Error("EMPTY_RESPONSE");
+      }
+    }
+    
+    return response;
   } catch (error: any) {
     const errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error));
     const errorMessage = error.message || errorStr;
@@ -429,8 +454,9 @@ async function callGemini(params: any, retries = 20, modelIndex = 0, failuresOnC
     // Detect Error Types
     const isOverloaded = errorMessage.includes('429') || errorMessage.includes('503') || errorMessage.includes('RESOURCE_EXHAUSTED');
     const isNotFound = errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('NOT_FOUND');
+    const isEmpty = errorMessage.includes('EMPTY_RESPONSE');
     
-    if ((isOverloaded || isNotFound) && retries > 0) {
+    if ((isOverloaded || isNotFound || isEmpty) && retries > 0) {
       currentKeyIndex++; // Rotate key immediately
       
       let nextModelIndex = modelIndex;
@@ -443,6 +469,9 @@ async function callGemini(params: any, retries = 20, modelIndex = 0, failuresOnC
          nextFailures = 0;
          delay = 500; // Small delay
          console.log(`[Tentativa ${20 - retries}] Modelo ${currentModel} não encontrado (404). Trocando para ${MODEL_HIERARCHY[Math.min(nextModelIndex, MODEL_HIERARCHY.length - 1)]}...`);
+      } else if (isEmpty) {
+         delay = 1000;
+         console.log(`[Tentativa ${20 - retries}] Resposta vazia no modelo ${currentModel}. Tentando novamente...`);
       } else {
          // 429/503: Retry logic
          delay = errorMessage.includes('503') ? 2000 : 1000;
@@ -577,7 +606,13 @@ app.post("/api/dr-michel/chat", async (req, res) => {
         systemInstruction: selectedSystemPrompt,
         temperature: temperature,
         maxOutputTokens: 8192,
-        tools: tools
+        tools: tools,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       }
     });
 
@@ -585,12 +620,21 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     try {
       responseText = response.text || "";
     } catch (e) {
-      console.warn("Could not access response.text, checking candidates...");
+      console.warn("Could not access response.text, checking candidates...", e);
+    }
+
+    if (!responseText) {
+      console.warn("Response text is empty. Full response:", JSON.stringify(response, null, 2));
       if (response.candidates && response.candidates.length > 0) {
         const candidate = response.candidates[0];
-        if (candidate.content && candidate.content.parts) {
-           responseText = candidate.content.parts.map((p: any) => p.text || '').join('');
+        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+           responseText = `[Aviso: A resposta foi interrompida ou bloqueada. Motivo: ${candidate.finishReason}].\n\n`;
         }
+        if (candidate.content && candidate.content.parts) {
+           responseText += candidate.content.parts.map((p: any) => p.text || '').join('');
+        }
+      } else if (response.promptFeedback) {
+        responseText = `[Aviso: O prompt foi bloqueado. Motivo: ${response.promptFeedback.blockReason}].\n\n`;
       }
     }
 
@@ -672,7 +716,13 @@ app.post("/api/dra-luana/chat", async (req, res) => {
         systemInstruction: selectedSystemPrompt,
         temperature: temperature,
         maxOutputTokens: 8192,
-        tools: tools
+        tools: tools,
+        safetySettings: [
+          { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+          { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+        ]
       }
     });
 
@@ -680,12 +730,21 @@ app.post("/api/dra-luana/chat", async (req, res) => {
     try {
       responseText = response.text || "";
     } catch (e) {
-      console.warn("Could not access response.text, checking candidates...");
+      console.warn("Could not access response.text, checking candidates...", e);
+    }
+
+    if (!responseText) {
+      console.warn("Response text is empty. Full response:", JSON.stringify(response, null, 2));
       if (response.candidates && response.candidates.length > 0) {
         const candidate = response.candidates[0];
-        if (candidate.content && candidate.content.parts) {
-           responseText = candidate.content.parts.map((p: any) => p.text || '').join('');
+        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+           responseText = `[Aviso: A resposta foi interrompida ou bloqueada. Motivo: ${candidate.finishReason}].\n\n`;
         }
+        if (candidate.content && candidate.content.parts) {
+           responseText += candidate.content.parts.map((p: any) => p.text || '').join('');
+        }
+      } else if (response.promptFeedback) {
+        responseText = `[Aviso: O prompt foi bloqueado. Motivo: ${response.promptFeedback.blockReason}].\n\n`;
       }
     }
 
