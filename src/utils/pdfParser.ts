@@ -1,7 +1,7 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Use cdnjs for better reliability and speed
-const PDFJS_VERSION = '3.11.174'; 
+// Use specific version from CDN to ensure stability and match package.json
+const PDFJS_VERSION = '3.11.174';
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
 
 export interface PDFContent {
@@ -11,6 +11,15 @@ export interface PDFContent {
 }
 
 export async function extractTextFromPDF(file: File): Promise<PDFContent> {
+  if (!pdfjsLib || !pdfjsLib.getDocument) {
+    console.error("PDF.js library not loaded correctly.");
+    return {
+      text: "ERRO TÉCNICO: A biblioteca de leitura de PDF não foi carregada. Tente recarregar a página.",
+      images: [],
+      isScanned: false
+    };
+  }
+
   try {
     const arrayBuffer = await file.arrayBuffer();
     
@@ -18,67 +27,102 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
       data: arrayBuffer,
       cMapUrl: `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/cmaps/`,
       cMapPacked: true,
+      standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`,
     });
     
-    const pdf = await loadingTask.promise;
+    const timeoutPromise = new Promise<any>((_, reject) => 
+      setTimeout(() => reject(new Error("Tempo limite de leitura do PDF excedido (60s).")), 60000)
+    );
+
+    const pdf = await Promise.race([loadingTask.promise, timeoutPromise]);
+    
     let fullText = '';
     const images: string[] = [];
-    let totalTextLength = 0;
-
-    // Limit image rendering to first 5 pages to avoid payload explosion
-    // If it's a huge document, we assume it's digital or user will split it.
-    const maxPagesToRender = 5; 
-
+    
+    // MEMORY SAFE OCR SETTINGS
+    // We limit image extraction to 20 pages to prevent Out Of Memory (OOM) crashes (Black Screen)
+    // Text is still extracted from ALL pages.
+    const MAX_PAGES_FOR_OCR = 20; 
+    
     for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      
-      // 1. Extract Text
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items
-        .map((item: any) => item.str)
-        .join(' ');
-      
-      if (pageText.trim()) {
-        fullText += `--- Página ${i} ---\n${pageText}\n\n`;
-        totalTextLength += pageText.length;
-      }
+      try {
+        // Yield to main thread to prevent UI freeze
+        await new Promise(resolve => setTimeout(resolve, 50));
 
-      // 2. Heuristic: If text is very short (< 50 chars), assume it's scanned/handwritten
-      // OR if the user explicitly wants to read handwritten notes (we can't know intent here, so we rely on density)
-      // For now, if density is low, we render.
-      const isLowDensity = pageText.length < 100;
-
-      if (isLowDensity && i <= maxPagesToRender) {
-        try {
-          const viewport = page.getViewport({ scale: 1.5 }); // 1.5 scale for decent OCR quality
-          const canvas = document.createElement('canvas');
-          const context = canvas.getContext('2d');
-          
-          if (context) {
-            canvas.height = viewport.height;
-            canvas.width = viewport.width;
-            
-            await page.render({ 
-              canvasContext: context, 
-              viewport: viewport 
-            } as any).promise;
-            
-            // Convert to JPEG (Base64) - remove prefix for API
-            const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
-            images.push(base64);
-          }
-        } catch (renderError) {
-          console.warn(`Erro ao renderizar página ${i} como imagem:`, renderError);
+        const page = await pdf.getPage(i);
+        
+        // 1. Extract Text
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items
+          .map((item: any) => item.str)
+          .join(' ');
+        
+        if (pageText.trim()) {
+          fullText += `--- Página ${i} ---\n${pageText}\n\n`;
         }
+        
+        // 2. Extract Image (OCR for handwritten/scanned docs)
+        // Only do this if the page has very little digital text AND we are under the safety limit
+        const isLowTextDensity = pageText.length < 150; 
+
+        if (isLowTextDensity && i <= MAX_PAGES_FOR_OCR) {
+            try {
+                // VERY LOW SCALE: 0.8 is enough for Gemini Vision to read handwriting, 
+                // but uses 4x less memory than scale 1.5
+                const viewport = page.getViewport({ scale: 0.8 }); 
+                
+                // Safety check for abnormally large pages
+                if (viewport.width * viewport.height > 3000000) {
+                   fullText += `[AVISO: Imagem da página ${i} muito pesada, leitura visual ignorada para evitar travamento]\n`;
+                   continue;
+                }
+
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d', { alpha: false }); // alpha: false saves memory
+                
+                if (context) {
+                  canvas.height = viewport.height;
+                  canvas.width = viewport.width;
+                  
+                  const renderTask = page.render({ 
+                    canvasContext: context, 
+                    viewport: viewport 
+                  }).promise;
+                  
+                  const renderTimeout = new Promise((_, reject) => 
+                    setTimeout(() => reject(new Error("Render timeout")), 10000)
+                  );
+                  
+                  await Promise.race([renderTask, renderTimeout]);
+                  
+                  // HIGH COMPRESSION: JPEG at 40% quality. 
+                  // Gemini can still read it, but it saves massive amounts of RAM.
+                  const base64 = canvas.toDataURL('image/jpeg', 0.4).split(',')[1];
+                  images.push(base64);
+                  
+                  // AGGRESSIVE MEMORY CLEANUP
+                  canvas.width = 0;
+                  canvas.height = 0;
+                  canvas.remove();
+                }
+            } catch (renderError) {
+                console.warn(`Erro ao renderizar imagem da página ${i}:`, renderError);
+            }
+        } else if (isLowTextDensity && i > MAX_PAGES_FOR_OCR) {
+             fullText += `[AVISO: Página ${i} parece ser uma imagem, mas o limite seguro de ${MAX_PAGES_FOR_OCR} páginas visuais foi atingido. Envie esta página separadamente se necessário.]\n`;
+        }
+
+      } catch (pageError) {
+        console.warn(`Erro ao processar página ${i}:`, pageError);
+        fullText += `\n[Erro de leitura na página ${i}]\n`;
       }
     }
 
     const isScanned = images.length > 0;
 
     if (!fullText.trim() && images.length === 0) {
-       // If no text and rendering failed
        return { 
-         text: "ERRO: O PDF parece vazio e não foi possível converter para imagem.", 
+         text: "AVISO: Não foi possível extrair conteúdo deste arquivo.", 
          images: [], 
          isScanned: false 
        };
@@ -87,10 +131,11 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
     return { text: fullText, images, isScanned };
 
   } catch (error: any) {
-    console.error("PDF Extraction Error:", error);
-    if (error.name === 'PasswordException') {
-      throw new Error("O arquivo PDF está protegido por senha.");
-    }
-    throw new Error(`Falha técnica ao extrair texto do PDF: ${error.message}`);
+    console.error("PDF Extraction Fatal Error:", error);
+    return {
+        text: `ERRO DE LEITURA: ${error.message || "Falha ao processar PDF."}`,
+        images: [],
+        isScanned: false
+    };
   }
 }
