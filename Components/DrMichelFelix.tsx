@@ -297,27 +297,35 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
             if (line.startsWith('data: ')) {
               const dataStr = line.slice(6);
               if (dataStr === '[DONE]') continue;
+              
+              let data;
               try {
-                const data = JSON.parse(dataStr);
-                if (data.error) throw new Error(data.error);
-                if (data.text) {
-                  fullText += data.text;
-                  setSessions(prev => prev.map(s => {
-                    if (s.id === sessionId) {
-                      const newMessages = [...s.messages];
-                      const msgIndex = newMessages.findIndex(m => m.id === assistantMsgId);
-                      if (msgIndex !== -1) {
-                        newMessages[msgIndex] = { ...newMessages[msgIndex], content: fullText };
-                      }
-                      return { ...s, messages: newMessages };
+                data = JSON.parse(dataStr);
+              } catch (e) {
+                continue;
+              }
+              
+              if (data.error) {
+                throw new Error(data.error);
+              }
+              
+              if (data.heartbeat) {
+                continue;
+              }
+              
+              if (data.text) {
+                fullText += data.text;
+                setSessions(prev => prev.map(s => {
+                  if (s.id === sessionId) {
+                    const newMessages = [...s.messages];
+                    const msgIndex = newMessages.findIndex(m => m.id === assistantMsgId);
+                    if (msgIndex !== -1) {
+                      newMessages[msgIndex] = { ...newMessages[msgIndex], content: fullText };
                     }
-                    return s;
-                  }));
-                }
-              } catch (e: any) {
-                if (e.message !== "Unexpected end of JSON input") {
-                   console.error("Stream parse error:", e);
-                }
+                    return { ...s, messages: newMessages };
+                  }
+                  return s;
+                }));
               }
             }
           }
