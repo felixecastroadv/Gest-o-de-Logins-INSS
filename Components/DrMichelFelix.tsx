@@ -70,7 +70,31 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
 
   useEffect(() => {
     if (sessions.length > 0) {
-      localStorage.setItem('dr_michel_sessions', JSON.stringify(sessions));
+      try {
+        // Sanitize sessions to prevent QuotaExceededError (localStorage 5MB limit)
+        const sessionsToSave = sessions.map(session => ({
+          ...session,
+          messages: session.messages.map(msg => {
+            if (msg.role === 'user' && msg.content.length > 2000 && msg.content.includes('--- CONTEÚDO DO ARQUIVO:')) {
+              return {
+                ...msg,
+                content: msg.content.substring(0, 500) + '\n\n[... Conteúdo do documento não salvo no histórico local para economizar espaço ...]'
+              };
+            }
+            return msg;
+          })
+        }));
+        localStorage.setItem('dr_michel_sessions', JSON.stringify(sessionsToSave));
+      } catch (error) {
+        console.warn("Failed to save sessions to localStorage:", error);
+        try {
+           // Fallback: keep only the most recent session
+           const recentSessions = sessions.slice(0, 1);
+           localStorage.setItem('dr_michel_sessions', JSON.stringify(recentSessions));
+        } catch (e) {
+           console.error("Storage completely full.");
+        }
+      }
     }
   }, [sessions]);
 
