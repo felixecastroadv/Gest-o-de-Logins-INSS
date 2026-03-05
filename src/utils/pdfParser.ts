@@ -1,8 +1,8 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Use cdnjs for better reliability and speed
-const PDFJS_VERSION = '3.11.174'; 
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${PDFJS_VERSION}/pdf.worker.min.js`;
+// Use local worker for better reliability and to match SocialSecurityCalc
+const PDFJS_VERSION = '3.11.174';
+pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
 export interface PDFContent {
   text: string;
@@ -11,6 +11,10 @@ export interface PDFContent {
 }
 
 export async function extractTextFromPDF(file: File): Promise<PDFContent> {
+  if (!pdfjsLib || !pdfjsLib.getDocument) {
+    throw new Error("Biblioteca PDF.js não carregada corretamente. Tente recarregar a página.");
+  }
+
   try {
     const arrayBuffer = await file.arrayBuffer();
     
@@ -20,7 +24,13 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
       cMapPacked: true,
     });
     
-    const pdf = await loadingTask.promise;
+    // Add timeout to prevent hanging
+    const timeoutPromise = new Promise<any>((_, reject) => 
+      setTimeout(() => reject(new Error("Tempo limite de leitura do PDF excedido (30s).")), 30000)
+    );
+
+    const pdf = await Promise.race([loadingTask.promise, timeoutPromise]);
+    
     let fullText = '';
     const images: string[] = [];
     let totalTextLength = 0;
