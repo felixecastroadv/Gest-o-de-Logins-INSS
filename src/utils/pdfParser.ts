@@ -13,7 +13,6 @@ export interface PDFContent {
 }
 
 export async function extractTextFromPDF(file: File): Promise<PDFContent> {
-  // Safety check for library loading
   if (!pdfjsLib || !pdfjsLib.getDocument) {
     console.error("PDF.js library not loaded correctly.");
     return {
@@ -33,24 +32,28 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
       standardFontDataUrl: `https://unpkg.com/pdfjs-dist@${PDFJS_VERSION}/standard_fonts/`,
     });
     
-    // Timeout race to prevent infinite hanging
     const timeoutPromise = new Promise<any>((_, reject) => 
-      setTimeout(() => reject(new Error("Tempo limite de leitura do PDF excedido (30s).")), 30000)
+      setTimeout(() => reject(new Error("Tempo limite de leitura do PDF excedido (60s).")), 60000)
     );
 
     const pdf = await Promise.race([loadingTask.promise, timeoutPromise]);
     
     let fullText = '';
-    const images: string[] = []; // We will no longer extract images to prevent crashes
+    const images: string[] = [];
+    
+    // MEMORY SAFE OCR SETTINGS
+    // We limit image extraction to 20 pages to prevent Out Of Memory (OOM) crashes (Black Screen)
+    // Text is still extracted from ALL pages.
+    const MAX_PAGES_FOR_OCR = 20; 
     
     for (let i = 1; i <= pdf.numPages; i++) {
       try {
-        // CRITICAL: Yield to main thread for 50ms between pages to prevent UI freeze/Black Screen
+        // Yield to main thread to prevent UI freeze
         await new Promise(resolve => setTimeout(resolve, 50));
 
         const page = await pdf.getPage(i);
         
-        // 1. Extract Text ONLY
+        // 1. Extract Text
         const textContent = await page.getTextContent();
         const pageText = textContent.items
           .map((item: any) => item.str)
@@ -60,8 +63,50 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
           fullText += `--- Página ${i} ---\n${pageText}\n\n`;
         }
         
-        // IMAGE EXTRACTION COMPLETELY DISABLED FOR STABILITY
-        // Rendering canvases for 90+ page PDFs with photos is what causes the browser to crash (OOM).
+        // 2. Extract Image (OCR for handwritten/scanned docs)
+        // Only do this if the page has very little digital text AND we are under the safety limit
+        const isLowTextDensity = pageText.length < 150; 
+
+        if (isLowTextDensity && i <= MAX_PAGES_FOR_OCR) {
+            try {
+                // VERY LOW SCALE: 0.8 is enough for Gemini Vision to read handwriting, 
+                // but uses 4x less memory than scale 1.5
+                const viewport = page.getViewport({ scale: 0.8 }); 
+                
+                // Safety check for abnormally large pages
+                if (viewport.width * viewport.height > 3000000) {
+                   fullText += `[AVISO: Imagem da página ${i} muito pesada, leitura visual ignorada para evitar travamento]\n`;
+                   continue;
+                }
+
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d', { alpha: false }); // alpha: false saves memory
+                
+                if (context) {
+                  canvas.height = viewport.height;
+                  canvas.width = viewport.width;
+                  
+                  await page.render({ 
+                    canvasContext: context, 
+                    viewport: viewport 
+                  } as any).promise;
+                  
+                  // HIGH COMPRESSION: JPEG at 40% quality. 
+                  // Gemini can still read it, but it saves massive amounts of RAM.
+                  const base64 = canvas.toDataURL('image/jpeg', 0.4).split(',')[1];
+                  images.push(base64);
+                  
+                  // AGGRESSIVE MEMORY CLEANUP
+                  canvas.width = 0;
+                  canvas.height = 0;
+                  canvas.remove();
+                }
+            } catch (renderError) {
+                console.warn(`Erro ao renderizar imagem da página ${i}:`, renderError);
+            }
+        } else if (isLowTextDensity && i > MAX_PAGES_FOR_OCR) {
+             fullText += `[AVISO: Página ${i} parece ser uma imagem, mas o limite seguro de ${MAX_PAGES_FOR_OCR} páginas visuais foi atingido. Envie esta página separadamente se necessário.]\n`;
+        }
 
       } catch (pageError) {
         console.warn(`Erro ao processar página ${i}:`, pageError);
@@ -69,11 +114,11 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
       }
     }
 
-    const isScanned = false;
+    const isScanned = images.length > 0;
 
-    if (!fullText.trim()) {
+    if (!fullText.trim() && images.length === 0) {
        return { 
-         text: "AVISO: O arquivo parece ser um PDF digitalizado (apenas imagens). Para evitar travamentos, a leitura de imagens em PDFs foi desativada. Por favor, envie as fotos/prints diretamente como arquivos de imagem (.jpg, .png).", 
+         text: "AVISO: Não foi possível extrair conteúdo deste arquivo.", 
          images: [], 
          isScanned: false 
        };
@@ -83,10 +128,8 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
 
   } catch (error: any) {
     console.error("PDF Extraction Fatal Error:", error);
-    
-    // Return safe error object instead of throwing to prevent React Error Boundary (Black Screen)
     return {
-        text: `ERRO DE LEITURA: ${error.message || "Falha desconhecida. O arquivo pode estar corrompido ou protegido."}`,
+        text: `ERRO DE LEITURA: ${error.message || "Falha ao processar PDF."}`,
         images: [],
         isScanned: false
     };
