@@ -43,14 +43,14 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
     let fullText = '';
     const images: string[] = [];
     
-    // LIMITS FOR STABILITY
-    // Only render the first 3 pages to prevent memory crashes
-    const maxPagesToRender = 3; 
-
+    // LIMITS & OPTIMIZATIONS
+    // We process ALL pages now, but with strict memory management and yielding
+    const maxPagesToRender = 100; // High limit to cover most legal docs, but prevent infinite loops
+    
     for (let i = 1; i <= pdf.numPages; i++) {
       try {
-        // Yield to main thread to prevent UI freeze
-        await new Promise(resolve => setTimeout(resolve, 50));
+        // CRITICAL: Yield to main thread for 100ms between pages to prevent UI freeze/Black Screen
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         const page = await pdf.getPage(i);
         
@@ -64,16 +64,20 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
           fullText += `--- Página ${i} ---\n${pageText}\n\n`;
         }
 
-        // 2. Image Rendering (Safe Mode)
-        // Only render if within the limit
-        if (i <= maxPagesToRender) {
+        // 2. Image Rendering (Smart Mode)
+        // Only render if:
+        // a) We haven't hit the safety limit
+        // b) The page has very little text (likely a scan/photo) OR it's a known image-heavy doc
+        const isLowTextDensity = pageText.length < 50; // Heuristic for scanned pages
+
+        if (i <= maxPagesToRender && isLowTextDensity) {
           try {
-            // Reduced scale for performance (1.0 is standard, 1.5 was high quality)
+            // Use 1.0 scale - sufficient for AI vision, saves 4x memory vs 2.0
             const viewport = page.getViewport({ scale: 1.0 }); 
             
-            // Safety check for huge pages (e.g. blueprints)
-            if (viewport.width * viewport.height > 4000000) {
-               console.warn(`Página ${i} muito grande para renderizar, pulando imagem.`);
+            // Skip massive pages (e.g. engineering blueprints) to avoid crash
+            if (viewport.width * viewport.height > 5000000) {
+               fullText += `[AVISO: Página ${i} contém uma imagem muito grande e foi pulada para evitar travamento]\n`;
                continue;
             }
 
@@ -89,9 +93,14 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
                 viewport: viewport 
               } as any).promise;
               
-              // Compress to JPEG 0.6 (60% quality) to save memory
-              const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+              // Aggressive compression: JPEG 0.5 (50% quality)
+              // This reduces payload size significantly while keeping text readable for AI
+              const base64 = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
               images.push(base64);
+              
+              // Explicitly clear canvas references to help GC
+              canvas.width = 1;
+              canvas.height = 1;
             }
           } catch (renderError) {
             console.warn(`Erro não fatal ao renderizar imagem da página ${i}:`, renderError);
