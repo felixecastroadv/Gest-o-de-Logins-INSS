@@ -159,6 +159,18 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
     setIsLoading(true);
 
     try {
+      // Check payload size roughly
+      const payloadSize = JSON.stringify({
+          message: messageText,
+          history: sessions.find(s => s.id === sessionId)?.messages || [],
+          images: images || []
+      }).length;
+
+      // If payload is > 4MB (Vercel serverless limit is 4.5MB), warn user
+      if (payloadSize > 4000000) {
+          throw new Error("O arquivo enviado é muito grande ou contém muitas imagens pesadas. Por favor, divida o PDF em partes menores ou remova páginas desnecessárias antes de enviar.");
+      }
+
       const response = await fetch('/api/dr-michel/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -491,7 +503,9 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
                       </span>
                     </div>
                     <div className="prose dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                      {msg.content}
+                      {msg.role === 'user' && msg.content.length > 3000 
+                        ? msg.content.substring(0, 800) + '\n\n[... Conteúdo longo ocultado na tela para evitar travamentos. A IA leu o texto completo ...]' 
+                        : msg.content}
                     </div>
                     <div className="flex items-center gap-2">
                       {msg.role === 'assistant' && (
