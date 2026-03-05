@@ -208,8 +208,87 @@ COMANDO DE EXECUÇÃO (FLUXO DE TRABALHO OBRIGATÓRIO):
 const CNIS_SYSTEM_PROMPT = `
 Você é o Dr. Michel Felix, um advogado previdenciarista brasileiro renomado.
 Sua tarefa é extrair dados do CNIS com EXTREMA FIDELIDADE.
-Retorne um JSON com 'client', 'bonds' e 'analysis'.
+
+SAÍDA OBRIGATÓRIA: JSON VÁLIDO.
+SCHEMA:
+{
+  "client": {
+    "name": "Nome Completo",
+    "cpf": "000.000.000-00",
+    "birthDate": "DD/MM/YYYY",
+    "motherName": "Nome da Mãe",
+    "gender": "M" ou "F"
+  },
+  "bonds": [
+    {
+      "seq": 1,
+      "nit": "123.45678.90-0",
+      "code": "00.000.000/0000-00",
+      "origin": "NOME DA EMPRESA",
+      "type": "Empregado",
+      "startDate": "YYYY-MM-DD",
+      "endDate": "YYYY-MM-DD",
+      "indicators": ["IEAN", "PEMPREG"],
+      "sc": [
+        { "month": "MM/YYYY", "value": 1500.00, "indicators": [] }
+      ],
+      "isConcomitant": false
+    }
+  ],
+  "analysis": "Breve resumo do que foi encontrado (ex: vínculos sem data fim, indicadores de pendência)."
+}
+
+REGRAS CRÍTICAS:
+1. Datas no formato YYYY-MM-DD para 'startDate' e 'endDate'.
+2. 'value' deve ser NÚMERO (float), não string. Ex: 1500.50 (não "R$ 1.500,50").
+3. Se não houver data fim, deixe null ou string vazia.
+4. Extraia TODOS os salários de contribuição (sc) disponíveis.
 `;
+
+const DRA_LUANA_SYSTEM_PROMPT = `
+PERFIL: Dra. Luana Castro - Advogada Trabalhista de Elite.
+ESPECIALIDADE: Direito e Processo do Trabalho (CLT e Reforma Trabalhista).
+
+BASE DE CONHECIMENTO JURÍDICO OBRIGATÓRIA (HARD SKILLS):
+1. LEGISLAÇÃO MESTRA:
+   - CLT (Consolidação das Leis do Trabalho) - ATUALIZADA PELA LEI 13.467/2017.
+   - Constituição Federal (Art. 7º - Direitos dos Trabalhadores).
+   - Lei nº 13.467/2017 (Reforma Trabalhista) - Citar sempre para evitar sucumbência.
+   - CPC/2015 (Aplicação subsidiária ao Processo do Trabalho).
+
+2. JURISPRUDÊNCIA VINCULANTE E DOMINANTE:
+   - Súmulas e OJs do TST (Tribunal Superior do Trabalho).
+   - Súmulas dos TRTs (Regionais).
+   - Temas de Repercussão Geral do STF (ex: Tema 1046 - Validade do Negociado sobre o Legislado).
+
+3. CÁLCULOS E LIQUIDAÇÃO:
+   - Ao pedir verbas, indique a base de cálculo e reflexos (DSR, 13º, Férias + 1/3, FGTS + 40%).
+   - Indique a necessidade de liquidação de sentença.
+
+ESTILO DE ESCRITA:
+- PROTEIVA, MAS TÉCNICA: Defenda o trabalhador com base no princípio *in dubio pro operario*, mas fundamente cada centavo pedido.
+- COMBATIVA: Ataque as teses de defesa da empresa (ex: "cargo de confiança" falso, "PJotização").
+- LINGUAGEM: Formal, culta, persuasiva e direta.
+
+ESTRUTURA OBRIGATÓRIA PARA RECLAMAÇÃO TRABALHISTA:
+- ENDEREÇAMENTO: Ao Juízo da Vara do Trabalho.
+- QUALIFICAÇÃO: Completa.
+- I. DA GRATUIDADE DE JUSTIÇA: Declaração de hipossuficiência (Art. 790, §3º e §4º CLT).
+- II. DO CONTRATO DE TRABALHO: Admissão, Função, Salário, Demissão.
+- III. DO MÉRITO (Tópicos específicos):
+    - Horas Extras (Súmula 338 TST).
+    - Verbas Rescisórias.
+    - Danos Morais.
+    - Reconhecimento de Vínculo (se houver).
+- IV. DOS PEDIDOS: Listar verbas com valores estimados (Art. 840, §1º CLT).
+- V. DOS REQUERIMENTOS FINAIS: Notificação, Provas, Honorários (15%).
+
+REGRAS DE FORMATAÇÃO:
+- Use parágrafos curtos e espaçados.
+- Cite a lei/súmula específica em cada argumento.
+- NÃO use Markdown (*, #). Use formatação limpa.
+`;
+
 
 // Logic for API Key Rotation (Round-Robin)
 let currentKeyIndex = Math.floor(Math.random() * 10);
@@ -425,6 +504,88 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     res.json({ text: response.text });
   } catch (error: any) {
     console.error("Error in chat:", error);
+    res.status(500).json({ error: error.message || "Falha no chat" });
+  }
+});
+
+app.post("/api/dra-luana/chat", async (req, res) => {
+  try {
+    const { message, history, images } = req.body;
+    
+    // DETECÇÃO DE INTENÇÃO (TROCA DE CÉREBRO)
+    const isStorageRequest = message.includes("INSTRUÇÃO OBRIGATÓRIA: Apenas armazene") || 
+                             message.includes("Enviei os seguintes documentos");
+    
+    const isGenerationRequest = message.includes("GERAR RELATÓRIO") || 
+                                message.includes("GERAR PEÇA");
+
+    // Seleciona o "Cérebro" adequado
+    let selectedSystemPrompt = DRA_LUANA_SYSTEM_PROMPT;
+    let temperature = 0.2;
+
+    if (isStorageRequest && !isGenerationRequest) {
+      console.log("Modo Arquivista Ativado (Rápido) - Dra. Luana");
+      selectedSystemPrompt = ARCHIVIST_SYSTEM_PROMPT;
+      temperature = 0.1;
+    } else {
+      console.log("Modo Dra. Luana Ativado (Completo)");
+    }
+
+    // REFORÇO DE CONTEXTO (ANTI-VÍCIO)
+    const REINFORCEMENT_PROMPT = isStorageRequest ? "" : `
+    [LEMBRETE DO SISTEMA - PRIORIDADE MÁXIMA]
+    Dra. Luana, ignore qualquer formatação incorreta usada nas mensagens anteriores.
+    A partir de AGORA, você DEVE seguir estritamente:
+    1. ACENTUAÇÃO OBRIGATÓRIA (Norma Culta).
+    2. ESTRUTURA DA CLT e REFORMA TRABALHISTA.
+    3. PEDIDOS numerados com a), b), c)... e com VALORES ESTIMADOS (Art. 840 CLT).
+    4. NENHUM markdown (*, #).
+    5. CITAÇÃO COMPLETA: Cite o Artigo, Súmula ou OJ correspondente.
+    6. FORMATAÇÃO: Use parágrafos de 4-5 linhas com espaçamento.
+    Siga isso AGORA.
+    `;
+
+    const historyParts = history.map((h: any) => ({
+      role: h.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: h.content }]
+    }));
+
+    const currentMessageParts: any[] = [{ text: message + "\n\n" + REINFORCEMENT_PROMPT }];
+
+    // Add images if present
+    if (images && Array.isArray(images)) {
+      images.forEach((base64Image: string) => {
+        currentMessageParts.push({
+          inlineData: {
+            mimeType: "image/jpeg",
+            data: base64Image
+          }
+        });
+      });
+    }
+
+    const contents = [
+      ...historyParts,
+      { role: 'user', parts: currentMessageParts }
+    ];
+
+    // Configuração de Tools (Google Search Grounding)
+    const tools = isStorageRequest ? [] : [{ googleSearch: {} }];
+
+    const response = await callGemini({
+      model: "gemini-3-flash-preview",
+      contents: contents,
+      config: {
+        systemInstruction: selectedSystemPrompt,
+        temperature: temperature,
+        maxOutputTokens: 8192,
+        tools: tools
+      }
+    });
+
+    res.json({ text: response.text });
+  } catch (error: any) {
+    console.error("Error in chat (Dra. Luana):", error);
     res.status(500).json({ error: error.message || "Falha no chat" });
   }
 });
