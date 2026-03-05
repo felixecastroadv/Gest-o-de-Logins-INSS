@@ -502,6 +502,67 @@ async function callGemini(params: any, retries = 20, modelIndex = 0, failuresOnC
   }
 }
 
+async function callGeminiStream(params: any, retries = 20, modelIndex = 0, failuresOnCurrentModel = 0): Promise<any> {
+  const keys = getApiKeys();
+  if (keys.length === 0) throw new Error("Nenhuma chave de API encontrada. Configure API_KEY_1, API_KEY_2, etc. na Vercel.");
+
+  const apiKey = keys[currentKeyIndex % keys.length];
+  const ai = new GoogleGenAI({ apiKey });
+  
+  const safeModelIndex = Math.min(modelIndex, MODEL_HIERARCHY.length - 1);
+  const currentModel = MODEL_HIERARCHY[safeModelIndex];
+  
+  const finalParams = { ...params, model: currentModel };
+  
+  if (modelIndex > 0 || failuresOnCurrentModel > 1) {
+    if (finalParams.config && finalParams.config.tools) {
+      delete finalParams.config.tools;
+    }
+  }
+
+  try {
+    return await ai.models.generateContentStream(finalParams);
+  } catch (error: any) {
+    const errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error));
+    const errorMessage = error.message || errorStr;
+    
+    const isOverloaded = errorMessage.includes('429') || errorMessage.includes('503') || errorMessage.includes('RESOURCE_EXHAUSTED');
+    const isNotFound = errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('NOT_FOUND');
+    
+    if ((isOverloaded || isNotFound) && retries > 0) {
+      currentKeyIndex++;
+      
+      let nextModelIndex = modelIndex;
+      let nextFailures = failuresOnCurrentModel + 1;
+      let delay = 1000;
+
+      if (isNotFound) {
+         nextModelIndex++;
+         nextFailures = 0;
+         delay = 500;
+         console.log(`[Stream Tentativa ${20 - retries}] Modelo ${currentModel} não encontrado (404). Trocando para ${MODEL_HIERARCHY[Math.min(nextModelIndex, MODEL_HIERARCHY.length - 1)]}...`);
+      } else {
+         delay = errorMessage.includes('503') ? 2000 : 1000;
+         if (nextFailures >= 3 && nextModelIndex < MODEL_HIERARCHY.length - 1) {
+             nextModelIndex++;
+             nextFailures = 0;
+             console.log(`[Stream Tentativa ${20 - retries}] Muitas falhas no modelo ${currentModel}. Trocando para ${MODEL_HIERARCHY[nextModelIndex]}...`);
+         } else {
+             console.log(`[Stream Tentativa ${20 - retries}] Erro de Cota/Sobrecarga no modelo ${currentModel}. Rotacionando chave...`);
+         }
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return callGeminiStream(params, retries - 1, nextModelIndex, nextFailures);
+    }
+    
+    if (retries === 0) {
+      throw new Error(`FALHA CRÍTICA APÓS 20 TENTATIVAS. Último modelo: ${currentModel}. Erro: ${errorMessage}`);
+    }
+    throw error;
+  }
+}
+
 // API Routes
 app.post("/api/analyze-cnis", async (req, res) => {
   try {
@@ -599,7 +660,7 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     // Apenas para o Dr. Michel (não para o Arquivista)
     const tools = isStorageRequest ? [] : [{ googleSearch: {} }];
 
-    const response = await callGemini({
+    const responseStream = await callGeminiStream({
       model: "gemini-3-flash-preview",
       contents: contents,
       config: {
@@ -616,32 +677,29 @@ app.post("/api/dr-michel/chat", async (req, res) => {
       }
     });
 
-    let responseText = "";
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
     try {
-      responseText = response.text || "";
-    } catch (e) {
-      console.warn("Could not access response.text, checking candidates...", e);
-    }
-
-    if (!responseText) {
-      console.warn("Response text is empty. Full response:", JSON.stringify(response, null, 2));
-      if (response.candidates && response.candidates.length > 0) {
-        const candidate = response.candidates[0];
-        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-           responseText = `[Aviso: A resposta foi interrompida ou bloqueada. Motivo: ${candidate.finishReason}].\n\n`;
+      for await (const chunk of responseStream) {
+        if (chunk.text) {
+          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
         }
-        if (candidate.content && candidate.content.parts) {
-           responseText += candidate.content.parts.map((p: any) => p.text || '').join('');
-        }
-      } else if (response.promptFeedback) {
-        responseText = `[Aviso: O prompt foi bloqueado. Motivo: ${response.promptFeedback.blockReason}].\n\n`;
       }
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    } catch (streamError: any) {
+      console.error("Stream error:", streamError);
+      res.write(`data: ${JSON.stringify({ error: streamError.message || "Erro durante a geração do texto." })}\n\n`);
+      res.end();
     }
 
-    res.json({ text: responseText || "Desculpe, não consegui gerar uma resposta válida para esta solicitação." });
   } catch (error: any) {
     console.error("Error in chat:", error);
-    res.status(500).json({ error: error.message || "Falha no chat" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message || "Falha no chat" });
+    }
   }
 });
 
@@ -709,7 +767,7 @@ app.post("/api/dra-luana/chat", async (req, res) => {
     // Configuração de Tools (Google Search Grounding)
     const tools = isStorageRequest ? [] : [{ googleSearch: {} }];
 
-    const response = await callGemini({
+    const responseStream = await callGeminiStream({
       model: "gemini-3-flash-preview",
       contents: contents,
       config: {
@@ -726,32 +784,29 @@ app.post("/api/dra-luana/chat", async (req, res) => {
       }
     });
 
-    let responseText = "";
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
     try {
-      responseText = response.text || "";
-    } catch (e) {
-      console.warn("Could not access response.text, checking candidates...", e);
-    }
-
-    if (!responseText) {
-      console.warn("Response text is empty. Full response:", JSON.stringify(response, null, 2));
-      if (response.candidates && response.candidates.length > 0) {
-        const candidate = response.candidates[0];
-        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
-           responseText = `[Aviso: A resposta foi interrompida ou bloqueada. Motivo: ${candidate.finishReason}].\n\n`;
+      for await (const chunk of responseStream) {
+        if (chunk.text) {
+          res.write(`data: ${JSON.stringify({ text: chunk.text })}\n\n`);
         }
-        if (candidate.content && candidate.content.parts) {
-           responseText += candidate.content.parts.map((p: any) => p.text || '').join('');
-        }
-      } else if (response.promptFeedback) {
-        responseText = `[Aviso: O prompt foi bloqueado. Motivo: ${response.promptFeedback.blockReason}].\n\n`;
       }
+      res.write(`data: [DONE]\n\n`);
+      res.end();
+    } catch (streamError: any) {
+      console.error("Stream error (Dra. Luana):", streamError);
+      res.write(`data: ${JSON.stringify({ error: streamError.message || "Erro durante a geração do texto." })}\n\n`);
+      res.end();
     }
 
-    res.json({ text: responseText || "Desculpe, não consegui gerar uma resposta válida para esta solicitação." });
   } catch (error: any) {
     console.error("Error in chat (Dra. Luana):", error);
-    res.status(500).json({ error: error.message || "Falha no chat" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message || "Falha no chat" });
+    }
   }
 });
 
