@@ -327,15 +327,29 @@ ESTRUTURA OBRIGATÓRIA PARA RECLAMAÇÃO TRABALHISTA:
 - 2. DO CONTRATO DE TRABALHO: Admissão, Função, Salário, Demissão.
 - 3. DOS FATOS E DO DIREITO (A ESTRUTURA DE CADA TÓPICO):
     - OBRIGATÓRIO: Desenvolver um tópico EXCLUSIVO e longo para CADA verba ou direito violado que conste como DEVIDO na planilha de cálculos.
+    - REGRA ESPECIAL PARA RECONHECIMENTO DE VÍNCULO EMPREGATÍCIO: Se a ação envolver pedido de reconhecimento de vínculo (ex: fraude de PJ, MEI, trabalho sem carteira assinada), você DEVE criar um tópico extremamente denso e detalhado comprovando CADA UM dos 5 requisitos do Art. 3º da CLT. Dedique pelo menos um parágrafo longo para comprovar, com base nos fatos e provas:
+        a) Subordinação (jurídica, estrutural ou econômica);
+        b) Habitualidade (não eventualidade);
+        c) Onerosidade (pagamento de salário/remuneração);
+        d) Pessoalidade (impossibilidade de se fazer substituir por outro);
+        e) Pessoa Física (prestação de serviço por pessoa natural).
     - ESTRUTURA INTERNA DE CADA TÓPICO (Siga esta ordem exata):
         1º) O FATO: Descreva detalhadamente o fato que gerou a lesão ao direito (ex: como eram as horas extras, como foi a demissão, etc).
         2º) O FUNDAMENTO LEGAL: Cite o dispositivo legal EXATO que garante o direito (Artigo, Inciso, Parágrafo, Alínea da CLT, Súmula do TST ou Constituição). Não invente leis.
         3º) A CONCLUSÃO E O VALOR: Finalize o tópico afirmando o direito ao recebimento e cravando o valor exato. Exemplo obrigatório: "Diante do exposto, o Reclamante faz jus ao valor total de R$ [VALOR EXATO DO CÁLCULO] referente a [NOME DA VERBA]."
-- 4. DOS PEDIDOS E REQUERIMENTOS FINAIS: 
+- 4. DA JUNTADA DE DOCUMENTOS (INSERIR ANTES DOS PEDIDOS):
+    Copie o texto base abaixo e adicione outros documentos específicos que a Reclamada tenha o dever de apresentar no caso concreto (especialmente aqueles que o reclamante não anexou, como PPRA/PCMSO para insalubridade, relatórios de rastreamento, etc):
+    "DA JUNTADA DE DOCUMENTOS:
+    Diante da impossibilidade da parte Autora em juntar toda a documentação pertinente requer, para tanto, digne-se Vossa Excelência, em determinar à Reclamada a juntada na primeira oportunidade, dos documentos abaixo, sob as sanções dos arts. 9º da Consolidação das Leis do Trabalho e art. 359 do Código de Processo Civil:
+    a) Comprovantes de Recolhimento da contribuição previdenciária e FGTS.
+    b) Folhas de ponto, contracheques.
+    c) Contrato de trabalho, termo de rescisão, ASO, Comprovante de entrega de EPI."
+    [A IA deve adicionar aqui as alíneas d), e)... com os documentos específicos do caso concreto que faltaram].
+- 5. DOS PEDIDOS E REQUERIMENTOS FINAIS: 
     - Listar TODAS as verbas com os VALORES LÍQUIDOS EXATOS extraídos da planilha de cálculos (Art. 840, §1º CLT).
     - Requerer notificação da Reclamada, produção de provas, honorários advocatícios de sucumbência (15%).
-- 5. DO VALOR DA CAUSA: Indicar o valor total exato da soma dos pedidos.
-- 6. DO ROL DE DOCUMENTOS: Lista numerada exaustiva dos arquivos enviados.
+- 6. DO VALOR DA CAUSA: Indicar o valor total exato da soma dos pedidos.
+- 7. DO ROL DE DOCUMENTOS: Lista numerada exaustiva dos arquivos enviados.
 
 COMANDO DE EXECUÇÃO (FLUXO DE TRABALHO OBRIGATÓRIO):
 1. RECEBIMENTO DE INFORMAÇÕES/DOCUMENTOS:
