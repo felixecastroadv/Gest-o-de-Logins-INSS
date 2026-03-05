@@ -53,6 +53,8 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
+  const [progress, setProgress] = useState(0);
+  const [progressText, setProgressText] = useState('');
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -102,7 +104,49 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [currentSession?.messages, isLoading]);
+  }, [currentSession?.messages, isLoading, progress]);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isLoading) {
+      setProgress(0);
+      const startTime = Date.now();
+      interval = setInterval(() => {
+        const elapsed = Date.now() - startTime;
+        const seconds = Math.floor(elapsed / 1000);
+        
+        let newProgress = 0;
+        let newText = '';
+
+        if (seconds < 5) {
+          newProgress = (seconds / 5) * 15;
+          newText = 'Analisando o histórico e os documentos enviados...';
+        } else if (seconds < 15) {
+          newProgress = 15 + ((seconds - 5) / 10) * 20;
+          newText = 'Pesquisando base legal e jurisprudência aplicável...';
+        } else if (seconds < 35) {
+          newProgress = 35 + ((seconds - 15) / 20) * 25;
+          newText = 'Estruturando a argumentação jurídica...';
+        } else if (seconds < 75) {
+          newProgress = 60 + ((seconds - 35) / 40) * 25;
+          newText = 'Redigindo os tópicos da peça...';
+        } else if (seconds < 120) {
+          newProgress = 85 + ((seconds - 75) / 45) * 10;
+          newText = 'Revisando a formatação e a gramática...';
+        } else {
+          newProgress = 95 + Math.min(((seconds - 120) / 60) * 4, 4); // max 99%
+          newText = 'Finalizando os últimos detalhes...';
+        }
+
+        setProgress(Math.min(Math.round(newProgress), 99));
+        setProgressText(newText);
+      }, 1000);
+    } else {
+      setProgress(100);
+      setTimeout(() => setProgress(0), 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isLoading]);
 
   const createNewSession = () => {
     const newSession: ChatSession = {
@@ -223,18 +267,62 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
         throw new Error(errorMessage);
       }
 
-      const data = await response.json();
-      
+      const assistantMsgId = (Date.now() + 1).toString();
       const assistantMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: assistantMsgId,
         role: 'assistant',
-        content: data.text,
+        content: '',
         timestamp: new Date().toISOString()
       };
 
       setSessions(prev => prev.map(s => 
         s.id === sessionId ? { ...s, messages: [...s.messages, assistantMsg] } : s
       ));
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      
+      if (reader) {
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6);
+              if (dataStr === '[DONE]') continue;
+              try {
+                const data = JSON.parse(dataStr);
+                if (data.error) throw new Error(data.error);
+                if (data.text) {
+                  fullText += data.text;
+                  setSessions(prev => prev.map(s => {
+                    if (s.id === sessionId) {
+                      const newMessages = [...s.messages];
+                      const msgIndex = newMessages.findIndex(m => m.id === assistantMsgId);
+                      if (msgIndex !== -1) {
+                        newMessages[msgIndex] = { ...newMessages[msgIndex], content: fullText };
+                      }
+                      return { ...s, messages: newMessages };
+                    }
+                    return s;
+                  }));
+                }
+              } catch (e: any) {
+                if (e.message !== "Unexpected end of JSON input") {
+                   console.error("Stream parse error:", e);
+                }
+              }
+            }
+          }
+        }
+      }
     } catch (error: any) {
       console.error(error);
       const errorMsg: Message = {
@@ -554,7 +642,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
                 </div>
               ))}
               {isLoading && (
-                <div className="flex gap-4 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-800 animate-pulse">
+                <div className="flex gap-4 bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-800">
                   <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center shadow-lg shadow-emerald-500/20">
                     <Loader2 className="w-6 h-6 text-white animate-spin" />
                   </div>
@@ -562,12 +650,14 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Dr. Michel Felix</span>
                       <span className="text-[10px] text-slate-400">•</span>
-                      <span className="text-[10px] text-slate-400 font-medium uppercase tracking-widest animate-pulse">Analisando e fundamentando...</span>
+                      <span className="text-[10px] text-slate-400 font-medium uppercase tracking-widest animate-pulse">{progressText}</span>
                     </div>
-                    <div className="space-y-2">
-                      <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-full"></div>
-                      <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-5/6"></div>
-                      <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded w-4/6"></div>
+                    <div className="w-full bg-slate-200 dark:bg-slate-800 rounded-full h-2.5 mb-1 overflow-hidden">
+                      <div className="bg-emerald-600 h-2.5 rounded-full transition-all duration-1000 ease-out" style={{ width: `${progress}%` }}></div>
+                    </div>
+                    <div className="flex justify-between text-xs text-slate-500">
+                      <span className="font-medium text-emerald-600 dark:text-emerald-400">{progress}% concluído</span>
+                      <span className="animate-pulse">Gerando resposta...</span>
                     </div>
                   </div>
                 </div>
