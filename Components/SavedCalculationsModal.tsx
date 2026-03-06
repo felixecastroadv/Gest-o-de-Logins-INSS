@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { XCircleIcon, TrashIcon, FolderOpenIcon, PencilSquareIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { SocialSecurityData } from '../SocialSecurityCalc';
+import { supabaseService } from '../services/supabaseService';
 
 interface SavedCalculationsModalProps {
     isOpen: boolean;
     onClose: () => void;
     onLoad: (data: SocialSecurityData) => void;
+    savedCalculations?: SavedCalculation[];
+    onUpdateCalculations?: (list: SavedCalculation[]) => void;
 }
 
 interface SavedCalculation {
@@ -15,37 +18,67 @@ interface SavedCalculation {
     data: SocialSecurityData;
 }
 
-const SavedCalculationsModal: React.FC<SavedCalculationsModalProps> = ({ isOpen, onClose, onLoad }) => {
-    const [calculations, setCalculations] = useState<SavedCalculation[]>([]);
+const SavedCalculationsModal: React.FC<SavedCalculationsModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    onLoad,
+    savedCalculations,
+    onUpdateCalculations
+}) => {
+    const [calculations, setCalculations] = useState<SavedCalculation[]>(savedCalculations || []);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editName, setEditName] = useState('');
 
     useEffect(() => {
         if (isOpen) {
-            loadCalculations();
+            if (savedCalculations) {
+                setCalculations(savedCalculations);
+            } else {
+                loadCalculations();
+            }
         }
-    }, [isOpen]);
+    }, [isOpen, savedCalculations]);
 
-    const loadCalculations = () => {
+    const loadCalculations = async () => {
         try {
-            const saved = localStorage.getItem('social_security_calculations');
-            if (saved) {
-                setCalculations(JSON.parse(saved));
+            const dbCalcs = await supabaseService.getCalculations();
+            if (dbCalcs && dbCalcs.length > 0) {
+                setCalculations(dbCalcs);
+            } else {
+                // Fallback to local
+                const saved = localStorage.getItem('social_security_calculations');
+                if (saved) {
+                    setCalculations(JSON.parse(saved));
+                }
             }
         } catch (error) {
             console.error("Erro ao carregar cálculos:", error);
         }
     };
 
-    const handleDelete = (id: string) => {
+    const handleDelete = async (id: string) => {
         if (confirm("Tem certeza que deseja excluir este cálculo?")) {
-            const newCalculations = calculations.filter(c => c.id !== id);
-            setCalculations(newCalculations);
-            localStorage.setItem('social_security_calculations', JSON.stringify(newCalculations));
+            try {
+                await supabaseService.deleteCalculation(id);
+                const newCalculations = calculations.filter(c => c.id !== id);
+                setCalculations(newCalculations);
+                if (onUpdateCalculations) {
+                    onUpdateCalculations(newCalculations);
+                } else {
+                    localStorage.setItem('social_security_calculations', JSON.stringify(newCalculations));
+                }
+            } catch (error) {
+                console.error("Erro ao excluir cálculo do Supabase:", error);
+                alert("Erro ao excluir cálculo do banco de dados.");
+            }
         }
     };
 
     const handleLoad = (calc: SavedCalculation) => {
+        if (!calc.data) {
+            alert("Erro: Este cálculo não possui dados válidos.");
+            return;
+        }
         if (confirm(`Deseja carregar o cálculo de ${calc.clientName}? Os dados atuais serão substituídos.`)) {
             onLoad(calc.data);
             onClose();
@@ -62,17 +95,27 @@ const SavedCalculationsModal: React.FC<SavedCalculationsModalProps> = ({ isOpen,
         setEditName('');
     };
 
-    const saveEditing = (id: string) => {
-        const newCalculations = calculations.map(c => {
-            if (c.id === id) {
-                return { ...c, clientName: editName, data: { ...c.data, clientName: editName } };
+    const saveEditing = async (id: string) => {
+        const targetCalc = calculations.find(c => c.id === id);
+        if (!targetCalc) return;
+
+        const updatedCalc = { ...targetCalc, clientName: editName, data: { ...targetCalc.data, clientName: editName } };
+        
+        try {
+            await supabaseService.saveCalculation(updatedCalc);
+            const newCalculations = calculations.map(c => c.id === id ? updatedCalc : c);
+            setCalculations(newCalculations);
+            if (onUpdateCalculations) {
+                onUpdateCalculations(newCalculations);
+            } else {
+                localStorage.setItem('social_security_calculations', JSON.stringify(newCalculations));
             }
-            return c;
-        });
-        setCalculations(newCalculations);
-        localStorage.setItem('social_security_calculations', JSON.stringify(newCalculations));
-        setEditingId(null);
-        setEditName('');
+            setEditingId(null);
+            setEditName('');
+        } catch (error) {
+            console.error("Error updating calculation in Supabase:", error);
+            alert("Erro ao atualizar nome no banco de dados.");
+        }
     };
 
     if (!isOpen) return null;
@@ -133,7 +176,7 @@ const SavedCalculationsModal: React.FC<SavedCalculationsModalProps> = ({ isOpen,
                                                     Salvo em: {new Date(calc.date).toLocaleString()}
                                                 </p>
                                                 <p className="text-[10px] text-slate-400 mt-0.5">
-                                                    Vínculos: {calc.data.bonds.length} | DER: {calc.data.der}
+                                                    Vínculos: {calc.data?.bonds?.length ?? 0} | DER: {calc.data?.der ?? 'N/A'}
                                                 </p>
                                             </>
                                         )}
