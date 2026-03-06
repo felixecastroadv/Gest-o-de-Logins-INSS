@@ -155,6 +155,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                 }
             } catch (err) { console.error("Error fetching social calculations:", err); }
 
+            /* 
+            // Optimized: Moved fetching to the component itself to save bandwidth/IO
             try {
                 const michelSessions = await supabaseService.getAIConversations('michel');
                 if (michelSessions && michelSessions.length > 0) {
@@ -170,6 +172,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     localStorage.setItem('dra_luana_sessions', JSON.stringify(fetchedDraLuanaSessions));
                 }
             } catch (err) { console.error("Error fetching Luana sessions:", err); }
+            */
 
         }
 
@@ -217,11 +220,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                      }
                 }
             )
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'ai_conversations' },
-                () => fetchData()
-            )
+            // Removed ai_conversations subscription to prevent read loops and high I/O
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'social_security_calculations' },
