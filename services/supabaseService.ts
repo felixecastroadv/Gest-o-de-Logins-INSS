@@ -166,13 +166,28 @@ export const supabaseService = {
       return [];
     }
     
-    return (data || []).map(item => ({
-      id: item.id,
-      employeeName: item.employee_name,
-      date: item.date,
-      totalValue: item.total_value || 0,
-      data: item.data
-    }));
+    return (data || []).map(item => {
+      // Ensure backward compatibility for LaborData
+      const laborData = item.data || {};
+      
+      // Patch Adicional Noturno
+      if (laborData.adicionalNoturno) {
+        if (laborData.adicionalNoturno.applySumula60 === undefined) {
+          laborData.adicionalNoturno.applySumula60 = false;
+        }
+        if (laborData.adicionalNoturno.extendedEndTime === undefined) {
+          laborData.adicionalNoturno.extendedEndTime = '';
+        }
+      }
+
+      return {
+        id: item.id,
+        employeeName: item.employee_name,
+        date: item.date,
+        totalValue: item.total_value || 0,
+        data: laborData
+      };
+    });
   },
 
   async deleteLaborCalculation(id: string) {
