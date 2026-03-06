@@ -74,78 +74,103 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // --- Realtime & Data Fetching Logic ---
-  const fetchData = async () => {
+    const fetchData = async () => {
     setIsLoading(true);
     setDbError(null);
     const supabase = initSupabase();
 
     try {
-        // Fetch Clients
-        let fetchedClients = INITIAL_DATA;
-        let fetchedContracts = INITIAL_CONTRACTS_LIST;
-        let fetchedCalculations: CalculationRecord[] = [];
-        let fetchedSocialCalculations: SocialSecurityCalculationRecord[] = [];
-        let fetchedDrMichelSessions: any[] = [];
-        let fetchedDraLuanaSessions: any[] = [];
+        // 1. Initialize with Local Data (Fallback)
+        const localClients = localStorage.getItem('inss_records');
+        let fetchedClients = localClients ? JSON.parse(localClients) : INITIAL_DATA;
+
+        const localContracts = localStorage.getItem('inss_contracts');
+        let fetchedContracts = localContracts ? JSON.parse(localContracts) : INITIAL_CONTRACTS_LIST;
+
+        const localCalculations = localStorage.getItem('inss_calculations');
+        let fetchedCalculations = localCalculations ? JSON.parse(localCalculations) : [];
+
+        const localSocialCalculations = localStorage.getItem('social_security_calculations');
+        let fetchedSocialCalculations = localSocialCalculations ? JSON.parse(localSocialCalculations) : [];
+
+        const localMichel = localStorage.getItem('dr_michel_sessions');
+        let fetchedDrMichelSessions = localMichel ? JSON.parse(localMichel) : [];
+
+        const localLuana = localStorage.getItem('dra_luana_sessions');
+        let fetchedDraLuanaSessions = localLuana ? JSON.parse(localLuana) : [];
 
         if (supabase) {
             // Cloud Fetch - Clients (ID 1)
-            const { data: clientData } = await supabase
-                .from('clients')
-                .select('data')
-                .eq('id', 1)
-                .single();
-                
-            if (clientData && clientData.data) {
-                fetchedClients = clientData.data;
-                localStorage.setItem('inss_records', JSON.stringify(clientData.data));
+            try {
+                const { data: clientData, error: clientError } = await supabase
+                    .from('clients')
+                    .select('data')
+                    .eq('id', 1)
+                    .single();
+                    
+                if (clientData && clientData.data) {
+                    fetchedClients = clientData.data;
+                    localStorage.setItem('inss_records', JSON.stringify(clientData.data));
+                } else if (clientError) {
+                    console.error("Error fetching clients:", clientError);
+                    setDbError("Erro ao buscar clientes na nuvem. Exibindo dados locais.");
+                }
+            } catch (err) {
+                console.error("Exception fetching clients:", err);
+                setDbError("Erro de conexão (Clientes). Exibindo dados locais.");
             }
 
             // Cloud Fetch - Contracts (ID 2)
-            const { data: contractData, error: contractError } = await supabase
-                .from('clients')
-                .select('data')
-                .eq('id', 2)
-                .single();
+            try {
+                const { data: contractData, error: contractError } = await supabase
+                    .from('clients')
+                    .select('data')
+                    .eq('id', 2)
+                    .single();
 
-            if (contractData && contractData.data) {
-                fetchedContracts = contractData.data;
-                localStorage.setItem('inss_contracts', JSON.stringify(contractData.data));
-            } else if (contractError && contractError.code === 'PGRST116') {
-                 await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS_LIST });
+                if (contractData && contractData.data) {
+                    fetchedContracts = contractData.data;
+                    localStorage.setItem('inss_contracts', JSON.stringify(contractData.data));
+                } else if (contractError && contractError.code === 'PGRST116') {
+                     await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS_LIST });
+                }
+            } catch (err) {
+                 console.error("Exception fetching contracts:", err);
             }
 
             // New Fetch Logic using dedicated tables
-            fetchedCalculations = await supabaseService.getLaborCalculations();
-            fetchedSocialCalculations = await supabaseService.getCalculations();
-            fetchedDrMichelSessions = await supabaseService.getAIConversations('michel');
-            fetchedDraLuanaSessions = await supabaseService.getAIConversations('luana');
+            try {
+                const laborCalcs = await supabaseService.getLaborCalculations();
+                if (laborCalcs && laborCalcs.length > 0) {
+                    fetchedCalculations = laborCalcs;
+                    localStorage.setItem('inss_calculations', JSON.stringify(fetchedCalculations));
+                }
+            } catch (err) { console.error("Error fetching labor calculations:", err); }
 
-            // Update local storage for cache
-            localStorage.setItem('inss_calculations', JSON.stringify(fetchedCalculations));
-            localStorage.setItem('social_security_calculations', JSON.stringify(fetchedSocialCalculations));
-            localStorage.setItem('dr_michel_sessions', JSON.stringify(fetchedDrMichelSessions));
-            localStorage.setItem('dra_luana_sessions', JSON.stringify(fetchedDraLuanaSessions));
+            try {
+                const socialCalcs = await supabaseService.getCalculations();
+                if (socialCalcs && socialCalcs.length > 0) {
+                    fetchedSocialCalculations = socialCalcs;
+                    localStorage.setItem('social_security_calculations', JSON.stringify(fetchedSocialCalculations));
+                }
+            } catch (err) { console.error("Error fetching social calculations:", err); }
 
-        } else {
-             // Local Fallback
-             const localClients = localStorage.getItem('inss_records');
-             if (localClients) fetchedClients = JSON.parse(localClients);
+            try {
+                const michelSessions = await supabaseService.getAIConversations('michel');
+                if (michelSessions && michelSessions.length > 0) {
+                    fetchedDrMichelSessions = michelSessions;
+                    localStorage.setItem('dr_michel_sessions', JSON.stringify(fetchedDrMichelSessions));
+                }
+            } catch (err) { console.error("Error fetching Michel sessions:", err); }
 
-             const localContracts = localStorage.getItem('inss_contracts');
-             if (localContracts) fetchedContracts = JSON.parse(localContracts);
+            try {
+                const luanaSessions = await supabaseService.getAIConversations('luana');
+                if (luanaSessions && luanaSessions.length > 0) {
+                    fetchedDraLuanaSessions = luanaSessions;
+                    localStorage.setItem('dra_luana_sessions', JSON.stringify(fetchedDraLuanaSessions));
+                }
+            } catch (err) { console.error("Error fetching Luana sessions:", err); }
 
-             const localCalculations = localStorage.getItem('inss_calculations');
-             if (localCalculations) fetchedCalculations = JSON.parse(localCalculations);
-
-             const localSocialCalculations = localStorage.getItem('social_security_calculations');
-             if (localSocialCalculations) fetchedSocialCalculations = JSON.parse(localSocialCalculations);
-
-             const localMichel = localStorage.getItem('dr_michel_sessions');
-             if (localMichel) fetchedDrMichelSessions = JSON.parse(localMichel);
-
-             const localLuana = localStorage.getItem('dra_luana_sessions');
-             if (localLuana) fetchedDraLuanaSessions = JSON.parse(localLuana);
         }
 
         setRecords(fetchedClients);
@@ -157,7 +182,10 @@ const Dashboard: React.FC<DashboardProps> = ({
 
     } catch (e) {
         console.error("Erro geral", e);
-        setDbError("Erro de conexão local/nuvem.");
+        setDbError("Erro crítico. Tentando recuperar backup local.");
+        // Last resort fallback
+        const localClients = localStorage.getItem('inss_records');
+        if (localClients) setRecords(JSON.parse(localClients));
     } finally {
         setIsLoading(false);
     }
