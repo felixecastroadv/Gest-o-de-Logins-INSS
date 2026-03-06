@@ -842,11 +842,34 @@ const calculateLaborResults = (calcData: LaborData) => {
                               calcData.stability.type === 'acidentaria' ? 'Acidentária' : 
                               calcData.stability.type === 'cipa' ? 'CIPA' : 'Outros';
             
-            results.push({ desc: `Indenização Estabilidade ${typeLabel} (${monthsStab} meses)`, value: stabValue, category: 'Indenizações' });
+            let legalBasis = '';
+            if (calcData.stability.type === 'gestante') legalBasis = 'Art. 10, II, "b" do ADCT e Súmula 244 do TST';
+            else if (calcData.stability.type === 'acidentaria') legalBasis = 'Art. 118 da Lei 8.213/91 e Súmula 378 do TST';
+            else if (calcData.stability.type === 'cipa') legalBasis = 'Art. 10, II, "a" do ADCT e Súmula 339 do TST';
+            else legalBasis = 'Legislação Específica / Convenção Coletiva';
+
+            results.push({ 
+                desc: `Indenização Estabilidade ${typeLabel} (${monthsStab} meses)`, 
+                value: stabValue, 
+                category: 'Indenizações',
+                details: `Período de Estabilidade: ${stabStart.toLocaleDateString('pt-BR')} a ${stabEnd.toLocaleDateString('pt-BR')}\n` +
+                         `Base de Cálculo (Salário): ${formatCurrency(salary)}\n` +
+                         `Meses de Estabilidade: ${monthsStab}\n` +
+                         `Cálculo: ${formatCurrency(salary)} x ${monthsStab} meses = ${formatCurrency(stabValue)}\n` +
+                         `Fundamento Legal: ${legalBasis}`
+            });
             
             // FGTS sobre estabilidade (Súmula 396 TST - período de estabilidade conta como tempo de serviço)
             stabilityFgts = stabValue * 0.08;
-            results.push({ desc: `FGTS sobre Estabilidade (${monthsStab} meses)`, value: stabilityFgts, category: 'FGTS' });
+            results.push({ 
+                desc: `FGTS sobre Estabilidade (${monthsStab} meses)`, 
+                value: stabilityFgts, 
+                category: 'FGTS',
+                details: `Base de Cálculo (Indenização Estabilidade): ${formatCurrency(stabValue)}\n` +
+                         `Alíquota FGTS: 8%\n` +
+                         `Cálculo: ${formatCurrency(stabValue)} x 8% = ${formatCurrency(stabilityFgts)}\n` +
+                         `Fundamento Legal: Súmula 396 do TST (tempo de serviço fictício)`
+            });
         }
     }
 
