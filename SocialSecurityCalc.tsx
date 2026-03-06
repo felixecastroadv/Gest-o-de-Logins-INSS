@@ -14,6 +14,7 @@ import { ClientRecord } from './types';
 import { formatCurrency } from './utils';
 import BenefitAnalysisModal from './Components/BenefitAnalysisModal';
 import SavedCalculationsModal from './Components/SavedCalculationsModal';
+import { supabaseService } from './services/supabaseService';
 import { fetchINPCData, processINPCIndices } from './services/bcbService';
 import { fetchIBGELifeExpectancy, IBGELifeExpectancy } from './src/services/ibgeService';
 import { analyzeBenefits } from './BenefitRules';
@@ -70,7 +71,9 @@ export interface SocialSecurityData {
 
 export interface SocialSecurityCalcProps {
     clients: ClientRecord[];
+    savedCalculations?: any[];
     onSaveCalculation?: (data: any) => void;
+    onUpdateCalculations?: (list: any[]) => void;
 }
 
 // --- Constants ---
@@ -104,7 +107,12 @@ const INITIAL_SS_DATA: SocialSecurityData = {
     customMinWageDate: '2026-01-01'
 };
 
-const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSaveCalculation }) => {
+const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ 
+    clients, 
+    savedCalculations,
+    onSaveCalculation,
+    onUpdateCalculations
+}) => {
     const [data, setData] = useState<SocialSecurityData>(INITIAL_SS_DATA);
     const [expandedBonds, setExpandedBonds] = useState<string[]>([]);
     
@@ -1056,54 +1064,42 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
         doc.save(`Relatorio_Previdenciario_${data.clientName.replace(/\s+/g, '_')}.pdf`);
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
+        const newCalc = {
+            id: new Date().getTime().toString(),
+            date: new Date().toISOString(),
+            clientName: data.clientName,
+            data: data
+        };
+
         if (onSaveCalculation) {
             onSaveCalculation(data);
-            // Also save locally for the modal
-            try {
-                const saved = localStorage.getItem('social_security_calculations');
-                const calculations = saved ? JSON.parse(saved) : [];
-                const newCalc = {
-                    id: new Date().getTime().toString(),
-                    date: new Date().toISOString(),
-                    clientName: data.clientName,
-                    data: data
-                };
-                localStorage.setItem('social_security_calculations', JSON.stringify([newCalc, ...calculations]));
-            } catch (e) {
-                console.error("Error saving locally", e);
-            }
-            alert("Novo cálculo salvo com sucesso!");
         } else {
             // Fallback local save if no prop provided
              try {
+                await supabaseService.saveCalculation(newCalc);
+                
                 const saved = localStorage.getItem('social_security_calculations');
                 const calculations = saved ? JSON.parse(saved) : [];
-                const newCalc = {
-                    id: new Date().getTime().toString(),
-                    date: new Date().toISOString(),
-                    clientName: data.clientName,
-                    data: data
-                };
                 localStorage.setItem('social_security_calculations', JSON.stringify([newCalc, ...calculations]));
-                alert("Novo cálculo salvo localmente com sucesso!");
+                alert("Novo cálculo salvo com sucesso no banco de dados!");
             } catch (e) {
-                console.error("Error saving locally", e);
-                alert("Erro ao salvar localmente.");
+                console.error("Error saving", e);
+                alert("Erro ao salvar cálculo.");
             }
         }
     };
 
-    const handleUpdate = () => {
+    const handleUpdate = async () => {
         try {
-            const saved = localStorage.getItem('social_security_calculations');
-            if (!saved) {
+            const saved = savedCalculations || (localStorage.getItem('social_security_calculations') ? JSON.parse(localStorage.getItem('social_security_calculations')!) : []);
+            
+            if (saved.length === 0) {
                 alert("Nenhum cálculo salvo encontrado para atualizar. Use 'Salvar Novo Cálculo'.");
                 return;
             }
             
-            let calculations = JSON.parse(saved);
-            const clientCalcs = calculations.filter((c: any) => c.clientName === data.clientName);
+            const clientCalcs = saved.filter((c: any) => c.clientName === data.clientName);
             
             if (clientCalcs.length === 0) {
                 alert("Nenhum cálculo salvo encontrado para este cliente. Use 'Salvar Novo Cálculo'.");
@@ -1112,23 +1108,25 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
             
             // Update the most recent one for this client
             const targetId = clientCalcs[0].id;
+            const updatedCalc = {
+                ...clientCalcs[0],
+                date: new Date().toISOString(),
+                data: data
+            };
             
-            calculations = calculations.map((c: any) => {
-                if (c.id === targetId) {
-                    return {
-                        ...c,
-                        date: new Date().toISOString(), // Update the date
-                        data: data
-                    };
-                }
-                return c;
-            });
+            await supabaseService.saveCalculation(updatedCalc);
             
-            localStorage.setItem('social_security_calculations', JSON.stringify(calculations));
-            alert("Alterações salvas com sucesso no cálculo existente!");
+            const updatedList = saved.map((c: any) => c.id === targetId ? updatedCalc : c);
+            
+            if (onUpdateCalculations) {
+                onUpdateCalculations(updatedList);
+            } else {
+                localStorage.setItem('social_security_calculations', JSON.stringify(updatedList));
+            }
+            alert("Alterações salvas com sucesso no banco de dados!");
             
         } catch (e) {
-            console.error("Error updating locally", e);
+            console.error("Error updating", e);
             alert("Erro ao salvar alterações.");
         }
     };
@@ -2142,6 +2140,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({ clients, onSave
                 isOpen={isSavedCalculationsModalOpen}
                 onClose={() => setIsSavedCalculationsModalOpen(false)}
                 onLoad={handleLoadCalculation}
+                savedCalculations={savedCalculations}
+                onUpdateCalculations={onUpdateCalculations}
             />
         </div>
     );
