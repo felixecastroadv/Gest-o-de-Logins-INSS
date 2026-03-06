@@ -230,14 +230,15 @@ SCHEMA:
       "nit": "123.45678.90-0",
       "code": "00.000.000/0000-00",
       "origin": "NOME DA EMPRESA",
-      "type": "Empregado",
+      "type": "Empregado", // "Empregado", "Contribuinte Individual", "Facultativo", "Benefício" (para auxílio-doença/aposentadoria por invalidez)
       "startDate": "YYYY-MM-DD",
       "endDate": "YYYY-MM-DD",
       "indicators": ["IEAN", "PEMPREG"],
       "sc": [
         { "month": "MM/YYYY", "value": 1500.00, "indicators": [] }
       ],
-      "isConcomitant": false
+      "isConcomitant": false,
+      "isBenefit": false // true se for benefício por incapacidade
     }
   ],
   "analysis": "Breve resumo do que foi encontrado (ex: vínculos sem data fim, indicadores de pendência)."
@@ -248,6 +249,7 @@ REGRAS CRÍTICAS:
 2. 'value' deve ser NÚMERO (float), não string. Ex: 1500.50 (não "R$ 1.500,50").
 3. Se não houver data fim, deixe null ou string vazia.
 4. Extraia TODOS os salários de contribuição (sc) disponíveis.
+5. EXTRAIA BENEFÍCIOS POR INCAPACIDADE: Identifique períodos de auxílio-doença (B31, B91) ou aposentadoria por invalidez (B32, B92) e marque como 'isBenefit: true'.
 `;
 
 const DRA_LUANA_SYSTEM_PROMPT = `
