@@ -57,6 +57,8 @@ interface LaborData {
   periculosidade: boolean; // 30%
   adicionalNoturno: {
     active: boolean;
+    applySumula60?: boolean; // Súmula 60 TST - Prorrogação
+    extendedEndTime?: string; // Horário fim real (ex: 07:00)
     periods: {
       id: string;
       hoursPerMonth: number;
@@ -691,24 +693,66 @@ const calculateLaborResults = (calcData: LaborData) => {
                 
                 if (pStart && pEnd && period.hoursPerMonth > 0) {
                     const workDaysPerMonth = period.daysPerMonth || 26; // Default to 26 as per user request
+                    
+                    // Súmula 60 TST Calculation
+                    let extendedHoursPerMonth = 0;
+                    let extendedDetails = '';
+                    
+                    if (calcData.adicionalNoturno.applySumula60 && calcData.adicionalNoturno.extendedEndTime) {
+                        const [endHour, endMin] = calcData.adicionalNoturno.extendedEndTime.split(':').map(Number);
+                        // Calculate time difference from 05:00 (which is 5 * 60 minutes)
+                        // If end time is e.g. 02:00 (next day), we assume it's past 05:00 only if it's explicitly > 05:00?
+                        // Usually "Prorrogação" means it went past 05:00. If user puts 07:00, it's 2 hours.
+                        // If user puts 04:00, it's not extended.
+                        
+                        let diffMinutes = (endHour * 60 + endMin) - (5 * 60);
+                        
+                        // Handle case where shift goes into next day but user inputs time like "07:00"
+                        // Assuming the input is the end time of the shift.
+                        // If end time is < 05:00, no extension.
+                        
+                        if (diffMinutes > 0) {
+                             // Apply night hour reduction (52.5 min = 0.875 hours)
+                             // Factor = 60 / 52.5 = 1.142857
+                             const nightFactor = 60 / 52.5;
+                             const extendedNightMinutes = diffMinutes * nightFactor;
+                             const extendedNightHoursPerDay = extendedNightMinutes / 60;
+                             
+                             extendedHoursPerMonth = extendedNightHoursPerDay * workDaysPerMonth;
+                             
+                             extendedDetails = `[Súmula 60 TST - Prorrogação da Jornada Noturna]\n` +
+                                               `Término Real da Jornada: ${calcData.adicionalNoturno.extendedEndTime}\n` +
+                                               `Horas Prorrogadas/Dia (Relógio): ${(diffMinutes/60).toFixed(2)}h (05:00 às ${calcData.adicionalNoturno.extendedEndTime})\n` +
+                                               `Fator de Redução da Hora Noturna: 1.1428 (52min30s)\n` +
+                                               `Horas Prorrogadas/Dia (Noturnas): ${extendedNightHoursPerDay.toFixed(2)}h\n` +
+                                               `Dias Considerados: ${workDaysPerMonth}\n` +
+                                               `Adicional Mensal Extra: ${extendedHoursPerMonth.toFixed(2)}h`;
+                        }
+                    }
+
+                    const totalHoursPerMonth = period.hoursPerMonth + extendedHoursPerMonth;
+
                     const result = calculateBenefitExact(pStart, pEnd, calcData.salaryHistory, salary, (sal, days) => {
                         const hourlyRate = sal / 220;
                         const nightRate = hourlyRate * 0.20;
-                        const monthlyVal = nightRate * period.hoursPerMonth;
+                        const monthlyVal = nightRate * totalHoursPerMonth;
                         return (monthlyVal / workDaysPerMonth) * days;
                     }, workDaysPerMonth);
                     
                     const detailsStr = `Salário Hora: Base / 220\n` +
                         `Adicional Noturno: 20%\n` +
-                        (period.hoursPerDay ? `Horas/Dia: ${period.hoursPerDay}\n` : '') +
+                        (period.hoursPerDay ? `Horas/Dia (Base): ${period.hoursPerDay}\n` : '') +
                         (period.daysPerMonth ? `Dias/Mês: ${period.daysPerMonth}\n` : '') +
-                        `Total Horas/Mês: ${period.hoursPerMonth}\n` +
+                        `Horas Base/Mês (22h-05h): ${period.hoursPerMonth}\n` +
+                        (extendedHoursPerMonth > 0 ? `Horas Prorrogadas/Mês (Súmula 60): ${extendedHoursPerMonth.toFixed(2)}\n` : '') +
+                        `Total Horas/Mês (Base + Prorrogação): ${totalHoursPerMonth.toFixed(2)}\n` +
                         `Meses Calculados: ${result.months}\n` +
                         `Total: ${formatCurrency(result.value)}\n\n` +
+                        (extendedDetails ? extendedDetails + '\n\n' : '') +
                         `Memória (Últimos 12 meses):\n${result.memory.slice(-12).join('\n')}`;
 
                     results.push({ 
-                        desc: `Adicional Noturno (${period.hoursPerMonth}h/mês - ${result.months} meses - Período ${idx + 1})`, 
+                        desc: `Adicional Noturno (${totalHoursPerMonth.toFixed(1)}h/mês - ${result.months} meses - Período ${idx + 1})`, 
                         value: result.value, 
                         category: 'Adicionais',
                         details: detailsStr
@@ -1928,6 +1972,38 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   
                                   {data.adicionalNoturno.active && (
                                       <div className="space-y-2 mt-2">
+                                          {/* Súmula 60 TST - Prorrogação */}
+                                          <div className="bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-lg border border-indigo-100 dark:border-indigo-800 mb-3">
+                                              <label className="flex items-center gap-2 cursor-pointer mb-2">
+                                                  <input 
+                                                      type="checkbox" 
+                                                      checked={data.adicionalNoturno.applySumula60 || false} 
+                                                      onChange={e => setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, applySumula60: e.target.checked } }))} 
+                                                      className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600" 
+                                                  />
+                                                  <span className="text-xs font-bold text-indigo-700 dark:text-indigo-300">
+                                                      Aplicar Súmula 60 TST (Prorrogação da Jornada Noturna)
+                                                  </span>
+                                              </label>
+                                              
+                                              {data.adicionalNoturno.applySumula60 && (
+                                                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 pl-6 mt-2">
+                                                      <div className="flex items-center gap-2">
+                                                          <label className="text-[10px] font-bold text-slate-500 uppercase whitespace-nowrap">Término Real da Jornada:</label>
+                                                          <input 
+                                                              type="time" 
+                                                              value={data.adicionalNoturno.extendedEndTime || ''}
+                                                              onChange={e => setData(prev => ({ ...prev, adicionalNoturno: { ...prev.adicionalNoturno, extendedEndTime: e.target.value } }))}
+                                                              className="w-24 px-2 py-1 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded text-xs font-bold focus:ring-1 focus:ring-indigo-500"
+                                                          />
+                                                      </div>
+                                                      <span className="text-[10px] text-slate-400 italic leading-tight">
+                                                          (Ex: se termina às 07:00, o sistema calculará o adicional das 05:00 às 07:00 com hora reduzida)
+                                                      </span>
+                                                  </div>
+                                              )}
+                                          </div>
+
                                           <p className="text-[10px] text-slate-500 dark:text-slate-400 mb-2">
                                               Considera-se noturno o trabalho entre <strong>22h e 5h</strong> (urbano). A hora noturna é reduzida (52min 30s).
                                           </p>
