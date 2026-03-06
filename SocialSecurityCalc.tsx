@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import { jsPDF } from "jspdf";
 import autoTable from 'jspdf-autotable';
@@ -39,6 +39,7 @@ export interface CNISBond {
     // New fields for the calculator
     activityType: string; // 'common', 'special_25', etc.
     isConcomitant: boolean;
+    isBenefit: boolean;
     useInCalculation: boolean;
 }
 
@@ -337,6 +338,32 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
         return { years, months, days, totalDays: totalAdjustedDays };
     };
     
+    const isBondIntercalated = useCallback((benefit: CNISBond, allBonds: CNISBond[]) => {
+        if (!benefit.isBenefit) return true;
+        if (!benefit.startDate || !benefit.endDate) return false;
+        
+        const bStart = parseDateLocal(benefit.startDate).getTime();
+        const bEnd = parseDateLocal(benefit.endDate).getTime();
+        
+        const contributionBonds = allBonds.filter(b => !b.isBenefit && b.useInCalculation && b.startDate && b.endDate);
+        
+        // Must have a contribution BEFORE (within grace period, approx 12 months)
+        const hasContribBefore = contributionBonds.some(c => {
+            const cEnd = parseDateLocal(c.endDate).getTime();
+            const gap = bStart - cEnd;
+            return cEnd <= bStart && gap <= (365 * 24 * 60 * 60 * 1000 * 1.1);
+        });
+
+        // Must have a contribution AFTER (within grace period)
+        const hasContribAfter = contributionBonds.some(c => {
+            const cStart = parseDateLocal(c.startDate).getTime();
+            const gap = cStart - bEnd;
+            return cStart >= bEnd && gap <= (365 * 24 * 60 * 60 * 1000 * 1.1);
+        });
+
+        return hasContribBefore && hasContribAfter;
+    }, []);
+
     // Unified Time Calculation (Day-by-Day Simulation)
     // Handles concurrency (counts only once) and Special Time multipliers (pre-Reform)
     const unifiedTime = useMemo(() => {
@@ -344,11 +371,14 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
         
         if (activeBonds.length === 0) return "0 anos, 0 meses e 0 dias";
 
+        // Filter benefit bonds that are intercalated
+        const bondsToProcess = activeBonds.filter(b => !b.isBenefit || isBondIntercalated(b, data.bonds));
+
         // 1. Determine Global Range
         let minDateMs = Infinity;
         let maxDateMs = -Infinity;
 
-        const processedBonds = activeBonds.map(b => {
+        const processedBonds = bondsToProcess.map(b => {
             if (!b.startDate || !b.endDate) return null;
 
             const start = parseDateLocal(b.startDate);
@@ -434,6 +464,9 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
 
         data.bonds.forEach(bond => {
             if (!bond.useInCalculation) return;
+            
+            // If it's a benefit, it must be intercalated to count as carencia
+            if (bond.isBenefit && !isBondIntercalated(bond, data.bonds)) return;
 
             // Priority: Date Range (since SCs might be missing from AI)
             if (bond.startDate && bond.endDate) {
@@ -506,7 +539,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
         const sortedBonds = [...bondTimes].sort((a, b) => b.totalDays - a.totalDays);
 
         for (const { bond } of sortedBonds) {
-            if (!bond.useInCalculation) {
+            if (!bond.useInCalculation || (bond.isBenefit && !isBondIntercalated(bond, data.bonds))) {
                 map.set(bond.id, 0);
                 continue;
             }
@@ -730,6 +763,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                     sc,
                     activityType: 'common',
                     isConcomitant: b.isConcomitant || false,
+                    isBenefit: b.isBenefit || false,
                     useInCalculation: true
                 };
             });
@@ -1390,6 +1424,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                 sc,
                 activityType: 'common',
                 isConcomitant: false,
+                isBenefit: false,
                 useInCalculation: true
             });
         });
@@ -1420,6 +1455,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
             type: 'Empregado',
             activityType: 'common',
             isConcomitant: false,
+            isBenefit: false,
             useInCalculation: true
         };
         setData(prev => ({ ...prev, bonds: [...prev.bonds, newBond] }));
@@ -1797,22 +1833,45 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                                                 effectiveEndDate = data.der;
                                             }
                                         }
-                                        const time = calculateTime(bond.startDate, effectiveEndDate, bond.activityType, data.gender);
+                                        
+                                        const isIntercalated = isBondIntercalated(bond, data.bonds);
+                                        const time = (bond.isBenefit && !isIntercalated) 
+                                            ? { years: 0, months: 0, days: 0, totalDays: 0 }
+                                            : calculateTime(bond.startDate, effectiveEndDate, bond.activityType, data.gender);
+                                        
                                         return (
                                             <React.Fragment key={bond.id}>
-                                                <tr className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
+                                                <tr className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors ${bond.isBenefit ? 'bg-indigo-50/30 dark:bg-indigo-900/10' : ''}`}>
                                                     <td className="px-3 py-2 text-center">
                                                         <input type="checkbox" checked={bond.useInCalculation} onChange={() => handleBondChange(bond.id, 'useInCalculation', !bond.useInCalculation)} className="rounded text-indigo-600" />
                                                         <span className="block text-[10px] text-slate-400 font-mono">{idx + 1}</span>
                                                     </td>
                                                     <td className={STYLES.TABLE_CELL}>
-                                                        <input 
-                                                            type="text" 
-                                                            className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 dark:text-slate-200 p-0"
-                                                            value={bond.origin}
-                                                            onChange={e => handleBondChange(bond.id, 'origin', e.target.value)}
-                                                        />
-                                                        <div className="text-[10px] text-slate-400">{bond.type}</div>
+                                                        <div className="flex flex-col">
+                                                            <input 
+                                                                type="text" 
+                                                                className="w-full bg-transparent border-none focus:ring-0 text-sm font-bold text-slate-700 dark:text-slate-200 p-0"
+                                                                value={bond.origin}
+                                                                onChange={e => handleBondChange(bond.id, 'origin', e.target.value)}
+                                                            />
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] text-slate-400">{bond.type}</span>
+                                                                <label className="flex items-center gap-1 cursor-pointer">
+                                                                    <input 
+                                                                        type="checkbox" 
+                                                                        checked={bond.isBenefit} 
+                                                                        onChange={e => handleBondChange(bond.id, 'isBenefit', e.target.checked)}
+                                                                        className="h-3 w-3 rounded text-indigo-600"
+                                                                    />
+                                                                    <span className="text-[9px] font-bold text-indigo-600 uppercase">Benefício</span>
+                                                                </label>
+                                                                {bond.isBenefit && !isIntercalated && (
+                                                                    <span className="text-[9px] text-red-500 font-bold bg-red-50 px-1 rounded border border-red-100 animate-pulse">
+                                                                        Não Intercalado
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </div>
                                                     </td>
                                                     <td className={STYLES.TABLE_CELL}>
                                                         <input 
