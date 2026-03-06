@@ -59,6 +59,7 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
@@ -125,12 +126,18 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
             localStorage.setItem('dra_luana_sessions', JSON.stringify(sessionsToSave));
           }
 
-          // Sync with Supabase
+          // Sync with Supabase - Debounced to reduce writes
+          if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+          }
+
           if (currentSession) {
-            supabaseService.saveAIConversation({
-              ...currentSession,
-              ai_name: 'luana'
-            }).catch(err => console.error("Error syncing with Supabase:", err));
+            saveTimeoutRef.current = setTimeout(() => {
+              supabaseService.saveAIConversation({
+                ...currentSession,
+                ai_name: 'luana'
+              }).catch(err => console.error("Error syncing with Supabase:", err));
+            }, 2000); // 2 seconds delay
           }
         }
       } catch (error) {
