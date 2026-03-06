@@ -61,6 +61,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
@@ -126,12 +127,18 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
             localStorage.setItem('dr_michel_sessions', JSON.stringify(sessionsToSave));
           }
 
-          // Sync with Supabase - only the current session if it changed
+          // Sync with Supabase - Debounced to reduce writes
+          if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current);
+          }
+
           if (currentSession) {
-            supabaseService.saveAIConversation({
-              ...currentSession,
-              ai_name: 'michel'
-            }).catch(err => console.error("Error syncing with Supabase:", err));
+            saveTimeoutRef.current = setTimeout(() => {
+              supabaseService.saveAIConversation({
+                ...currentSession,
+                ai_name: 'michel'
+              }).catch(err => console.error("Error syncing with Supabase:", err));
+            }, 2000); // 2 seconds delay
           }
         }
       } catch (error) {
