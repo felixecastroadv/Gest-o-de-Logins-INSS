@@ -1,4 +1,6 @@
 
+import { IBGE_LIFE_EXPECTANCY } from '../constants/ibgeTable';
+
 /**
  * Service to fetch life expectancy data from IBGE SIDRA API.
  * Used for Fator Previdenciário calculations.
@@ -52,11 +54,22 @@ export const fetchIBGELifeExpectancy = async (): Promise<IBGELifeExpectancy[]> =
             });
         }
         
+        if (results.length === 0) {
+             throw new Error("IBGE API returned empty data");
+        }
+
         // Sort by age
         return results.sort((a, b) => a.age - b.age);
     } catch (error) {
-        console.error("Error fetching IBGE life expectancy:", error);
-        throw error;
+        console.warn("Error fetching IBGE life expectancy from API, falling back to static table:", error);
+        
+        // Fallback to static table
+        const staticResults: IBGELifeExpectancy[] = Object.entries(IBGE_LIFE_EXPECTANCY).map(([ageStr, expectancy]) => ({
+            age: parseInt(ageStr),
+            expectancy: expectancy
+        })).sort((a, b) => a.age - b.age);
+        
+        return staticResults;
     }
 };
 
