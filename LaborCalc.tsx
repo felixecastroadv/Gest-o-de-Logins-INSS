@@ -16,6 +16,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { jsPDF } from "jspdf";
 import { ClientRecord, ContractRecord } from './types';
+import { supabaseService } from './services/supabaseService';
 
 // --- Estilos CSS (Tailwind) ---
 const STYLES = {
@@ -1353,22 +1354,31 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       }));
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
       if (!data.employeeName) {
           alert("Informe o nome do cliente para salvar.");
           return;
       }
-      if (onSaveCalculation) {
-          const record: CalculationRecord = {
-              id: editingId || Math.random().toString(36).substr(2, 9),
-              date: new Date().toISOString(),
-              employeeName: data.employeeName,
-              totalValue: totalValue,
-              data: data
-          };
-          onSaveCalculation(record);
+      
+      const record: CalculationRecord = {
+          id: editingId || Math.random().toString(36).substr(2, 9),
+          date: new Date().toISOString(),
+          employeeName: data.employeeName,
+          totalValue: totalValue,
+          data: data
+      };
+
+      try {
+          await supabaseService.saveLaborCalculation(record);
+          
+          if (onSaveCalculation) {
+              onSaveCalculation(record);
+          }
           setEditingId(null);
-          alert("Cálculo salvo com sucesso!");
+          alert("Cálculo salvo com sucesso no banco de dados!");
+      } catch (error) {
+          console.error("Error saving labor calculation:", error);
+          alert("Erro ao salvar cálculo no banco de dados.");
       }
   };
 
