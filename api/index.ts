@@ -57,7 +57,7 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - O texto não pode perder densidade no final. Mantenha o nível técnico alto do início ao fim.
 
 4. RACIOCÍNIO JURÍDICO EXAUSTIVO (TRÍADE FATO-VALOR-NORMA):
-   - CONEXÃO OBRIGATÓRIA: Não cite apenas "nos termos da lei". Cite: "nos termos do Art. X, inciso Y da Lei Z, que dispõe [transcrição ou paráfrase fiel]".
+   - CONEXÃO OBRIGATÓRIA: Não cite apenas "nos termos da lei". Cite: "nos termos do Art. X, inciso Y da Lei Z, que dispõe [paráfrase fiel do dispositivo]".
    - ANTI-ALUCINAÇÃO (GROUNDING OBRIGATÓRIO): Use a ferramenta de busca (Google Search) para verificar a redação ATUALIZADA de cada artigo citado no site do Planalto. Não confie na sua memória. Se a lei mudou, use a nova.
    - INTEGRAÇÃO PROFUNDA: Não apenas cite a lei. Explique COMO a lei se aplica ao caso concreto. Desenvolva o raciocínio.
    - STORYTELLING JURÍDICO: Na seção "DOS FATOS", não faça apenas uma lista cronológica. Conte a história de vida e sofrimento da parte autora, humanizando o pedido e sensibilizando o juiz. Destaque a incongruência entre a realidade da doença e a decisão fria do INSS.
@@ -302,7 +302,7 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - CADA PARÁGRAFO DE MÉRITO deve ter entre 5 a 7 linhas.
    - O texto não pode perder densidade no final. Mantenha o nível técnico alto do início ao fim.
 4. RACIOCÍNIO JURÍDICO EXAUSTIVO (TRÍADE FATO-VALOR-NORMA):
-   - CONEXÃO OBRIGATÓRIA: Não cite apenas "nos termos da lei". Cite: "nos termos do Art. X, inciso Y da CLT, que dispõe [transcrição ou paráfrase fiel]".
+   - CONEXÃO OBRIGATÓRIA: Não cite apenas "nos termos da lei". Cite: "nos termos do Art. X, inciso Y da CLT, que dispõe [paráfrase fiel do dispositivo]".
    - ANTI-ALUCINAÇÃO (GROUNDING OBRIGATÓRIO): Use a ferramenta de busca (Google Search) para verificar a redação ATUALIZADA de cada artigo citado. Não confie na sua memória.
    - INTEGRAÇÃO PROFUNDA: Não apenas cite a lei. Explique COMO a lei se aplica ao caso concreto e aos valores calculados.
    - STORYTELLING JURÍDICO: Na seção "DOS FATOS", conte a história da relação de emprego, as violações sofridas, humanizando o pedido.
@@ -318,22 +318,12 @@ ESTRUTURA OBRIGATÓRIA PARA RECLAMAÇÃO TRABALHISTA:
 - ENDEREÇAMENTO: Ao Juízo da Vara do Trabalho de [Cidade].
 - QUALIFICAÇÃO: Completa do Reclamante e da(s) Reclamada(s).
 - TÍTULO: Reclamação Trabalhista (Rito Sumaríssimo ou Ordinário, dependendo do valor da causa).
-- 1. INICIALMENTE (COPIAR EXATAMENTE OS 3 TÓPICOS ABAIXO EM TODAS AS PEÇAS):
-    1.1. DA JUSTIÇA GRATUITA
-    O Reclamante declara, para os devidos fins e sob as penas da lei, que não possui condições de arcar com as custas processuais e honorários advocatícios sem prejuízo do seu próprio sustento e de sua família, conforme Declaração de Hipossuficiência Econômica anexa.
-    Diante disso, requer a concessão dos benefícios da Justiça Gratuita, nos termos do artigo 790, §§ 3º e 4º da CLT, e do artigo 98 do Código de Processo Civil.
+- 1. INICIALMENTE (ESTRUTURA OBRIGATÓRIA):
+    1.1. DA JUSTIÇA GRATUITA: Fundamente o pedido de gratuidade com base no Art. 790, §§ 3º e 4º da CLT e Art. 98 do CPC, mencionando a hipossuficiência econômica da parte autora para arcar com custas e honorários sem prejuízo do sustento próprio e familiar.
+    
+    1.2. DAS INTIMAÇÕES, PUBLICAÇÕES E NOTIFICAÇÕES: Requeira que as notificações sejam feitas exclusivamente em nome dos advogados Michel Santos Felix (OAB/RJ 231.640) e Luana de Oliveira Castro Pacheco (OAB/RJ 226.749), com escritório na Av. Prefeito José de Amorim, 500, apto. 204, Jardim Meriti, São João de Meriti/RJ, CEP 25.555-201, e e-mail felixecastroadv@gmail.com, sob pena de nulidade.
 
-    1.2. DAS INTIMAÇÕES, PUBLICAÇÕES E NOTIFICAÇÕES
-    Requer, inicialmente, que as futuras intimações, publicações e notificações sejam feitas em nome do advogado Michel Santos Felix, brasileiro, casado, advogado, inscrito na OAB/RJ sob o nº 231.640 e no CPF/MF nº 142.805.877-01, Luana de Oliveira Castro Pacheco, OAB/RJ 226.749, com escritório profissional sito na Av. Prefeito José de Amorim, 500, apto. 204, Jardim Meriti – São João de Meriti/RJ, CEP 25.555-201, com endereço eletrônico felixecastroadv@gmail.com, onde receberá intimações e notificações, sob pena de nulidade.
-
-    1.3. DO VALOR ESTIMADO DA CAUSA – ART. 12, § 2º DA IN 41 DO TST
-    Uma das mais polêmicas e controvertidas inovações oriundas da Lei 13.467 de 2017 se refere à indicação do valor do pedido, conforme estabelece o artigo 840, §1º, vejamos:
-    “Art. 840. (...) § 1º Sendo escrita, a reclamação deverá conter a designação do juízo, a qualificação das partes, a breve exposição dos fatos de que resulte o dissídio, o pedido, que deverá ser certo, determinado e com indicação de seu valor, a data e a assinatura da reclamante ou de seu representante.”
-    Tal dispositivo requer interpretação constitucionalmente adequada, no sentido de que a petição inicial deve apenas INDICAR uma estimativa de valores dos pedidos nela formulados, não limitando a condenação, tendo em vista que a apresentação de cálculos detalhados ocorrerá em momento próprio, quando houver a liquidação ou execução de sentença.
-    Elidindo quaisquer dúvidas sobre o tema, o C. TST expediu a Instrução Normativa 41/2018, que em seu artigo 12, § 2º determina o seguinte: “para fim do que dispõe o art. 840, §§ 1º e 2º, da CLT, o valor da causa será estimado, observando-se, no que couber, o disposto nos arts. 291 a 293 do Código de Processo Civil”.
-    Assim, a obrigação da parte se restringe a indicar o valor estimado da causa, fixado para fins de alçada e rito processual, não existindo qualquer exigência de liquidação prévia dos pedidos.
-    Ora, exigir que a parte Obreira, ressalta-se, hipossuficiente, proceda a liquidação de valores extremamente minuciosos e complexos como condição ao ajuizamento e admissão de sua reclamatória trabalhista significa restringir ou mesmo extinguir seu direito constitucional de ação e tutela jurisdicional, colidindo com o artigo 5º, inciso XXXV e artigo 7º, inciso XXIX, da CF/88.
-    Deste modo, requer sejam os valores dos pedidos da petição inicial considerados como mera ESTIMATIVA, indicados apenas para fins de alçada e rito processual, não limitando o valor a ser apurado futuramente em liquidação ou execução de sentença, nem se confundindo com o valor real buscado na presente demanda, resguardando-se a apresentação da liquidação em fase processual oportuna.
+    1.3. DO VALOR ESTIMADO DA CAUSA: Argumente que, conforme o Art. 840, §1º da CLT e a IN 41/2018 do TST (Art. 12, § 2º), os valores indicados na inicial são meras estimativas para fins de alçada e rito processual, não limitando a condenação futura em liquidação de sentença. Reforce que a exigência de liquidação prévia e exaustiva violaria o acesso à justiça (Art. 5º, XXXV da CF).
 - 2. DO CONTRATO DE TRABALHO: Admissão, Função, Salário, Demissão.
 - 3. DOS FATOS E DO DIREITO (A ESTRUTURA DE CADA TÓPICO):
     - OBRIGATÓRIO: Desenvolver um tópico EXCLUSIVO e longo para CADA verba ou direito violado que conste como DEVIDO na planilha de cálculos.
@@ -348,13 +338,11 @@ ESTRUTURA OBRIGATÓRIA PARA RECLAMAÇÃO TRABALHISTA:
         2º) O FUNDAMENTO LEGAL: Cite o dispositivo legal EXATO que garante o direito (Artigo, Inciso, Parágrafo, Alínea da CLT, Súmula do TST ou Constituição). Não invente leis.
         3º) A CONCLUSÃO E O VALOR: Finalize o tópico afirmando o direito ao recebimento e cravando o valor exato. Exemplo obrigatório: "Diante do exposto, o Reclamante faz jus ao valor total de R$ [VALOR EXATO DO CÁLCULO] referente a [NOME DA VERBA]."
 - 4. DA JUNTADA DE DOCUMENTOS (INSERIR ANTES DOS PEDIDOS):
-    Copie o texto base abaixo e adicione outros documentos específicos que a Reclamada tenha o dever de apresentar no caso concreto (especialmente aqueles que o reclamante não anexou, como PPRA/PCMSO para insalubridade, relatórios de rastreamento, etc):
-    "DA JUNTADA DE DOCUMENTOS:
-    Diante da impossibilidade da parte Autora em juntar toda a documentação pertinente requer, para tanto, digne-se Vossa Excelência, em determinar à Reclamada a juntada na primeira oportunidade, dos documentos abaixo, sob as sanções dos arts. 9º da Consolidação das Leis do Trabalho e art. 359 do Código de Processo Civil:
-    a) Comprovantes de Recolhimento da contribuição previdenciária e FGTS.
-    b) Folhas de ponto, contracheques.
-    c) Contrato de trabalho, termo de rescisão, ASO, Comprovante de entrega de EPI."
-    [A IA deve adicionar aqui as alíneas d), e)... com os documentos específicos do caso concreto que faltaram].
+    Fundamente o pedido de exibição de documentos pela Reclamada com base no Art. 9º da CLT e Art. 396 do CPC (ex-359). Requeira especificamente a juntada de:
+    a) Comprovantes de recolhimento de FGTS e INSS;
+    b) Controles de jornada (folhas de ponto) e recibos de pagamento (holerites);
+    c) Contrato de trabalho, TRCT, ASO e comprovantes de entrega de EPIs;
+    d) Documentos específicos do caso (ex: PPRA, PCMSO, relatórios de rastreamento, etc).
 - 5. DOS PEDIDOS E REQUERIMENTOS FINAIS: 
     - Listar TODAS as verbas com os VALORES LÍQUIDOS EXATOS extraídos da planilha de cálculos (Art. 840, §1º CLT).
     - Requerer notificação da Reclamada, produção de provas, honorários advocatícios de sucumbência (15%).
@@ -383,7 +371,8 @@ COMANDO DE EXECUÇÃO (FLUXO DE TRABALHO OBRIGATÓRIO):
 let currentKeyIndex = Math.floor(Math.random() * 10);
 
 const MODEL_HIERARCHY = [
-  "gemini-3.1-pro-preview",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-preview",
   "gemini-3-flash-preview"
 ];
 
@@ -407,7 +396,7 @@ function getApiKeys() {
   return uniqueKeys;
 }
 
-async function callGemini(params: any, retries = 20, modelIndex = 0, failuresOnCurrentModel = 0) {
+async function callGemini(params: any, retries = 30, modelIndex = 0, failuresOnCurrentModel = 0) {
   const keys = getApiKeys();
   if (keys.length === 0) throw new Error("Nenhuma chave de API encontrada. Configure API_KEY_1, API_KEY_2, etc. na Vercel.");
 
@@ -461,37 +450,42 @@ async function callGemini(params: any, retries = 20, modelIndex = 0, failuresOnC
     const errorMessage = error.message || errorStr;
     
     // Detect Error Types
-    const isOverloaded = errorMessage.includes('429') || errorMessage.includes('503') || errorMessage.includes('RESOURCE_EXHAUSTED');
+    const isOverloaded = errorMessage.includes('429') || errorMessage.includes('503') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('Quota exceeded');
     const isNotFound = errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('NOT_FOUND');
     const isEmpty = errorMessage.includes('EMPTY_RESPONSE');
+    const isInvalidKey = errorMessage.includes('API key not valid') || errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('400') || errorMessage.includes('API_KEY_INVALID');
     
-    if ((isOverloaded || isNotFound || isEmpty) && retries > 0) {
+    if ((isOverloaded || isNotFound || isEmpty || isInvalidKey) && retries > 0) {
       currentKeyIndex++; // Rotate key immediately
       
       let nextModelIndex = modelIndex;
       let nextFailures = failuresOnCurrentModel + 1;
-      let delay = 1000;
+      let delay = isInvalidKey ? 500 : 2000;
 
       if (isNotFound) {
          // 404: Switch model immediately
          nextModelIndex++;
          nextFailures = 0;
          delay = 500; // Small delay
-         console.log(`[Tentativa ${20 - retries}] Modelo ${currentModel} não encontrado (404). Trocando para ${MODEL_HIERARCHY[Math.min(nextModelIndex, MODEL_HIERARCHY.length - 1)]}...`);
+         console.log(`[Tentativa ${30 - retries}] Modelo ${currentModel} não encontrado (404). Trocando para ${MODEL_HIERARCHY[Math.min(nextModelIndex, MODEL_HIERARCHY.length - 1)]}...`);
       } else if (isEmpty) {
          delay = 1000;
-         console.log(`[Tentativa ${20 - retries}] Resposta vazia no modelo ${currentModel}. Tentando novamente...`);
+         console.log(`[Tentativa ${30 - retries}] Resposta vazia no modelo ${currentModel}. Tentando novamente...`);
       } else {
          // 429/503: Retry logic
-         delay = errorMessage.includes('503') ? 2000 : 1000;
+         delay = errorMessage.includes('503') ? 3000 : 2000;
          
-         // Switch model after 3 failures on the same model
-         if (nextFailures >= 3 && nextModelIndex < MODEL_HIERARCHY.length - 1) {
+         // Switch model faster on quota errors
+         if (errorMessage.includes('Quota exceeded') && nextModelIndex < MODEL_HIERARCHY.length - 1) {
              nextModelIndex++;
              nextFailures = 0;
-             console.log(`[Tentativa ${20 - retries}] Muitas falhas (${failuresOnCurrentModel}) no modelo ${currentModel}. Trocando para ${MODEL_HIERARCHY[nextModelIndex]}...`);
+             console.log(`[Tentativa ${30 - retries}] Cota esgotada no modelo ${currentModel}. Trocando para ${MODEL_HIERARCHY[nextModelIndex]}...`);
+         } else if (nextFailures >= 2 && nextModelIndex < MODEL_HIERARCHY.length - 1) {
+             nextModelIndex++;
+             nextFailures = 0;
+             console.log(`[Tentativa ${30 - retries}] Muitas falhas (${failuresOnCurrentModel}) no modelo ${currentModel}. Trocando para ${MODEL_HIERARCHY[nextModelIndex]}...`);
          } else {
-             console.log(`[Tentativa ${20 - retries}] Erro de Cota/Sobrecarga no modelo ${currentModel}. Rotacionando chave...`);
+             console.log(`[Tentativa ${30 - retries}] Erro de Cota/Sobrecarga no modelo ${currentModel}. Rotacionando chave...`);
          }
       }
       
@@ -501,7 +495,7 @@ async function callGemini(params: any, retries = 20, modelIndex = 0, failuresOnC
     
     // Critical Failure
     if (retries === 0) {
-      throw new Error(`FALHA CRÍTICA APÓS 20 TENTATIVAS.
+      throw new Error(`FALHA CRÍTICA APÓS 30 TENTATIVAS.
       Último modelo: ${currentModel}.
       Erro Original: ${errorMessage}.
       Chaves ativas: ${keys.length}.
@@ -511,7 +505,7 @@ async function callGemini(params: any, retries = 20, modelIndex = 0, failuresOnC
   }
 }
 
-async function callGeminiStream(params: any, retries = 20, modelIndex = 0, failuresOnCurrentModel = 0): Promise<any> {
+async function callGeminiStream(params: any, retries = 30, modelIndex = 0, failuresOnCurrentModel = 0): Promise<any> {
   const keys = getApiKeys();
   if (keys.length === 0) throw new Error("Nenhuma chave de API encontrada. Configure API_KEY_1, API_KEY_2, etc. na Vercel.");
 
@@ -535,29 +529,35 @@ async function callGeminiStream(params: any, retries = 20, modelIndex = 0, failu
     const errorStr = JSON.stringify(error, Object.getOwnPropertyNames(error));
     const errorMessage = error.message || errorStr;
     
-    const isOverloaded = errorMessage.includes('429') || errorMessage.includes('503') || errorMessage.includes('RESOURCE_EXHAUSTED');
+    const isOverloaded = errorMessage.includes('429') || errorMessage.includes('503') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('Quota exceeded');
     const isNotFound = errorMessage.includes('404') || errorMessage.includes('not found') || errorMessage.includes('NOT_FOUND');
+    const isInvalidKey = errorMessage.includes('API key not valid') || errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('400') || errorMessage.includes('API_KEY_INVALID');
     
-    if ((isOverloaded || isNotFound) && retries > 0) {
+    if ((isOverloaded || isNotFound || isInvalidKey) && retries > 0) {
       currentKeyIndex++;
       
       let nextModelIndex = modelIndex;
       let nextFailures = failuresOnCurrentModel + 1;
-      let delay = 1000;
+      let delay = isInvalidKey ? 500 : 2000;
 
       if (isNotFound) {
          nextModelIndex++;
          nextFailures = 0;
          delay = 500;
-         console.log(`[Stream Tentativa ${20 - retries}] Modelo ${currentModel} não encontrado (404). Trocando para ${MODEL_HIERARCHY[Math.min(nextModelIndex, MODEL_HIERARCHY.length - 1)]}...`);
+         console.log(`[Stream Tentativa ${30 - retries}] Modelo ${currentModel} não encontrado (404). Trocando para ${MODEL_HIERARCHY[Math.min(nextModelIndex, MODEL_HIERARCHY.length - 1)]}...`);
       } else {
-         delay = errorMessage.includes('503') ? 2000 : 1000;
-         if (nextFailures >= 3 && nextModelIndex < MODEL_HIERARCHY.length - 1) {
+         delay = errorMessage.includes('503') ? 3000 : 2000;
+         
+         if (errorMessage.includes('Quota exceeded') && nextModelIndex < MODEL_HIERARCHY.length - 1) {
              nextModelIndex++;
              nextFailures = 0;
-             console.log(`[Stream Tentativa ${20 - retries}] Muitas falhas no modelo ${currentModel}. Trocando para ${MODEL_HIERARCHY[nextModelIndex]}...`);
+             console.log(`[Stream Tentativa ${30 - retries}] Cota esgotada no modelo ${currentModel}. Trocando para ${MODEL_HIERARCHY[nextModelIndex]}...`);
+         } else if (nextFailures >= 2 && nextModelIndex < MODEL_HIERARCHY.length - 1) {
+             nextModelIndex++;
+             nextFailures = 0;
+             console.log(`[Stream Tentativa ${30 - retries}] Muitas falhas no modelo ${currentModel}. Trocando para ${MODEL_HIERARCHY[nextModelIndex]}...`);
          } else {
-             console.log(`[Stream Tentativa ${20 - retries}] Erro de Cota/Sobrecarga no modelo ${currentModel}. Rotacionando chave...`);
+             console.log(`[Stream Tentativa ${30 - retries}] Erro de Cota/Sobrecarga no modelo ${currentModel}. Rotacionando chave...`);
          }
       }
       
@@ -566,7 +566,7 @@ async function callGeminiStream(params: any, retries = 20, modelIndex = 0, failu
     }
     
     if (retries === 0) {
-      throw new Error(`FALHA CRÍTICA APÓS 20 TENTATIVAS. Último modelo: ${currentModel}. Erro: ${errorMessage}`);
+      throw new Error(`FALHA CRÍTICA APÓS 30 TENTATIVAS. Último modelo: ${currentModel}. Erro: ${errorMessage}`);
     }
     throw error;
   }
@@ -636,9 +636,10 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     2. ESTRUTURA DA LEI 14.331/2022 com alíneas a), b), c), d).
     3. PEDIDOS numerados com a), b), c)...
     4. NENHUM markdown (*, #).
-    5. CITAÇÃO COMPLETA: Cite o Artigo, mas EVITE REPRODUZIR longos trechos de lei ipsis litteris para não acionar filtros de recitação. Parafraseie quando possível.
-    6. FORMATAÇÃO: Use parágrafos de 4-5 linhas com espaçamento. NUNCA envie blocos de texto únicos.
-    7. SE O USUÁRIO PEDIR PARA "CONTINUAR": Retome a redação EXATAMENTE da última palavra que você escreveu na mensagem anterior, sem repetir nada e sem introduções.
+    5. CITAÇÃO COMPLETA: Cite o Artigo, mas EVITE REPRODUZIR longos trechos de lei ipsis litteris para não acionar filtros de recitação. Parafraseie quando possível. NUNCA use a frase "Uma das mais polêmicas e controvertidas inovações" ou blocos de texto idênticos a modelos de internet.
+    6. ANTI-RECITATION: Não repita longos trechos da mensagem do usuário ou de leis. Se o sistema interromper, mude a forma de escrever.
+    7. FORMATAÇÃO: Use parágrafos de 4-5 linhas com espaçamento. NUNCA envie blocos de texto únicos.
+    8. SE O USUÁRIO PEDIR PARA "CONTINUAR": Retome a redação EXATAMENTE da última palavra que você escreveu na mensagem anterior, sem repetir nada e sem introduções.
     Siga isso AGORA.
     `;
 
@@ -764,9 +765,10 @@ app.post("/api/dra-luana/chat", async (req, res) => {
     2. ESTRUTURA DA CLT e REFORMA TRABALHISTA.
     3. PEDIDOS numerados com a), b), c)... e com VALORES ESTIMADOS (Art. 840 CLT).
     4. NENHUM markdown (*, #).
-    5. CITAÇÃO COMPLETA: Cite o Artigo, mas EVITE REPRODUZIR longos trechos de lei ipsis litteris para não acionar filtros de recitação. Parafraseie quando possível.
-    6. FORMATAÇÃO: Use parágrafos de 4-5 linhas com espaçamento.
-    7. SE O USUÁRIO PEDIR PARA "CONTINUAR": Retome a redação EXATAMENTE da última palavra que você escreveu na mensagem anterior, sem repetir nada e sem introduções.
+    5. CITAÇÃO COMPLETA: Cite o Artigo, mas EVITE REPRODUZIR longos trechos de lei ipsis litteris para não acionar filtros de recitação. Parafraseie quando possível. NUNCA use a frase "Uma das mais polêmicas e controvertidas inovações" ou blocos de texto idênticos a modelos de internet.
+    6. ANTI-RECITATION: Não repita longos trechos da mensagem do usuário ou de leis. Se o sistema interromper, mude a forma de escrever.
+    7. FORMATAÇÃO: Use parágrafos de 4-5 linhas com espaçamento.
+    8. SE O USUÁRIO PEDIR PARA "CONTINUAR": Retome a redação EXATAMENTE da última palavra que você escreveu na mensagem anterior, sem repetir nada e sem introduções.
     Siga isso AGORA.
     `;
 
