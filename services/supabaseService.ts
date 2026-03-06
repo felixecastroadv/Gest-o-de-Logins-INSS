@@ -34,7 +34,7 @@ export const supabaseService = {
       .from('ai_conversations')
       .upsert({
         id: session.id,
-        ai_name: session.ai_name,
+        lawyer_type: session.ai_name,
         title: session.title,
         date: session.date,
         messages: session.messages
@@ -53,7 +53,7 @@ export const supabaseService = {
     const { data, error } = await supabase
       .from('ai_conversations')
       .select('*')
-      .eq('ai_name', aiName)
+      .eq('lawyer_type', aiName)
       .order('date', { ascending: false });
       
     if (error) {
