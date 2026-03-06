@@ -57,7 +57,10 @@ interface LaborData {
       type: 'segunda_sexta' | 'segunda_sabado' | '6x1' | '12x36' | '24x48' | 'outros';
       startTime: string; // HH:mm
       endTime: string; // HH:mm
+      breakStartTime: string; // HH:mm
+      breakEndTime: string; // HH:mm
       customDescription?: string;
+      customMonthlyDays?: number; // Para escalas personalizadas
   };
 
   // Adicionais
@@ -182,7 +185,10 @@ const INITIAL_LABOR_DATA: LaborData = {
       type: 'segunda_sexta',
       startTime: '08:00',
       endTime: '17:00',
-      customDescription: ''
+      breakStartTime: '12:00',
+      breakEndTime: '13:00',
+      customDescription: '',
+      customMonthlyDays: 22
   },
   insalubridadeLevel: 'nenhum',
   periculosidade: false,
@@ -1539,34 +1545,46 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       // Jornada Contratual
       if (dataToUse.contractualSchedule) {
           y += 6;
-          const { type, startTime, endTime, customDescription } = dataToUse.contractualSchedule;
+          const { type, startTime, endTime, breakStartTime, breakEndTime, customDescription } = dataToUse.contractualSchedule;
           let scheduleDesc = '';
           
-          if (type === 'outros') {
-              scheduleDesc = `Jornada: ${customDescription || 'Personalizada'}`;
-          } else {
-              const typeLabels: any = {
-                  'segunda_sexta': 'Segunda a Sexta',
-                  'segunda_sabado': 'Segunda a Sábado',
-                  '12x36': 'Escala 12x36',
-                  '24x48': 'Escala 24x48'
-              };
-              
-              // Calculate monthly estimate for report
-              let days = 0;
-              let hours = 0;
-              const [h1, m1] = (startTime || '08:00').split(':').map(Number);
-              const [h2, m2] = (endTime || '17:00').split(':').map(Number);
-              let dailyHours = (h2 + m2/60) - (h1 + m1/60);
-              if (dailyHours < 0) dailyHours += 24;
+          const typeLabels: any = {
+              'segunda_sexta': 'Segunda a Sexta',
+              'segunda_sabado': 'Segunda a Sábado',
+              '12x36': 'Escala 12x36',
+              '24x48': 'Escala 24x48',
+              'outros': 'Personalizada'
+          };
+          
+          // Calculate monthly estimate for report
+          let days = 0;
+          let hours = 0;
+          const [h1, m1] = (startTime || '08:00').split(':').map(Number);
+          const [h2, m2] = (endTime || '17:00').split(':').map(Number);
+          let dailyHours = (h2 + m2/60) - (h1 + m1/60);
+          if (dailyHours < 0) dailyHours += 24;
 
-              if (type === 'segunda_sexta') { days = 22; hours = dailyHours * days; }
-              else if (type === 'segunda_sabado') { days = 26; hours = dailyHours * days; }
-              else if (type === '12x36') { days = 15; hours = 12 * 15; }
-              else if (type === '24x48') { days = 10; hours = 24 * 10; }
-
-              scheduleDesc = `Jornada: ${typeLabels[type]} (${startTime} às ${endTime}) - Est. Mensal: ~${days} dias / ~${hours.toFixed(0)}h`;
+          // Subtract break if defined
+          let breakInfo = '';
+          if (breakStartTime && breakEndTime) {
+              const [bh1, bm1] = breakStartTime.split(':').map(Number);
+              const [bh2, bm2] = breakEndTime.split(':').map(Number);
+              let breakDuration = (bh2 + bm2/60) - (bh1 + bm1/60);
+              if (breakDuration < 0) breakDuration += 24;
+              dailyHours -= breakDuration;
+              breakInfo = ` (Int: ${breakStartTime}-${breakEndTime})`;
           }
+
+          if (type === 'segunda_sexta') { days = 22; hours = dailyHours * days; }
+          else if (type === 'segunda_sabado') { days = 26; hours = dailyHours * days; }
+          else if (type === '12x36') { days = 15; hours = dailyHours * 15; }
+          else if (type === '24x48') { days = 10; hours = dailyHours * 10; }
+          else if (type === 'outros') { days = 22; hours = dailyHours * days; }
+
+          let label = typeLabels[type] || type;
+          if (type === 'outros' && customDescription) label += ` (${customDescription})`;
+
+          scheduleDesc = `Jornada: ${label} (${startTime} às ${endTime}${breakInfo}) - Est. Mensal: ~${days} dias / ~${hours.toFixed(1)}h`;
           
           doc.text(scheduleDesc, margin, y);
       }
@@ -1855,115 +1873,211 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                               Jornada de Trabalho Prevista (Contratual)
                           </h3>
                           
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                              <div>
-                                  <label className={STYLES.LABEL_TEXT}>Tipo de Escala</label>
-                                  <select
-                                      value={data.contractualSchedule?.type || 'segunda_sexta'}
-                                      onChange={(e) => setData(prev => ({
-                                          ...prev,
-                                          contractualSchedule: {
-                                              ...(prev.contractualSchedule || { startTime: '08:00', endTime: '17:00' }),
-                                              type: e.target.value as any
-                                          }
-                                      }))}
-                                      className={STYLES.INPUT_FIELD}
-                                  >
-                                      <option value="segunda_sexta">Segunda a Sexta (5x2)</option>
-                                      <option value="segunda_sabado">Segunda a Sábado (6x1)</option>
-                                      <option value="12x36">Plantão 12x36</option>
-                                      <option value="24x48">Plantão 24x48</option>
-                                      <option value="outros">Outros / Personalizado</option>
-                                  </select>
-                              </div>
-
-                              {data.contractualSchedule?.type === 'outros' && (
-                                  <div className="md:col-span-3 lg:col-span-3">
-                                      <label className={STYLES.LABEL_TEXT}>Descrição da Jornada</label>
-                                      <input
-                                          type="text"
-                                          value={data.contractualSchedule?.customDescription || ''}
+                          <div className="flex flex-col gap-4">
+                              {/* Linha 1: Tipo de Escala e Descrição */}
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  <div className={data.contractualSchedule?.type === 'outros' ? "md:col-span-1" : "md:col-span-1"}>
+                                      <label className={STYLES.LABEL_TEXT}>Tipo de Escala</label>
+                                      <select
+                                          value={data.contractualSchedule?.type || 'segunda_sexta'}
                                           onChange={(e) => setData(prev => ({
                                               ...prev,
-                                              contractualSchedule: { ...prev.contractualSchedule!, customDescription: e.target.value }
+                                              contractualSchedule: {
+                                                  ...(prev.contractualSchedule || { startTime: '08:00', endTime: '17:00' }),
+                                                  type: e.target.value as any
+                                              }
                                           }))}
-                                          placeholder="Ex: Escala 5x1 com folgas rotativas..."
+                                          className={STYLES.INPUT_FIELD}
+                                      >
+                                          <option value="segunda_sexta">Segunda a Sexta (5x2)</option>
+                                          <option value="segunda_sabado">Segunda a Sábado (6x1)</option>
+                                          <option value="12x36">Plantão 12x36</option>
+                                          <option value="24x48">Plantão 24x48</option>
+                                          <option value="outros">Outros / Personalizado</option>
+                                      </select>
+                                  </div>
+
+                                  {data.contractualSchedule?.type === 'outros' && (
+                                      <div className="md:col-span-2">
+                                          <label className={STYLES.LABEL_TEXT}>Descrição da Jornada</label>
+                                          <input
+                                              type="text"
+                                              value={data.contractualSchedule?.customDescription || ''}
+                                              onChange={(e) => {
+                                                  const val = e.target.value;
+                                                  let days = data.contractualSchedule?.customMonthlyDays || 22;
+                                                  
+                                                  // Try to parse "AxB" pattern (e.g., 12x36, 5x2)
+                                                  const match = val.match(/(\d+)[xX](\d+)/);
+                                                  if (match) {
+                                                      const n1 = parseInt(match[1]);
+                                                      const n2 = parseInt(match[2]);
+                                                      if (!isNaN(n1) && !isNaN(n2)) {
+                                                          if (n1 + n2 > 0) {
+                                                              // If sum > 10, assume hours (e.g. 12x36). Total hours in month = 720.
+                                                              // Cycles = 720 / (n1 + n2). Work days = Cycles * (n1/24... wait, usually 1 shift per cycle).
+                                                              // Let's use simple cycle count for shifts.
+                                                              if (n1 + n2 > 10) {
+                                                                  days = 720 / (n1 + n2);
+                                                              } else {
+                                                                  // Assume days (e.g. 5x2). 30 days / (5+2) * 5.
+                                                                  days = (30 / (n1 + n2)) * n1;
+                                                              }
+                                                          }
+                                                      }
+                                                  }
+                                                  
+                                                  setData(prev => ({
+                                                      ...prev,
+                                                      contractualSchedule: { 
+                                                          ...prev.contractualSchedule!, 
+                                                          customDescription: val,
+                                                          customMonthlyDays: Number(days.toFixed(1))
+                                                      }
+                                                  }))
+                                              }}
+                                              placeholder="Ex: Escala 5x1, 12x36..."
+                                              className={STYLES.INPUT_FIELD}
+                                          />
+                                      </div>
+                                  )}
+                              </div>
+
+                              {/* Linha 2: Horários (Entrada -> Intervalo -> Saída) */}
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                  <div>
+                                      <label className={STYLES.LABEL_TEXT}>Entrada</label>
+                                      <input
+                                          type="time"
+                                          value={data.contractualSchedule?.startTime || '08:00'}
+                                          onChange={(e) => setData(prev => ({
+                                              ...prev,
+                                              contractualSchedule: { ...prev.contractualSchedule!, startTime: e.target.value }
+                                          }))}
                                           className={STYLES.INPUT_FIELD}
                                       />
                                   </div>
-                              )}
+                                  
+                                  <div>
+                                      <label className={STYLES.LABEL_TEXT}>Início Intervalo</label>
+                                      <input
+                                          type="time"
+                                          value={data.contractualSchedule?.breakStartTime || ''}
+                                          onChange={(e) => setData(prev => ({
+                                              ...prev,
+                                              contractualSchedule: { ...prev.contractualSchedule!, breakStartTime: e.target.value }
+                                          }))}
+                                          className={STYLES.INPUT_FIELD}
+                                      />
+                                  </div>
 
-                              {data.contractualSchedule?.type !== 'outros' && (
-                                  <>
-                                      <div>
-                                          <label className={STYLES.LABEL_TEXT}>Entrada</label>
+                                  <div>
+                                      <label className={STYLES.LABEL_TEXT}>Fim Intervalo</label>
+                                      <input
+                                          type="time"
+                                          value={data.contractualSchedule?.breakEndTime || ''}
+                                          onChange={(e) => setData(prev => ({
+                                              ...prev,
+                                              contractualSchedule: { ...prev.contractualSchedule!, breakEndTime: e.target.value }
+                                          }))}
+                                          className={STYLES.INPUT_FIELD}
+                                      />
+                                  </div>
+
+                                  <div>
+                                      <label className={STYLES.LABEL_TEXT}>Saída</label>
+                                      <input
+                                          type="time"
+                                          value={data.contractualSchedule?.endTime || '17:00'}
+                                          onChange={(e) => setData(prev => ({
+                                              ...prev,
+                                              contractualSchedule: { ...prev.contractualSchedule!, endTime: e.target.value }
+                                          }))}
+                                          className={STYLES.INPUT_FIELD}
+                                      />
+                                  </div>
+                              </div>
+                              
+                              {/* Linha 3: Estimativa (Full Width) */}
+                              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-4">
+                                  <div className="flex flex-col flex-1">
+                                      <span className="text-xs uppercase font-bold text-slate-400 mb-1">Estimativa Mensal (Contratual)</span>
+                                      <span className="text-xs text-slate-500">Baseada na escala e horários informados</span>
+                                  </div>
+                                  
+                                  {data.contractualSchedule?.type === 'outros' && (
+                                      <div className="flex flex-col w-32">
+                                          <label className="text-[10px] uppercase font-bold text-slate-400 mb-1">Dias / Mês</label>
                                           <input
-                                              type="time"
-                                              value={data.contractualSchedule?.startTime || '08:00'}
+                                              type="number"
+                                              value={data.contractualSchedule?.customMonthlyDays || 22}
                                               onChange={(e) => setData(prev => ({
                                                   ...prev,
-                                                  contractualSchedule: { ...prev.contractualSchedule!, startTime: e.target.value }
+                                                  contractualSchedule: { ...prev.contractualSchedule!, customMonthlyDays: Number(e.target.value) }
                                               }))}
-                                              className={STYLES.INPUT_FIELD}
+                                              className={`${STYLES.INPUT_FIELD} text-right font-bold`}
                                           />
                                       </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TEXT}>Saída</label>
-                                          <input
-                                              type="time"
-                                              value={data.contractualSchedule?.endTime || '17:00'}
-                                              onChange={(e) => setData(prev => ({
-                                                  ...prev,
-                                                  contractualSchedule: { ...prev.contractualSchedule!, endTime: e.target.value }
-                                              }))}
-                                              className={STYLES.INPUT_FIELD}
-                                          />
-                                      </div>
+                                  )}
+                                  
+                                  {(() => {
+                                      const type = data.contractualSchedule?.type || 'segunda_sexta';
+                                      const start = data.contractualSchedule?.startTime || '08:00';
+                                      const end = data.contractualSchedule?.endTime || '17:00';
+                                      const breakStart = data.contractualSchedule?.breakStartTime;
+                                      const breakEnd = data.contractualSchedule?.breakEndTime;
+                                      const customDays = data.contractualSchedule?.customMonthlyDays || 22;
                                       
-                                      {/* Display Calculated Info */}
-                                      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col justify-center">
-                                          <span className="text-[10px] uppercase font-bold text-slate-400 mb-1">Estimativa Mensal (Contratual)</span>
-                                          {(() => {
-                                              const type = data.contractualSchedule?.type || 'segunda_sexta';
-                                              const start = data.contractualSchedule?.startTime || '08:00';
-                                              const end = data.contractualSchedule?.endTime || '17:00';
-                                              
-                                              let days = 0;
-                                              let hours = 0;
-                                              
-                                              const [h1, m1] = start.split(':').map(Number);
-                                              const [h2, m2] = end.split(':').map(Number);
-                                              let dailyHours = (h2 + m2/60) - (h1 + m1/60);
-                                              if (dailyHours < 0) dailyHours += 24;
-                                              
-                                              if (type === 'segunda_sexta') {
-                                                  days = 22; // Avg
-                                                  hours = dailyHours * days;
-                                              } else if (type === 'segunda_sabado') {
-                                                  days = 26; // Avg
-                                                  hours = dailyHours * days; 
-                                              } else if (type === '12x36') {
-                                                  days = 15;
-                                                  hours = 12 * 15; 
-                                              } else if (type === '24x48') {
-                                                  days = 10;
-                                                  hours = 24 * 10;
-                                              }
-                                              
-                                              return (
-                                                  <div className="flex flex-col">
-                                                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
-                                                          ~{days} dias / mês
-                                                      </span>
-                                                      <span className="text-xs text-slate-500">
-                                                          ~{hours.toFixed(0)} horas / mês
-                                                      </span>
-                                                  </div>
-                                              );
-                                          })()}
-                                      </div>
-                                  </>
-                              )}
+                                      let days = 0;
+                                      let hours = 0;
+                                      
+                                      const [h1, m1] = start.split(':').map(Number);
+                                      const [h2, m2] = end.split(':').map(Number);
+                                      let dailyHours = (h2 + m2/60) - (h1 + m1/60);
+                                      if (dailyHours < 0) dailyHours += 24;
+                                      
+                                      // Subtract break if defined
+                                      let hasBreak = false;
+                                      if (breakStart && breakEnd) {
+                                          const [bh1, bm1] = breakStart.split(':').map(Number);
+                                          const [bh2, bm2] = breakEnd.split(':').map(Number);
+                                          let breakDuration = (bh2 + bm2/60) - (bh1 + bm1/60);
+                                          if (breakDuration < 0) breakDuration += 24;
+                                          dailyHours -= breakDuration;
+                                          hasBreak = true;
+                                      }
+                                      
+                                      if (type === 'segunda_sexta') {
+                                          days = 22; // Avg
+                                          hours = dailyHours * days;
+                                      } else if (type === 'segunda_sabado') {
+                                          days = 26; // Avg
+                                          hours = dailyHours * days; 
+                                      } else if (type === '12x36') {
+                                          days = 15;
+                                          hours = dailyHours * 15; 
+                                      } else if (type === '24x48') {
+                                          days = 10;
+                                          hours = dailyHours * 10;
+                                      } else if (type === 'outros') {
+                                          days = customDays;
+                                          hours = dailyHours * days;
+                                      }
+                                      
+                                      return (
+                                          <div className="text-right min-w-[120px]">
+                                              <div className="text-lg font-bold text-slate-700 dark:text-slate-300">
+                                                  ~{days} dias / {hours.toFixed(1)}h
+                                              </div>
+                                              {hasBreak && (
+                                                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium block">
+                                                      (Intervalo descontado)
+                                                  </span>
+                                              )}
+                                          </div>
+                                      );
+                                  })()}
+                              </div>
                           </div>
                       </div>
 
