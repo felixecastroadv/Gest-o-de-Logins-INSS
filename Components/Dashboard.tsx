@@ -11,7 +11,16 @@ import { DashboardProps, ClientRecord, ContractRecord, NotificationItem } from '
 import { INITIAL_DATA, INITIAL_CONTRACTS_LIST } from '../data';
 import LaborCalc, { CalculationRecord } from '../LaborCalc';
 import SocialSecurityCalc, { SocialSecurityData } from '../SocialSecurityCalc';
+
+export interface SocialSecurityCalculationRecord {
+    id: string;
+    date: string;
+    clientName: string;
+    data: SocialSecurityData;
+}
+
 import { initSupabase } from '../supabaseClient';
+import { supabaseService } from '../services/supabaseService';
 import { isUrgentDate, formatCurrency } from '../utils';
 import StatsCards from './StatsCards';
 import FinancialStats from './FinancialStats';
@@ -41,7 +50,9 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [records, setRecords] = useState<ClientRecord[]>([]);
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [savedCalculations, setSavedCalculations] = useState<CalculationRecord[]>([]);
-  const [savedSocialCalculations, setSavedSocialCalculations] = useState<SocialSecurityData[]>([]);
+  const [savedSocialCalculations, setSavedSocialCalculations] = useState<SocialSecurityCalculationRecord[]>([]);
+  const [drMichelSessions, setDrMichelSessions] = useState<any[]>([]);
+  const [draLuanaSessions, setDraLuanaSessions] = useState<any[]>([]);
   
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -73,7 +84,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         let fetchedClients = INITIAL_DATA;
         let fetchedContracts = INITIAL_CONTRACTS_LIST;
         let fetchedCalculations: CalculationRecord[] = [];
-        let fetchedSocialCalculations: SocialSecurityData[] = [];
+        let fetchedSocialCalculations: SocialSecurityCalculationRecord[] = [];
+        let fetchedDrMichelSessions: any[] = [];
+        let fetchedDraLuanaSessions: any[] = [];
 
         if (supabase) {
             // Cloud Fetch - Clients (ID 1)
@@ -102,33 +115,17 @@ const Dashboard: React.FC<DashboardProps> = ({
                  await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS_LIST });
             }
 
-            // Cloud Fetch - Calculations (ID 3)
-            const { data: calcData, error: calcError } = await supabase
-                .from('clients')
-                .select('data')
-                .eq('id', 3)
-                .single();
+            // New Fetch Logic using dedicated tables
+            fetchedCalculations = await supabaseService.getLaborCalculations();
+            fetchedSocialCalculations = await supabaseService.getCalculations();
+            fetchedDrMichelSessions = await supabaseService.getAIConversations('michel');
+            fetchedDraLuanaSessions = await supabaseService.getAIConversations('luana');
 
-            if (calcData && calcData.data) {
-                fetchedCalculations = calcData.data;
-                localStorage.setItem('inss_calculations', JSON.stringify(calcData.data));
-            } else if (calcError && calcError.code === 'PGRST116') {
-                 await supabase.from('clients').upsert({ id: 3, data: [] });
-            }
-
-            // Cloud Fetch - Social Security Calculations (ID 4)
-            const { data: socialCalcData, error: socialCalcError } = await supabase
-                .from('clients')
-                .select('data')
-                .eq('id', 4)
-                .single();
-
-            if (socialCalcData && socialCalcData.data) {
-                fetchedSocialCalculations = socialCalcData.data;
-                localStorage.setItem('inss_social_calculations', JSON.stringify(socialCalcData.data));
-            } else if (socialCalcError && socialCalcError.code === 'PGRST116') {
-                 await supabase.from('clients').upsert({ id: 4, data: [] });
-            }
+            // Update local storage for cache
+            localStorage.setItem('inss_calculations', JSON.stringify(fetchedCalculations));
+            localStorage.setItem('social_security_calculations', JSON.stringify(fetchedSocialCalculations));
+            localStorage.setItem('dr_michel_sessions', JSON.stringify(fetchedDrMichelSessions));
+            localStorage.setItem('dra_luana_sessions', JSON.stringify(fetchedDraLuanaSessions));
 
         } else {
              // Local Fallback
@@ -141,14 +138,22 @@ const Dashboard: React.FC<DashboardProps> = ({
              const localCalculations = localStorage.getItem('inss_calculations');
              if (localCalculations) fetchedCalculations = JSON.parse(localCalculations);
 
-             const localSocialCalculations = localStorage.getItem('inss_social_calculations');
+             const localSocialCalculations = localStorage.getItem('social_security_calculations');
              if (localSocialCalculations) fetchedSocialCalculations = JSON.parse(localSocialCalculations);
+
+             const localMichel = localStorage.getItem('dr_michel_sessions');
+             if (localMichel) fetchedDrMichelSessions = JSON.parse(localMichel);
+
+             const localLuana = localStorage.getItem('dra_luana_sessions');
+             if (localLuana) fetchedDraLuanaSessions = JSON.parse(localLuana);
         }
 
         setRecords(fetchedClients);
         setContracts(fetchedContracts);
         setSavedCalculations(fetchedCalculations);
         setSavedSocialCalculations(fetchedSocialCalculations);
+        setDrMichelSessions(fetchedDrMichelSessions);
+        setDraLuanaSessions(fetchedDraLuanaSessions);
 
     } catch (e) {
         console.error("Erro geral", e);
@@ -180,12 +185,24 @@ const Dashboard: React.FC<DashboardProps> = ({
                          } else if (payload.new.id === 2) {
                              setContracts(payload.new.data);
                              localStorage.setItem('inss_contracts', JSON.stringify(payload.new.data));
-                         } else if (payload.new.id === 3) {
-                             setSavedCalculations(payload.new.data);
-                             localStorage.setItem('inss_calculations', JSON.stringify(payload.new.data));
                          }
                      }
                 }
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'ai_conversations' },
+                () => fetchData()
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'social_security_calculations' },
+                () => fetchData()
+            )
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'labor_calculations' },
+                () => fetchData()
             )
             .subscribe();
 
@@ -221,7 +238,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [records]);
 
   // Save Logic (Generic)
-  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations', newData: any[]) => {
+  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana', newData: any[]) => {
       setIsSyncing(true);
       setSaveError(null);
       const supabase = initSupabase();
@@ -250,9 +267,23 @@ const Dashboard: React.FC<DashboardProps> = ({
               }
           } else if (type === 'social_calculations') {
               setSavedSocialCalculations(newData);
-              localStorage.setItem('inss_social_calculations', JSON.stringify(newData));
+              localStorage.setItem('social_security_calculations', JSON.stringify(newData));
               if (supabase) {
                   const { error } = await supabase.from('clients').upsert({ id: 4, data: newData });
+                  if (error) throw error;
+              }
+          } else if (type === 'dr_michel') {
+              setDrMichelSessions(newData);
+              localStorage.setItem('dr_michel_sessions', JSON.stringify(newData));
+              if (supabase) {
+                  const { error } = await supabase.from('clients').upsert({ id: 5, data: newData });
+                  if (error) throw error;
+              }
+          } else if (type === 'dra_luana') {
+              setDraLuanaSessions(newData);
+              localStorage.setItem('dra_luana_sessions', JSON.stringify(newData));
+              if (supabase) {
+                  const { error } = await supabase.from('clients').upsert({ id: 6, data: newData });
                   if (error) throw error;
               }
           }
@@ -345,28 +376,59 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
   }
 
-  // Handlers for Calculations
-  const handleSaveCalculation = (calc: CalculationRecord) => {
-      const exists = savedCalculations.find(c => c.id === calc.id);
-      let updated;
-      if (exists) {
-          updated = savedCalculations.map(c => c.id === calc.id ? calc : c);
-      } else {
-          updated = [calc, ...savedCalculations];
+  const handleSaveCalculation = async (calc: CalculationRecord) => {
+      try {
+          await supabaseService.saveLaborCalculation(calc);
+          const updated = await supabaseService.getLaborCalculations();
+          setSavedCalculations(updated);
+          localStorage.setItem('inss_calculations', JSON.stringify(updated));
+      } catch (error) {
+          console.error("Error saving labor calculation:", error);
       }
-      saveData('calculations', updated);
   };
 
-  const handleDeleteCalculation = (id: string) => {
+  const handleDeleteCalculation = async (id: string) => {
       if (confirm('Excluir este cálculo salvo?')) {
-          saveData('calculations', savedCalculations.filter(c => c.id !== id));
+          try {
+              await supabaseService.deleteLaborCalculation(id);
+              const updated = savedCalculations.filter(c => c.id !== id);
+              setSavedCalculations(updated);
+              localStorage.setItem('inss_calculations', JSON.stringify(updated));
+          } catch (error) {
+              console.error("Error deleting labor calculation:", error);
+          }
       }
   };
 
-  const handleSaveSocialCalculation = (data: SocialSecurityData) => {
-      const updated = [data, ...savedSocialCalculations];
-      saveData('social_calculations', updated);
-      alert('Cálculo Previdenciário salvo com sucesso!');
+  const handleSaveSocialCalculation = async (data: SocialSecurityData) => {
+      const newCalc = {
+          id: new Date().getTime().toString(),
+          date: new Date().toISOString(),
+          clientName: data.clientName,
+          data: data
+      };
+      
+      try {
+          await supabaseService.saveCalculation(newCalc);
+          const updated = [newCalc, ...savedSocialCalculations];
+          setSavedSocialCalculations(updated);
+          localStorage.setItem('social_security_calculations', JSON.stringify(updated));
+          alert('Cálculo Previdenciário salvo com sucesso no banco de dados!');
+      } catch (error) {
+          console.error("Error saving social calculation:", error);
+          alert('Erro ao salvar cálculo no banco de dados.');
+      }
+  };
+
+  const handleSaveDrMichelSessions = async (sessions: any[]) => {
+      // Since DrMichelFelix now handles its own sync, this is mostly for local state sync
+      setDrMichelSessions(sessions);
+      localStorage.setItem('dr_michel_sessions', JSON.stringify(sessions));
+  };
+
+  const handleSaveDraLuanaSessions = async (sessions: any[]) => {
+      setDraLuanaSessions(sessions);
+      localStorage.setItem('dra_luana_sessions', JSON.stringify(sessions));
   };
 
   // Sorting and Filtering Logic
@@ -618,9 +680,15 @@ const Dashboard: React.FC<DashboardProps> = ({
              
              {/* CONTENT SWITCHER */}
              {currentView === 'dr_michel' ? (
-                 <DrMichelFelix />
+                 <DrMichelFelix 
+                    initialSessions={drMichelSessions} 
+                    onSaveSessions={handleSaveDrMichelSessions} 
+                  />
              ) : currentView === 'dra_luana' ? (
-                 <DraLuanaCastro />
+                 <DraLuanaCastro 
+                    initialSessions={draLuanaSessions} 
+                    onSaveSessions={handleSaveDraLuanaSessions} 
+                  />
              ) : currentView === 'labor_calc' ? (
                  <LaborCalc 
                     clients={records} 
@@ -632,7 +700,12 @@ const Dashboard: React.FC<DashboardProps> = ({
              ) : currentView === 'social_calc' ? (
                  <SocialSecurityCalc 
                     clients={records}
+                    savedCalculations={savedSocialCalculations}
                     onSaveCalculation={handleSaveSocialCalculation}
+                    onUpdateCalculations={(list) => {
+                        setSavedSocialCalculations(list);
+                        localStorage.setItem('social_security_calculations', JSON.stringify(list));
+                    }}
                  />
              ) : currentView === 'clients' ? (
                  <>
