@@ -60,12 +60,14 @@ const SettingsModal = ({ isOpen, onClose, onSave, onRestoreBackup }: { isOpen: b
                     </div>
                 </div>
 
-                {isEnvManaged ? (
+                {url && key ? (
                     <div className="mb-4 bg-green-50 dark:bg-green-900/20 p-4 rounded-lg border border-green-200 dark:border-green-800 flex items-start gap-3">
                         <CheckIcon className="h-5 w-5 text-green-600 mt-0.5 flex-shrink-0" />
                         <div>
-                            <p className="text-sm font-bold text-green-700 dark:text-green-300">Conexão Automática Ativa!</p>
-                            <p className="text-xs text-green-600 dark:text-green-400 mt-1">O sistema já está configurado para acessar a nuvem.</p>
+                            <p className="text-sm font-bold text-green-700 dark:text-green-300">Conectado à Nuvem!</p>
+                            <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                {isEnvManaged ? "Configuração automática ativa." : "Conexão manual estabelecida."}
+                            </p>
                         </div>
                     </div>
                 ) : (
