@@ -507,6 +507,18 @@ export const checkInsuredQuality = (bonds: CNISBond[], der: string): { hasQualit
 };
 
 export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<string, number>, ibgeTable?: IBGELifeExpectancy[]): SimulationResult => {
+    if (!data || !data.bonds) {
+        return {
+            totalTime: { years: 0, months: 0, days: 0, totalDays: 0 },
+            totalCarencia: 0,
+            age: { years: 0, months: 0, days: 0 },
+            points: 0,
+            gender: data?.gender || 'M',
+            isTeacher: data?.isTeacher || false,
+            isPcd: data?.isPcd || false,
+            benefits: []
+        };
+    }
     const der = data.der || new Date().toISOString().split('T')[0];
     const timeTotal = calculateTimeForPeriod(data.bonds, der, data.gender);
     const age = calculateAge(data.birthDate, der);
