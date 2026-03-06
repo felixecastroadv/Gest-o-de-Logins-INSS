@@ -23,6 +23,7 @@ import { CheckIcon as Check } from '@heroicons/react/24/solid';
 import { SocialSecurityData } from '../SocialSecurityCalc';
 import { initSupabase } from '../supabaseClient';
 import { extractTextFromPDF } from '../src/utils/pdfParser';
+import { supabaseService } from '../services/supabaseService';
 
 interface Message {
   id: string;
@@ -40,10 +41,12 @@ interface ChatSession {
 }
 
 interface DrMichelFelixProps {
+  initialSessions?: ChatSession[];
+  onSaveSessions?: (sessions: ChatSession[]) => void;
 }
 
-const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
-  const [sessions, setSessions] = useState<ChatSession[]>([]);
+const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSessions }) => {
+  const [sessions, setSessions] = useState<ChatSession[]>(initialSessions || []);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -62,43 +65,80 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
   const currentSession = sessions.find(s => s.id === currentSessionId);
 
   useEffect(() => {
-    const saved = localStorage.getItem('dr_michel_sessions');
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      setSessions(parsed);
-      if (parsed.length > 0) setCurrentSessionId(parsed[0].id);
-    }
+    const loadFromSupabase = async () => {
+      try {
+        const dbSessions = await supabaseService.getAIConversations('michel');
+        if (dbSessions && dbSessions.length > 0) {
+          const formattedSessions = dbSessions.map(s => ({
+            id: s.id,
+            title: s.title,
+            date: s.date,
+            messages: s.messages
+          }));
+          setSessions(formattedSessions);
+          if (!currentSessionId) {
+            setCurrentSessionId(formattedSessions[0].id);
+          }
+        } else {
+          // Fallback to local if DB is empty (first time or error)
+          const localSaved = localStorage.getItem('dr_michel_sessions');
+          if (localSaved) {
+            const parsed = JSON.parse(localSaved);
+            setSessions(parsed);
+            if (!currentSessionId && parsed.length > 0) {
+              setCurrentSessionId(parsed[0].id);
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Error loading from Supabase:", error);
+      }
+    };
+    
+    loadFromSupabase();
   }, []);
 
   useEffect(() => {
-    if (sessions.length > 0) {
+    // Removed the check if (sessions.length > 0) to allow saving empty sessions (deletion of all conversations)
+    if (true) {
       try {
-        // Sanitize sessions to prevent QuotaExceededError (localStorage 5MB limit)
-        const sessionsToSave = sessions.map(session => ({
-          ...session,
-          messages: session.messages.map(msg => {
-            if (msg.role === 'user' && msg.content.length > 2000 && msg.content.includes('--- CONTEÚDO DO ARQUIVO:')) {
-              return {
-                ...msg,
-                content: msg.content.substring(0, 500) + '\n\n[... Conteúdo do documento não salvo no histórico local para economizar espaço ...]'
-              };
-            }
-            return msg;
-          })
-        }));
-        localStorage.setItem('dr_michel_sessions', JSON.stringify(sessionsToSave));
-      } catch (error) {
-        console.warn("Failed to save sessions to localStorage:", error);
-        try {
-           // Fallback: keep only the most recent session
-           const recentSessions = sessions.slice(0, 1);
-           localStorage.setItem('dr_michel_sessions', JSON.stringify(recentSessions));
-        } catch (e) {
-           console.error("Storage completely full.");
+        const localSaved = localStorage.getItem('dr_michel_sessions');
+        const currentStr = JSON.stringify(sessions);
+
+        if (localSaved !== currentStr) {
+          // Sanitize sessions to prevent QuotaExceededError (localStorage 5MB limit)
+          const sessionsToSave = sessions.map(session => ({
+            ...session,
+            messages: session.messages.map(msg => {
+              if (msg.role === 'user' && msg.content.length > 2000 && msg.content.includes('--- CONTEÚDO DO ARQUIVO:')) {
+                return {
+                  ...msg,
+                  content: msg.content.substring(0, 500) + '\n\n[... Conteúdo do documento não salvo no histórico local para economizar espaço ...]'
+                };
+              }
+              return msg;
+            })
+          }));
+          
+          if (onSaveSessions) {
+            onSaveSessions(sessionsToSave);
+          } else {
+            localStorage.setItem('dr_michel_sessions', JSON.stringify(sessionsToSave));
+          }
+
+          // Sync with Supabase - only the current session if it changed
+          if (currentSession) {
+            supabaseService.saveAIConversation({
+              ...currentSession,
+              ai_name: 'michel'
+            }).catch(err => console.error("Error syncing with Supabase:", err));
+          }
         }
+      } catch (error) {
+        console.warn("Failed to save sessions:", error);
       }
     }
-  }, [sessions]);
+  }, [sessions, onSaveSessions, currentSession]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -166,13 +206,19 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = () => {
     });
   };
 
-  const deleteSession = (id: string, e: React.MouseEvent) => {
+  const deleteSession = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirm('Deseja excluir esta conversa?')) {
-      const updated = sessions.filter(s => s.id !== id);
-      setSessions(updated);
-      if (currentSessionId === id) {
-        setCurrentSessionId(updated.length > 0 ? updated[0].id : null);
+      try {
+        await supabaseService.deleteAIConversation(id);
+        const updated = sessions.filter(s => s.id !== id);
+        setSessions(updated);
+        if (currentSessionId === id) {
+          setCurrentSessionId(updated.length > 0 ? updated[0].id : null);
+        }
+      } catch (error) {
+        console.error("Error deleting session from Supabase:", error);
+        alert("Erro ao excluir conversa do banco de dados.");
       }
     }
   };
