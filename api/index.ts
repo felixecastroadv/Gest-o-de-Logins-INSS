@@ -294,8 +294,13 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - NUMERAÇÃO: Tópicos (I., II.) e Pedidos (a), b)) obrigatórios.
 4. EXTENSÃO E DENSIDADE (CRUCIAL - PROIBIDO RESUMIR):
    - A petição deve ser ROBUSTA, LONGA e DETALHADA (Mínimo de 3000 a 6000 palavras, cerca de 8 a 15 páginas).
-   - PROIBIDO RESUMIR: Escreva a petição completa, com toda a densidade exigida. Não abrevie, não pule tópicos e não tente "encurtar" a peça para caber em uma única resposta. 
-   - GERE O MÁXIMO DE TEXTO POSSÍVEL: Não se preocupe com o tamanho da mensagem. Se a petição for muito longa e o sistema cortar a sua resposta no meio de uma frase, NÃO TEM PROBLEMA. O usuário simplesmente digitará "continue" e você retomará exatamente de onde parou. O seu único objetivo é garantir a profundidade e a extensão máxima.
+   - MÉTODO DE ENTREGA FRACIONADA (OBRIGATÓRIO): 
+     - Você deve planejar a peça INTEIRA (todos os tópicos do início ao fim) antes de começar a escrever.
+     - Você entregará a petição em PARTES de aproximadamente 2000 palavras por vez.
+     - Ao atingir o limite de 2000 palavras (ou o limite técnico de saída), pare IMEDIATAMENTE, mesmo que seja no meio de um parágrafo ou frase.
+     - O usuário dará o comando "CONTINUAR" para que você prossiga.
+     - Ao receber "CONTINUAR", você deve retomar a escrita EXATAMENTE do ponto onde parou na mensagem anterior, sem repetir nenhuma palavra, sem saudações e sem introduções.
+   - PROIBIDO RESUMIR: Escreva a petição completa, com toda a densidade exigida. Não abrevie e não pule tópicos.
    - DISTRIBUIÇÃO INTELIGENTE DE CONTEÚDO:
      - TÓPICOS PROCEDIMENTAIS (Gratuidade, Resumo): MÁXIMO de 1 a 2 parágrafos curtos. Seja direto.
      - TÓPICOS DE MÉRITO (DOS FATOS e DO DIREITO): AQUI deve estar a densidade. Mínimo de 8 a 12 parágrafos por tópico.
@@ -768,7 +773,8 @@ app.post("/api/dra-luana/chat", async (req, res) => {
     5. CITAÇÃO COMPLETA: Cite o Artigo, mas EVITE REPRODUZIR longos trechos de lei ipsis litteris para não acionar filtros de recitação. Parafraseie quando possível. NUNCA use a frase "Uma das mais polêmicas e controvertidas inovações" ou blocos de texto idênticos a modelos de internet.
     6. ANTI-RECITATION: Não repita longos trechos da mensagem do usuário ou de leis. Se o sistema interromper, mude a forma de escrever.
     7. FORMATAÇÃO: Use parágrafos de 4-5 linhas com espaçamento.
-    8. SE O USUÁRIO PEDIR PARA "CONTINUAR": Retome a redação EXATAMENTE da última palavra que você escreveu na mensagem anterior, sem repetir nada e sem introduções.
+    8. MÉTODO DE ENTREGA: Entregue a peça em blocos de 2000 palavras. Se o usuário disser "CONTINUAR", retome EXATAMENTE de onde parou, sem repetir nada.
+    9. BASE NOS CÁLCULOS: Cada verba devida no PDF de cálculos DEVE ter um tópico próprio seguindo o molde: 1º Fato, 2º Fundamento, 3º Conclusão/Valor.
     Siga isso AGORA.
     `;
 
