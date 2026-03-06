@@ -51,6 +51,14 @@ interface LaborData {
   terminationReason: 'sem_justa_causa' | 'pedido_demissao' | 'justa_causa' | 'rescisao_indireta' | 'sem_anotacao';
   noticePeriod: 'trabalhado' | 'indenizado' | 'dispensado' | 'nao_pago'; // 'nao_pago' treated as indenizado for calculation but maybe different label? User said "quando não tem o pagamento... que seria indenizado"
   hasFgtsBalance: number; // Saldo já depositado para cálculo da multa
+  
+  // Jornada Contratual (Informativo)
+  contractualSchedule: {
+      type: 'segunda_sexta' | 'segunda_sabado' | '6x1' | '12x36' | '24x48' | 'outros';
+      startTime: string; // HH:mm
+      endTime: string; // HH:mm
+      customDescription?: string;
+  };
 
   // Adicionais
   insalubridadeLevel: 'nenhum' | 'minimo' | 'medio' | 'maximo'; // 10, 20, 40%
@@ -170,6 +178,12 @@ const INITIAL_LABOR_DATA: LaborData = {
   terminationReason: 'sem_justa_causa',
   noticePeriod: 'indenizado',
   hasFgtsBalance: 0,
+  contractualSchedule: {
+      type: 'segunda_sexta',
+      startTime: '08:00',
+      endTime: '17:00',
+      customDescription: ''
+  },
   insalubridadeLevel: 'nenhum',
   periculosidade: false,
   adicionalNoturno: { active: false, periods: [] },
@@ -1521,6 +1535,41 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       y += 6;
       doc.text(`Salário Base: ${formatCurrency(dataToUse.baseSalary)}`, margin, y);
       doc.text(`Motivo: ${dataToUse.terminationReason.replace(/_/g, ' ').toUpperCase()}`, pageWidth - margin, y, { align: "right" });
+      
+      // Jornada Contratual
+      if (dataToUse.contractualSchedule) {
+          y += 6;
+          const { type, startTime, endTime, customDescription } = dataToUse.contractualSchedule;
+          let scheduleDesc = '';
+          
+          if (type === 'outros') {
+              scheduleDesc = `Jornada: ${customDescription || 'Personalizada'}`;
+          } else {
+              const typeLabels: any = {
+                  'segunda_sexta': 'Segunda a Sexta',
+                  'segunda_sabado': 'Segunda a Sábado',
+                  '12x36': 'Escala 12x36',
+                  '24x48': 'Escala 24x48'
+              };
+              
+              // Calculate monthly estimate for report
+              let days = 0;
+              let hours = 0;
+              const [h1, m1] = (startTime || '08:00').split(':').map(Number);
+              const [h2, m2] = (endTime || '17:00').split(':').map(Number);
+              let dailyHours = (h2 + m2/60) - (h1 + m1/60);
+              if (dailyHours < 0) dailyHours += 24;
+
+              if (type === 'segunda_sexta') { days = 22; hours = dailyHours * days; }
+              else if (type === 'segunda_sabado') { days = 26; hours = dailyHours * days; }
+              else if (type === '12x36') { days = 15; hours = 12 * 15; }
+              else if (type === '24x48') { days = 10; hours = 24 * 10; }
+
+              scheduleDesc = `Jornada: ${typeLabels[type]} (${startTime} às ${endTime}) - Est. Mensal: ~${days} dias / ~${hours.toFixed(0)}h`;
+          }
+          
+          doc.text(scheduleDesc, margin, y);
+      }
 
       // Tabela de Verbas
       y += 15;
@@ -1796,6 +1845,125 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                       Marque se o valor acima corresponde ao total devido de todo o contrato. Se desmarcado, o sistema considerará como valor parcial.
                                   </p>
                               </div>
+                          </div>
+                      </div>
+
+                      {/* Seção de Jornada de Trabalho (Informativo) */}
+                      <div className={`md:col-span-2 ${STYLES.CARD_SECTION}`}>
+                          <h3 className={STYLES.CARD_TITLE}>
+                              <ClockIcon className="w-5 h-5 text-indigo-500" />
+                              Jornada de Trabalho Prevista (Contratual)
+                          </h3>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                              <div>
+                                  <label className={STYLES.LABEL_TEXT}>Tipo de Escala</label>
+                                  <select
+                                      value={data.contractualSchedule?.type || 'segunda_sexta'}
+                                      onChange={(e) => setData(prev => ({
+                                          ...prev,
+                                          contractualSchedule: {
+                                              ...(prev.contractualSchedule || { startTime: '08:00', endTime: '17:00' }),
+                                              type: e.target.value as any
+                                          }
+                                      }))}
+                                      className={STYLES.INPUT_FIELD}
+                                  >
+                                      <option value="segunda_sexta">Segunda a Sexta (5x2)</option>
+                                      <option value="segunda_sabado">Segunda a Sábado (6x1)</option>
+                                      <option value="12x36">Plantão 12x36</option>
+                                      <option value="24x48">Plantão 24x48</option>
+                                      <option value="outros">Outros / Personalizado</option>
+                                  </select>
+                              </div>
+
+                              {data.contractualSchedule?.type === 'outros' && (
+                                  <div className="md:col-span-3 lg:col-span-3">
+                                      <label className={STYLES.LABEL_TEXT}>Descrição da Jornada</label>
+                                      <input
+                                          type="text"
+                                          value={data.contractualSchedule?.customDescription || ''}
+                                          onChange={(e) => setData(prev => ({
+                                              ...prev,
+                                              contractualSchedule: { ...prev.contractualSchedule!, customDescription: e.target.value }
+                                          }))}
+                                          placeholder="Ex: Escala 5x1 com folgas rotativas..."
+                                          className={STYLES.INPUT_FIELD}
+                                      />
+                                  </div>
+                              )}
+
+                              {data.contractualSchedule?.type !== 'outros' && (
+                                  <>
+                                      <div>
+                                          <label className={STYLES.LABEL_TEXT}>Entrada</label>
+                                          <input
+                                              type="time"
+                                              value={data.contractualSchedule?.startTime || '08:00'}
+                                              onChange={(e) => setData(prev => ({
+                                                  ...prev,
+                                                  contractualSchedule: { ...prev.contractualSchedule!, startTime: e.target.value }
+                                              }))}
+                                              className={STYLES.INPUT_FIELD}
+                                          />
+                                      </div>
+                                      <div>
+                                          <label className={STYLES.LABEL_TEXT}>Saída</label>
+                                          <input
+                                              type="time"
+                                              value={data.contractualSchedule?.endTime || '17:00'}
+                                              onChange={(e) => setData(prev => ({
+                                                  ...prev,
+                                                  contractualSchedule: { ...prev.contractualSchedule!, endTime: e.target.value }
+                                              }))}
+                                              className={STYLES.INPUT_FIELD}
+                                          />
+                                      </div>
+                                      
+                                      {/* Display Calculated Info */}
+                                      <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg border border-slate-200 dark:border-slate-700 flex flex-col justify-center">
+                                          <span className="text-[10px] uppercase font-bold text-slate-400 mb-1">Estimativa Mensal (Contratual)</span>
+                                          {(() => {
+                                              const type = data.contractualSchedule?.type || 'segunda_sexta';
+                                              const start = data.contractualSchedule?.startTime || '08:00';
+                                              const end = data.contractualSchedule?.endTime || '17:00';
+                                              
+                                              let days = 0;
+                                              let hours = 0;
+                                              
+                                              const [h1, m1] = start.split(':').map(Number);
+                                              const [h2, m2] = end.split(':').map(Number);
+                                              let dailyHours = (h2 + m2/60) - (h1 + m1/60);
+                                              if (dailyHours < 0) dailyHours += 24;
+                                              
+                                              if (type === 'segunda_sexta') {
+                                                  days = 22; // Avg
+                                                  hours = dailyHours * days;
+                                              } else if (type === 'segunda_sabado') {
+                                                  days = 26; // Avg
+                                                  hours = dailyHours * days; 
+                                              } else if (type === '12x36') {
+                                                  days = 15;
+                                                  hours = 12 * 15; 
+                                              } else if (type === '24x48') {
+                                                  days = 10;
+                                                  hours = 24 * 10;
+                                              }
+                                              
+                                              return (
+                                                  <div className="flex flex-col">
+                                                      <span className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                                                          ~{days} dias / mês
+                                                      </span>
+                                                      <span className="text-xs text-slate-500">
+                                                          ~{hours.toFixed(0)} horas / mês
+                                                      </span>
+                                                  </div>
+                                              );
+                                          })()}
+                                      </div>
+                                  </>
+                              )}
                           </div>
                       </div>
 
