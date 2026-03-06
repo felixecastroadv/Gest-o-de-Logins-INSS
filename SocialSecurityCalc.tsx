@@ -282,13 +282,11 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
     };
 
     const calculateTime = (start: string, end: string, type: string, gender: string) => {
-        // If start is missing, we can't calculate
-        if (!start) return { years: 0, months: 0, days: 0, totalDays: 0 };
+        // If start or end is missing, we can't calculate (as requested by user)
+        if (!start || !end) return { years: 0, months: 0, days: 0, totalDays: 0 };
         
         const startDate = parseDateLocal(start);
-        // If end is missing, assume it's up to the DER (or Today if DER is missing)
-        // But only if we consider it "Active". For now, let's use DER if provided, else Today.
-        let endDate = end ? parseDateLocal(end) : (data.der ? parseDateLocal(data.der) : new Date());
+        const endDate = parseDateLocal(end);
         
         if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
              return { years: 0, months: 0, days: 0, totalDays: 0 };
@@ -351,10 +349,12 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
         let maxDateMs = -Infinity;
 
         const processedBonds = activeBonds.map(b => {
+            if (!b.startDate || !b.endDate) return null;
+
             const start = parseDateLocal(b.startDate);
             start.setHours(12, 0, 0, 0);
             
-            let endStr = b.endDate || data.der || new Date().toISOString().split('T')[0];
+            let endStr = b.endDate;
             let end = parseDateLocal(endStr);
             end.setHours(12, 0, 0, 0);
 
@@ -376,7 +376,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
             if (b.activityType === 'special_15') factor = data.gender === 'M' ? 2.33 : 2.0;
 
             return { startMs: start.getTime(), endMs: end.getTime(), factor };
-        }).filter(b => !isNaN(b.startMs) && !isNaN(b.endMs) && b.startMs <= b.endMs);
+        }).filter(b => b !== null && !isNaN(b.startMs) && !isNaN(b.endMs) && b.startMs <= b.endMs) as { startMs: number, endMs: number, factor: number }[];
 
         if (processedBonds.length === 0) return "0 anos, 0 meses e 0 dias";
 
@@ -585,8 +585,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
         if (bond.endDate) {
             end = parseDateLocal(bond.endDate);
         } else {
-            // If active, go up to today
-            end = new Date();
+            // If no end date, we don't generate history (as requested by user)
+            return bond.sc.map(s => ({ month: s.month, value: s.value, indicators: s.indicators || [], isMissing: false }));
         }
         if (data.der) {
             const derDate = parseDateLocal(data.der);
