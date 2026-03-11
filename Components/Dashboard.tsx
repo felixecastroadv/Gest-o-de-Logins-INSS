@@ -31,6 +31,7 @@ import NotificationsModal from './NotificationsModal';
 import CopyButton from './CopyButton';
 import DrMichelFelix from './DrMichelFelix';
 import DraLuanaCastro from './DraLuanaCastro';
+import { safeSetLocalStorage } from '../utils';
 
 const Dashboard: React.FC<DashboardProps> = ({ 
   user, 
@@ -110,7 +111,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     
                 if (clientData && clientData.data) {
                     fetchedClients = clientData.data;
-                    localStorage.setItem('inss_records', JSON.stringify(clientData.data));
+                    safeSetLocalStorage('inss_records', JSON.stringify(clientData.data));
                 } else if (clientError) {
                     console.error("Error fetching clients:", clientError);
                     setDbError("Erro ao buscar clientes na nuvem. Exibindo dados locais.");
@@ -130,7 +131,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
                 if (contractData && contractData.data) {
                     fetchedContracts = contractData.data;
-                    localStorage.setItem('inss_contracts', JSON.stringify(contractData.data));
+                    safeSetLocalStorage('inss_contracts', JSON.stringify(contractData.data));
                 } else if (contractError && contractError.code === 'PGRST116') {
                      await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS_LIST });
                 }
@@ -143,7 +144,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 const laborCalcs = await supabaseService.getLaborCalculations();
                 if (laborCalcs && laborCalcs.length > 0) {
                     fetchedCalculations = laborCalcs;
-                    localStorage.setItem('inss_calculations', JSON.stringify(fetchedCalculations));
+                    safeSetLocalStorage('inss_calculations', JSON.stringify(fetchedCalculations));
                 }
             } catch (err) { console.error("Error fetching labor calculations:", err); }
 
@@ -151,7 +152,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 const socialCalcs = await supabaseService.getCalculations();
                 if (socialCalcs && socialCalcs.length > 0) {
                     fetchedSocialCalculations = socialCalcs;
-                    localStorage.setItem('social_security_calculations', JSON.stringify(fetchedSocialCalculations));
+                    safeSetLocalStorage('social_security_calculations', JSON.stringify(fetchedSocialCalculations));
                 }
             } catch (err) { console.error("Error fetching social calculations:", err); }
 
@@ -161,7 +162,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 const michelSessions = await supabaseService.getAIConversations('michel');
                 if (michelSessions && michelSessions.length > 0) {
                     fetchedDrMichelSessions = michelSessions;
-                    localStorage.setItem('dr_michel_sessions', JSON.stringify(fetchedDrMichelSessions));
+                    safeSetLocalStorage('dr_michel_sessions', JSON.stringify(fetchedDrMichelSessions));
                 }
             } catch (err) { console.error("Error fetching Michel sessions:", err); }
 
@@ -169,7 +170,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 const luanaSessions = await supabaseService.getAIConversations('luana');
                 if (luanaSessions && luanaSessions.length > 0) {
                     fetchedDraLuanaSessions = luanaSessions;
-                    localStorage.setItem('dra_luana_sessions', JSON.stringify(fetchedDraLuanaSessions));
+                    safeSetLocalStorage('dra_luana_sessions', JSON.stringify(fetchedDraLuanaSessions));
                 }
             } catch (err) { console.error("Error fetching Luana sessions:", err); }
             */
@@ -212,10 +213,10 @@ const Dashboard: React.FC<DashboardProps> = ({
                      if (payload.new && payload.new.data) {
                          if (payload.new.id === 1) {
                              setRecords(payload.new.data);
-                             localStorage.setItem('inss_records', JSON.stringify(payload.new.data));
+                             safeSetLocalStorage('inss_records', JSON.stringify(payload.new.data));
                          } else if (payload.new.id === 2) {
                              setContracts(payload.new.data);
-                             localStorage.setItem('inss_contracts', JSON.stringify(payload.new.data));
+                             safeSetLocalStorage('inss_contracts', JSON.stringify(payload.new.data));
                          }
                      }
                 }
@@ -265,14 +266,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [records]);
 
   // Save Logic (Generic)
-  const safeSetLocalStorage = (key: string, value: string) => {
-      try {
-          localStorage.setItem(key, value);
-      } catch (err: any) {
-          console.warn(`Erro ao salvar no localStorage (${key}):`, err.message);
-      }
-  };
-
   const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana', newData: any[]) => {
       setIsSyncing(true);
       setSaveError(null);
