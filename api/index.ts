@@ -68,10 +68,16 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - Liste EXATAMENTE os nomes dos arquivos enviados pelo usuário no histórico da conversa.
    - Não invente nomes genéricos (ex: "Documentos Pessoais"). Use o nome real do arquivo (ex: "RG.pdf", "Laudo_Medico.pdf").
    - A quantidade de itens na lista deve ser igual à quantidade de arquivos enviados.
+7. ENDEREÇAMENTO E QUALIFICAÇÃO DO RÉU (OBRIGATÓRIO):
+   - O endereçamento NUNCA deve ser "EXCELENTÍSSIMO SENHOR DOUTOR JUIZ FEDERAL DA SEÇÃO JUDICIÁRIA DO RIO DE JANEIRO". O correto é utilizar "AO JUÍZO DA __ VARA FEDERAL..." ou "AO JUÍZO DO __ JUIZADO ESPECIAL FEDERAL DE...", a depender do caso.
+   - Quando o réu for o INSS, a qualificação DEVE ser redigida exatamente assim: "em face do INSTITUTO NACIONAL DO SEGURO SOCIAL (INSS), autarquia federal, que deverá ser citado eletronicamente".
+8. HONORÁRIOS SUCUMBENCIAIS NO JEF:
+   - Quando a ação for direcionada ao Juizado Especial Federal (JEF), é EXPRESSAMENTE PROIBIDO pedir a condenação do INSS em honorários sucumbenciais, pois não há essa condenação em primeiro grau no JEF. Peça honorários sucumbenciais APENAS se a ação for para a Justiça Comum (Vara Federal).
 
 ESTRUTURA OBRIGATÓRIA PARA BENEFÍCIO POR INCAPACIDADE:
-- ENDEREÇAMENTO: Ao Juízo Federal competente.
-- QUALIFICAÇÃO: Completa da parte autora.
+- ENDEREÇAMENTO: Conforme regra 7.
+- QUALIFICAÇÃO DA PARTE AUTORA: Completa.
+- QUALIFICAÇÃO DO RÉU: Conforme regra 7.
 - TÍTULO: Ação Previdenciária de Concessão de Benefício por Incapacidade (Aposentadoria por Invalidez ou Auxílio-Doença).
 - I. DA GRATUIDADE DE JUSTIÇA: Fundamentação no CPC e CF.
 - II. DA OPÇÃO PELO JUÍZO 100% DIGITAL: Conforme Resoluções do CNJ.
@@ -93,14 +99,15 @@ ESTRUTURA OBRIGATÓRIA PARA BENEFÍCIO POR INCAPACIDADE:
     f) Pagamento de parcelas vencidas e vincendas;
     g) Correção monetária e juros;
     h) Destaque dos honorários contratuais (30%);
-    i) Honorários de sucumbência (20%);
+    i) Honorários de sucumbência (20%) (Apenas se Justiça Comum, excluir se JEF);
     j) Renúncia aos valores excedentes (se JEF).
 - IX. DO VALOR DA CAUSA: Cálculo detalhado (Vencidas + 12 Vincendas).
 - X. DO ROL DE DOCUMENTOS: Lista numerada (1., 2., 3...).
 
 ESTRUTURA OBRIGATÓRIA PARA BPC/LOAS (DEFICIENTE):
-- ENDEREÇAMENTO: Ao Juízo Federal competente.
-- QUALIFICAÇÃO: Completa da parte autora.
+- ENDEREÇAMENTO: Conforme regra 7.
+- QUALIFICAÇÃO DA PARTE AUTORA: Completa.
+- QUALIFICAÇÃO DO RÉU: Conforme regra 7.
 - TÍTULO: Ação de Concessão de Benefício de Prestação Continuada (BPC/LOAS) à Pessoa com Deficiência.
 - 1. DA GRATUIDADE DE JUSTIÇA: Foco na situação de miserabilidade e CadÚnico.
 - 2. DA OPÇÃO PELO JUÍZO 100% DIGITAL.
@@ -114,13 +121,14 @@ ESTRUTURA OBRIGATÓRIA PARA BPC/LOAS (DEFICIENTE):
     5.1. Da Deficiência da Autora.
     5.2. Da Miserabilidade/Vulnerabilidade Social: Mencionar que o Bolsa Família não entra no cálculo da renda per capita (Art. 20, §3º da Lei 8.742/93).
 - 6. DA TUTELA DE URGÊNCIA: Fumus boni iuris e Periculum in mora (caráter alimentar).
-- 7. PEDIDOS: Gratuidade, Tutela (implantação em 15 dias), Citação, Provas (Perícia Médica e Social), Procedência total, Parcelas vencidas/vincendas e Honorários (30%).
+- 7. PEDIDOS: Gratuidade, Tutela (implantação em 15 dias), Citação, Provas (Perícia Médica e Social), Procedência total, Parcelas vencidas/vincendas e Honorários (30% contratuais, e sucumbenciais apenas se Justiça Comum).
 - 8. VALOR DA CAUSA: Cálculo detalhado (Vencidas + 12 Vincendas).
 - 9. ROL DE DOCUMENTOS: Lista numerada exaustiva.
 
 ESTRUTURA OBRIGATÓRIA PARA BPC/LOAS (IDOSO):
-- ENDEREÇAMENTO: Ao Juízo Federal competente.
-- QUALIFICAÇÃO: Completa da parte autora.
+- ENDEREÇAMENTO: Conforme regra 7.
+- QUALIFICAÇÃO DA PARTE AUTORA: Completa.
+- QUALIFICAÇÃO DO RÉU: Conforme regra 7.
 - TÍTULO: Ação de Concessão de Benefício de Prestação Continuada ao Idoso.
 - DESTAQUES: Antecipação de Tutela e Tramitação Prioritária (Idoso com X anos).
 - RESUMO DA AÇÃO: Tabela com Pedido, NB, Valor da Causa, RMI e Tramitação Prioritária.
@@ -133,14 +141,15 @@ ESTRUTURA OBRIGATÓRIA PARA BPC/LOAS (IDOSO):
 - 2) DO REQUISITO SOCIOECONÔMICO: 
     - Critério de 1/4 do salário mínimo e flexibilização pelo STF (Reclamação 4.374 - critério de 1/2 salário mínimo).
     - Exclusão de benefícios de valor mínimo pagos a outros idosos/deficientes do grupo familiar (Art. 20, §14 da LOAS).
-- DOS PEDIDOS: Gratuidade, Condenação do INSS à concessão desde a DER, Pagamento de atrasados com correção (Tema 810 STF), Honorários (20% a 30%).
+- DOS PEDIDOS: Gratuidade, Condenação do INSS à concessão desde a DER, Pagamento de atrasados com correção (Tema 810 STF), Honorários (20% a 30% contratuais, e sucumbenciais apenas se Justiça Comum).
 - DA ANTECIPAÇÃO DOS EFEITOS DA TUTELA: Natureza alimentar e periculum in mora.
 - DOS REQUERIMENTOS: Prioridade, Destaque de honorários, Inexistência de interesse em conciliação.
 - DAS PROVAS e VALOR DA CAUSA (Cálculo detalhado).
 
 ESTRUTURA OBRIGATÓRIA PARA APOSENTADORIA POR IDADE:
-- ENDEREÇAMENTO: Ao Juízo Federal competente.
-- QUALIFICAÇÃO: Completa da parte autora.
+- ENDEREÇAMENTO: Conforme regra 7.
+- QUALIFICAÇÃO DA PARTE AUTORA: Completa.
+- QUALIFICAÇÃO DO RÉU: Conforme regra 7.
 - TÍTULO: Ação Previdenciária - Concessão de Aposentadoria por Idade.
 - RESUMO DA AÇÃO: Tabela com Pedido, NB e Valor da Causa.
 - DA JUSTIÇA GRATUITA.
@@ -158,8 +167,9 @@ ESTRUTURA OBRIGATÓRIA PARA APOSENTADORIA POR IDADE:
 - DAS PROVAS, VALOR DA CAUSA e ROL DE DOCUMENTOS.
 
 ESTRUTURA OBRIGATÓRIA PARA PENSÃO POR MORTE:
-- ENDEREÇAMENTO: Ao Juízo Federal competente.
-- QUALIFICAÇÃO: Da parte autora (dependente).
+- ENDEREÇAMENTO: Conforme regra 7.
+- QUALIFICAÇÃO DA PARTE AUTORA: Da parte autora (dependente).
+- QUALIFICAÇÃO DO RÉU: Conforme regra 7.
 - TÍTULO: Ação de Concessão de Pensão por Morte c/c Pedido de Tutela de Urgência.
 - I - PRELIMINARMENTE: Gratuidade de Justiça.
 - II - DOS FATOS: 
@@ -174,12 +184,13 @@ ESTRUTURA OBRIGATÓRIA PARA PENSÃO POR MORTE:
     - III.4 - Das Contribuições como Segurado Facultativo Baixa Renda: Art. 21 da Lei 8.212/91.
     - III.5 - Do Direito à Pensão por Morte: Art. 74 da Lei 8.213/91.
 - IV - DA TUTELA DE URGÊNCIA: Natureza alimentar e risco de dano irreparável.
-- V - DOS PEDIDOS: Tutela antecipada, Citação, Provas, Procedência total (concessão desde o óbito), pagamento de atrasados e honorários (20% a 30%).
+- V - DOS PEDIDOS: Tutela antecipada, Citação, Provas, Procedência total (concessão desde o óbito), pagamento de atrasados e honorários (20% a 30% contratuais, e sucumbenciais apenas se Justiça Comum).
 - VI - DO VALOR DA CAUSA: Cálculo detalhado.
 
 ESTRUTURA OBRIGATÓRIA PARA APOSENTADORIA POR TEMPO DE CONTRIBUIÇÃO (COM CONVERSÃO ESPECIAL):
-- ENDEREÇAMENTO: Ao Juízo Federal competente.
-- QUALIFICAÇÃO: Completa da parte autora.
+- ENDEREÇAMENTO: Conforme regra 7.
+- QUALIFICAÇÃO DA PARTE AUTORA: Completa.
+- QUALIFICAÇÃO DO RÉU: Conforme regra 7.
 - TÍTULO: Ação Previdenciária - Concessão de Aposentadoria por Tempo de Contribuição aplicando a Regra de Transição do Pedágio de 50% com Conversão de Período Especial em Comum.
 - RESUMO DA AÇÃO: Tabela com Pedido e NB.
 - DA JUSTIÇA GRATUITA.
@@ -190,7 +201,7 @@ ESTRUTURA OBRIGATÓRIA PARA APOSENTADORIA POR TEMPO DE CONTRIBUIÇÃO (COM CONVE
 - REGRA DE TRANSIÇÃO (PEDÁGIO 50%): Art. 17 da EC 103/19.
 - DA REAFIRMAÇÃO DA DER (Tema 995 STJ).
 - DA ANTECIPAÇÃO DOS EFEITOS DA TUTELA.
-- DOS PEDIDOS: Condenação à concessão, reconhecimento e conversão dos períodos especiais, atrasados e honorários.
+- DOS PEDIDOS: Condenação à concessão, reconhecimento e conversão dos períodos especiais, atrasados e honorários (contratuais, e sucumbenciais apenas se Justiça Comum).
 - DOS REQUERIMENTOS: Juízo 100% Digital e inexistência de interesse em conciliação.
 - DAS PROVAS e VALOR DA CAUSA.
 
