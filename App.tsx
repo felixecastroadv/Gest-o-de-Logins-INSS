@@ -5,6 +5,7 @@ import Login from './Components/Login';
 import Dashboard from './Components/Dashboard'; 
 import SettingsModal from './Components/SettingsModal';
 import { getDbConfig, initSupabase } from './supabaseClient';
+import { safeSetLocalStorage } from './utils';
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -37,13 +38,13 @@ export default function App() {
   const toggleDarkMode = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
-    localStorage.setItem('inss_theme', newMode ? 'dark' : 'light');
+    safeSetLocalStorage('inss_theme', newMode ? 'dark' : 'light');
     if (newMode) { document.documentElement.classList.add('dark'); } else { document.documentElement.classList.remove('dark'); }
   };
 
   const handleLogin = (authenticatedUser: User) => { 
       setUser(authenticatedUser); 
-      localStorage.setItem('inss_user', JSON.stringify(authenticatedUser));
+      safeSetLocalStorage('inss_user', JSON.stringify(authenticatedUser));
   };
   
   const handleLogout = () => { 
@@ -63,8 +64,8 @@ export default function App() {
              };
              restore();
         } else {
-            localStorage.setItem('inss_records', JSON.stringify(INITIAL_DATA));
-            localStorage.setItem('inss_contracts', JSON.stringify(INITIAL_CONTRACTS_LIST));
+            safeSetLocalStorage('inss_records', JSON.stringify(INITIAL_DATA));
+            safeSetLocalStorage('inss_contracts', JSON.stringify(INITIAL_CONTRACTS_LIST));
             alert("Dados locais restaurados!");
             window.location.reload();
         }
