@@ -265,7 +265,9 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
 
         } catch (error) {
             console.error("Erro detalhado ao gerar PDF:", error);
-            alert(`Erro ao gerar PDF: ${error instanceof Error ? error.message : 'Erro desconhecido'}. Tente novamente.`);
+            // Tentar mostrar o erro na tela de forma mais visível para celular
+            const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+            alert(`Erro ao gerar PDF: ${errorMessage}. Detalhes: ${JSON.stringify(error)}`);
         } finally {
             setIsProcessing(false);
         }
