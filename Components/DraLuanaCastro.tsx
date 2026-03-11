@@ -22,6 +22,7 @@ import {
 import { CheckIcon as Check } from '@heroicons/react/24/solid';
 import { extractTextFromPDF } from '../src/utils/pdfParser';
 import { supabaseService } from '../services/supabaseService';
+import { safeSetLocalStorage } from '../utils';
 
 interface Message {
   id: string;
@@ -123,7 +124,7 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
           if (onSaveSessions) {
             onSaveSessions(sessionsToSave);
           } else {
-            localStorage.setItem('dra_luana_sessions', JSON.stringify(sessionsToSave));
+            safeSetLocalStorage('dra_luana_sessions', JSON.stringify(sessionsToSave));
           }
 
           // Sync with Supabase - Debounced to reduce writes
