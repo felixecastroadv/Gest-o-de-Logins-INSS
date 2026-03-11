@@ -22,6 +22,7 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
     const [isProcessing, setIsProcessing] = useState(false);
 
     const [crop, setCrop] = useState({ x: 10, y: 10, w: 80, h: 80 }); 
+    const [rotation, setRotation] = useState(0);
     const [dragHandle, setDragHandle] = useState<string | null>(null);
     
     const containerRef = useRef<HTMLDivElement>(null);
@@ -36,6 +37,7 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
             setCurrentImageSrc(null);
             setPages([]);
             setCrop({ x: 10, y: 10, w: 80, h: 80 });
+            setRotation(0);
         }
     }, [isOpen]);
 
@@ -48,6 +50,7 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
                     setCurrentImageSrc(ev.target.result.toString());
                     setStep('crop');
                     setCrop({ x: 10, y: 10, w: 80, h: 80 });
+                    setRotation(0);
                 }
             };
             reader.readAsDataURL(file);
@@ -160,9 +163,12 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
 
         const canvas = document.createElement('canvas');
         
+        // Ajustar dimensões baseado na rotação
+        const isRotated = rotation === 90 || rotation === 270;
+        
         const MAX_DIMENSION = 1600; 
-        let targetW = sourceW;
-        let targetH = sourceH;
+        let targetW = isRotated ? sourceH : sourceW;
+        let targetH = isRotated ? sourceW : sourceH;
 
         if (targetW > MAX_DIMENSION || targetH > MAX_DIMENSION) {
             const ratio = targetW / targetH;
@@ -183,10 +189,25 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
             ctx.imageSmoothingEnabled = true;
             ctx.imageSmoothingQuality = 'high';
 
+            // Resetar transformações
+            ctx.setTransform(1, 0, 0, 1, 0, 0);
+            
+            // Rotacionar o canvas
+            if (rotation === 90) {
+                ctx.translate(targetW, 0);
+                ctx.rotate(Math.PI / 2);
+            } else if (rotation === 180) {
+                ctx.translate(targetW, targetH);
+                ctx.rotate(Math.PI);
+            } else if (rotation === 270) {
+                ctx.translate(0, targetH);
+                ctx.rotate((3 * Math.PI) / 2);
+            }
+            
             ctx.drawImage(
                 image, 
                 sourceX, sourceY, sourceW, sourceH,
-                0, 0, targetW, targetH
+                0, 0, isRotated ? targetH : targetW, isRotated ? targetW : targetH
             );
             
             const base64 = canvas.toDataURL('image/jpeg', 0.65);
@@ -334,7 +355,14 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
                             </p>
                             
                             <div className="relative bg-black/90 rounded-xl overflow-hidden flex-1 touch-none select-none flex items-center justify-center" ref={containerRef} style={{ touchAction: 'none' }}>
-                                <img ref={imgRef} src={currentImageSrc} alt="Crop Target" className="max-w-full max-h-full object-contain pointer-events-none select-none" draggable={false} />
+                                <img 
+                                    ref={imgRef} 
+                                    src={currentImageSrc} 
+                                    alt="Crop Target" 
+                                    className="max-w-full max-h-full object-contain pointer-events-none select-none" 
+                                    style={{ transform: `rotate(${rotation}deg)` }}
+                                    draggable={false} 
+                                />
                                 
                                 <div 
                                     className="absolute border-2 border-primary-500 shadow-[0_0_0_9999px_rgba(0,0,0,0.6)]"
@@ -357,7 +385,8 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
                             
                             <div className="mt-4 flex gap-3 shrink-0">
                                 <button onClick={() => setStep('select')} className="flex-1 py-3 text-slate-500 font-bold bg-slate-100 dark:bg-slate-800 rounded-xl hover:bg-slate-200">Cancelar</button>
-                                <button onClick={confirmCrop} className="flex-1 py-3 text-white font-bold bg-green-600 hover:bg-green-700 rounded-xl shadow-lg flex items-center justify-center gap-2"><CheckIcon className="h-5 w-5" /> Confirmar</button>
+                                <button onClick={() => setRotation(r => (r + 90) % 360)} className="py-3 px-4 text-slate-700 font-bold bg-slate-200 dark:bg-slate-700 rounded-xl hover:bg-slate-300"><ArrowPathIcon className="h-5 w-5" /></button>
+                                <button onClick={confirmCrop} className="flex-[2] py-3 text-white font-bold bg-green-600 hover:bg-green-700 rounded-xl shadow-lg flex items-center justify-center gap-2"><CheckIcon className="h-5 w-5" /> Confirmar</button>
                             </div>
                         </div>
                     )}
