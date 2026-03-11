@@ -125,37 +125,45 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
     loadFromSupabase();
   }, []);
 
+  // Sanitize sessions to prevent payload size issues (both for localStorage and Supabase)
+  const sanitizedSessions = React.useMemo(() => {
+    return sessions.map(session => ({
+      ...session,
+      messages: session.messages.map(msg => {
+        if (msg.role === 'user' && msg.content.length > 50000 && msg.content.includes('--- CONTEÚDO DO ARQUIVO:')) {
+          return {
+            ...msg,
+            content: msg.content.substring(0, 50000) + '\n\n[... Conteúdo extremamente longo truncado para preservação do banco de dados. A IA já processou o conteúdo integral anteriormente ...]'
+          };
+        }
+        return msg;
+      })
+    }));
+  }, [sessions]);
+
+  // Save to Local Storage immediately
   useEffect(() => {
     try {
-      const sessionsToSave = sessions.map(session => ({
-        ...session,
-        messages: session.messages.map(msg => {
-          if (msg.role === 'user' && msg.content.length > 2000 && msg.content.includes('--- CONTEÚDO DO ARQUIVO:')) {
-            return {
-              ...msg,
-              content: msg.content.substring(0, 500) + '\n\n[... Conteúdo do documento não salvo no histórico local para economizar espaço ...]'
-            };
-          }
-          return msg;
-        })
-      }));
-      
-      const currentStr = JSON.stringify(sessionsToSave);
-      const localSaved = localStorage.getItem('dra_luana_sessions');
+      const currentStr = JSON.stringify(sanitizedSessions);
+      const storageKey = 'dra_luana_sessions';
+      const localSaved = localStorage.getItem(storageKey);
       
       if (localSaved !== currentStr) {
         if (onSaveSessions) {
-          onSaveSessions(sessionsToSave);
+          onSaveSessions(sanitizedSessions);
         } else {
-          safeSetLocalStorage('dra_luana_sessions', currentStr);
+          safeSetLocalStorage(storageKey, currentStr);
         }
       }
     } catch (error) {
       console.warn("Failed to save sessions locally:", error);
     }
+  }, [sanitizedSessions, onSaveSessions]);
 
+  // Save to Supabase with debounce
+  useEffect(() => {
     let hasChanges = false;
-    sessions.forEach(session => {
+    sanitizedSessions.forEach(session => {
       const sessionStr = JSON.stringify(session);
       if (lastSyncedSessionsRef.current[session.id] !== sessionStr) {
         pendingSyncRef.current.add(session.id);
@@ -167,28 +175,30 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
       if (syncTimeoutRef.current) {
         clearTimeout(syncTimeoutRef.current);
       }
+      
       syncTimeoutRef.current = setTimeout(() => {
-        const currentSessions = sessionsRef.current;
         const idsToSync = Array.from(pendingSyncRef.current);
         pendingSyncRef.current.clear();
 
         idsToSync.forEach(id => {
-          const sessionToSync = currentSessions.find(s => s.id === id);
+          const sessionToSync = sanitizedSessions.find(s => s.id === id);
           if (sessionToSync) {
+            // Optimistically mark as synced
+            lastSyncedSessionsRef.current[id] = JSON.stringify(sessionToSync);
+            
             supabaseService.saveAIConversation({
               ...sessionToSync,
               ai_name: 'luana'
-            }).then(() => {
-              lastSyncedSessionsRef.current[id] = JSON.stringify(sessionToSync);
             }).catch(err => {
               console.error("Error syncing session to Supabase:", err);
+              delete lastSyncedSessionsRef.current[id];
               pendingSyncRef.current.add(id);
             });
           }
         });
-      }, 2000);
+      }, 1500);
     }
-  }, [sessions, onSaveSessions]);
+  }, [sanitizedSessions]);
 
   useEffect(() => {
     if (scrollRef.current) {
