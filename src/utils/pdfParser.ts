@@ -67,12 +67,12 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
 
         if (isLowTextDensity && i <= MAX_PAGES_FOR_OCR) {
             try {
-                // VERY LOW SCALE: 0.8 is enough for Gemini Vision to read handwriting, 
-                // but uses 4x less memory than scale 1.5
-                const viewport = page.getViewport({ scale: 0.8 }); 
+                // SCALE: 1.2 is a good balance. It provides enough resolution for Gemini Vision 
+                // to read handwriting and small text, while keeping memory usage reasonable.
+                const viewport = page.getViewport({ scale: 1.2 }); 
                 
                 // Safety check for abnormally large pages
-                if (viewport.width * viewport.height > 3000000) {
+                if (viewport.width * viewport.height > 5000000) {
                    fullText += `[AVISO: Imagem da página ${i} muito pesada, leitura visual ignorada para evitar travamento]\n`;
                    continue;
                 }
@@ -90,14 +90,14 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
                   }).promise;
                   
                   const renderTimeout = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error("Render timeout")), 10000)
+                    setTimeout(() => reject(new Error("Render timeout")), 15000)
                   );
                   
                   await Promise.race([renderTask, renderTimeout]);
                   
-                  // HIGH COMPRESSION: JPEG at 40% quality. 
-                  // Gemini can still read it, but it saves massive amounts of RAM.
-                  const base64 = canvas.toDataURL('image/jpeg', 0.4).split(',')[1];
+                  // COMPRESSION: JPEG at 70% quality. 
+                  // Good balance between file size and text legibility for the AI.
+                  const base64 = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
                   images.push(base64);
                   
                   // AGGRESSIVE MEMORY CLEANUP
