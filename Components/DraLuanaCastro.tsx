@@ -60,9 +60,17 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
   
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const sessionsRef = useRef(sessions);
+  const pendingSyncRef = useRef<Set<string>>(new Set());
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSyncedSessionsRef = useRef<Record<string, string>>({});
 
   const currentSession = sessions.find(s => s.id === currentSessionId);
+
+  useEffect(() => {
+    sessionsRef.current = sessions;
+  }, [sessions]);
 
   useEffect(() => {
     const loadFromSupabase = async () => {
@@ -97,6 +105,13 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
         }
 
         if (formattedSessions.length > 0) {
+          formattedSessions.forEach(s => {
+            const dbMatch = dbSessions.find(dbS => dbS.id === s.id);
+            if (dbMatch && JSON.stringify(dbMatch.messages) === JSON.stringify(s.messages) && dbMatch.title === s.title) {
+              lastSyncedSessionsRef.current[s.id] = JSON.stringify(s);
+            }
+          });
+          
           setSessions(formattedSessions);
           if (!currentSessionId) {
             setCurrentSessionId(formattedSessions[0].id);
@@ -111,53 +126,69 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
   }, []);
 
   useEffect(() => {
-    // Removed the check if (sessions.length > 0) to allow saving empty sessions (deletion of all conversations)
-    if (true) {
-      try {
-        const localSaved = localStorage.getItem('dra_luana_sessions');
-        const currentStr = JSON.stringify(sessions);
-        
-        // Only save if different from what's already saved locally to avoid loops
-        if (localSaved !== currentStr) {
-          // Sanitize sessions to prevent QuotaExceededError (localStorage 5MB limit)
-          const sessionsToSave = sessions.map(session => ({
-            ...session,
-            messages: session.messages.map(msg => {
-              if (msg.role === 'user' && msg.content.length > 2000 && msg.content.includes('--- CONTEÚDO DO ARQUIVO:')) {
-                return {
-                  ...msg,
-                  content: msg.content.substring(0, 500) + '\n\n[... Conteúdo do documento não salvo no histórico local para economizar espaço ...]'
-                };
-              }
-              return msg;
-            })
-          }));
-          
-          if (onSaveSessions) {
-            onSaveSessions(sessionsToSave);
-          } else {
-            safeSetLocalStorage('dra_luana_sessions', JSON.stringify(sessionsToSave));
+    try {
+      const sessionsToSave = sessions.map(session => ({
+        ...session,
+        messages: session.messages.map(msg => {
+          if (msg.role === 'user' && msg.content.length > 2000 && msg.content.includes('--- CONTEÚDO DO ARQUIVO:')) {
+            return {
+              ...msg,
+              content: msg.content.substring(0, 500) + '\n\n[... Conteúdo do documento não salvo no histórico local para economizar espaço ...]'
+            };
           }
-
-          // Sync with Supabase - Debounced to reduce writes
-          if (saveTimeoutRef.current) {
-            clearTimeout(saveTimeoutRef.current);
-          }
-
-          if (currentSession) {
-            saveTimeoutRef.current = setTimeout(() => {
-              supabaseService.saveAIConversation({
-                ...currentSession,
-                ai_name: 'luana'
-              }).catch(err => console.error("Error syncing with Supabase:", err));
-            }, 2000); // 2 seconds delay
-          }
+          return msg;
+        })
+      }));
+      
+      const currentStr = JSON.stringify(sessionsToSave);
+      const localSaved = localStorage.getItem('dra_luana_sessions');
+      
+      if (localSaved !== currentStr) {
+        if (onSaveSessions) {
+          onSaveSessions(sessionsToSave);
+        } else {
+          safeSetLocalStorage('dra_luana_sessions', currentStr);
         }
-      } catch (error) {
-        console.warn("Failed to save sessions:", error);
       }
+    } catch (error) {
+      console.warn("Failed to save sessions locally:", error);
     }
-  }, [sessions, onSaveSessions, currentSession]);
+
+    let hasChanges = false;
+    sessions.forEach(session => {
+      const sessionStr = JSON.stringify(session);
+      if (lastSyncedSessionsRef.current[session.id] !== sessionStr) {
+        pendingSyncRef.current.add(session.id);
+        hasChanges = true;
+      }
+    });
+
+    if (hasChanges) {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+      syncTimeoutRef.current = setTimeout(() => {
+        const currentSessions = sessionsRef.current;
+        const idsToSync = Array.from(pendingSyncRef.current);
+        pendingSyncRef.current.clear();
+
+        idsToSync.forEach(id => {
+          const sessionToSync = currentSessions.find(s => s.id === id);
+          if (sessionToSync) {
+            supabaseService.saveAIConversation({
+              ...sessionToSync,
+              ai_name: 'luana'
+            }).then(() => {
+              lastSyncedSessionsRef.current[id] = JSON.stringify(sessionToSync);
+            }).catch(err => {
+              console.error("Error syncing session to Supabase:", err);
+              pendingSyncRef.current.add(id);
+            });
+          }
+        });
+      }, 2000);
+    }
+  }, [sessions, onSaveSessions]);
 
   useEffect(() => {
     if (scrollRef.current) {
