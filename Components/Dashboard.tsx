@@ -681,7 +681,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                  {isSyncing ? (
                       <span className="text-xs text-blue-500 flex items-center gap-1"><ArrowPathRoundedSquareIcon className="h-3 w-3 animate-spin" /> Salvando...</span>
                  ) : saveError ? (
-                      <span className="text-xs text-red-500 flex items-center gap-1 font-bold" title={saveError}><ExclamationTriangleIcon className="h-3 w-3" /> Erro ao Salvar</span>
+                      <span className="text-xs text-red-500 flex items-center gap-1 font-bold"><ExclamationTriangleIcon className="h-3 w-3" /> {saveError}</span>
                  ) : isCloudConfigured ? (
                      <span className="text-xs text-green-500 flex items-center gap-1 font-medium bg-green-50 dark:bg-green-900/20 px-2 py-0.5 rounded-full border border-green-100 dark:border-green-800"><CloudIcon className="h-3 w-3" /> Online</span>
                  ) : (
