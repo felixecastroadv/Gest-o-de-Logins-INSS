@@ -24,6 +24,7 @@ import { SocialSecurityData } from '../SocialSecurityCalc';
 import { initSupabase } from '../supabaseClient';
 import { extractTextFromPDF } from '../src/utils/pdfParser';
 import { supabaseService } from '../services/supabaseService';
+import { safeSetLocalStorage } from '../utils';
 
 interface Message {
   id: string;
@@ -124,7 +125,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
           if (onSaveSessions) {
             onSaveSessions(sessionsToSave);
           } else {
-            localStorage.setItem('dr_michel_sessions', JSON.stringify(sessionsToSave));
+            safeSetLocalStorage('dr_michel_sessions', JSON.stringify(sessionsToSave));
           }
 
           // Sync with Supabase - Debounced to reduce writes
