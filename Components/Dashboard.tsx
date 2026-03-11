@@ -316,7 +316,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           }
       } catch (err: any) {
           console.error("Erro ao salvar na nuvem:", err);
-          setSaveError("Erro ao sincronizar com o banco de dados. Dados salvos apenas localmente.");
+          setSaveError("Erro: " + (err.message || "Falha na conexão"));
       } finally {
           setTimeout(() => setIsSyncing(false), 800);
       }
