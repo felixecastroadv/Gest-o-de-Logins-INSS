@@ -210,7 +210,7 @@ const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose, onSave }) 
                 0, 0, isRotated ? targetH : targetW, isRotated ? targetW : targetH
             );
             
-            const base64 = canvas.toDataURL('image/jpeg', 0.65);
+            const base64 = canvas.toDataURL('image/jpeg', 0.85);
             
             setPages(prev => [...prev, base64]);
             setCurrentImageSrc(null);
