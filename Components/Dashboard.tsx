@@ -265,6 +265,14 @@ const Dashboard: React.FC<DashboardProps> = ({
   }, [records]);
 
   // Save Logic (Generic)
+  const safeSetLocalStorage = (key: string, value: string) => {
+      try {
+          localStorage.setItem(key, value);
+      } catch (err: any) {
+          console.warn(`Erro ao salvar no localStorage (${key}):`, err.message);
+      }
+  };
+
   const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana', newData: any[]) => {
       setIsSyncing(true);
       setSaveError(null);
@@ -273,49 +281,49 @@ const Dashboard: React.FC<DashboardProps> = ({
       try {
           if (type === 'clients') {
               setRecords(newData);
-              localStorage.setItem('inss_records', JSON.stringify(newData));
+              safeSetLocalStorage('inss_records', JSON.stringify(newData));
               if (supabase) {
                   const { error } = await supabase.from('clients').upsert({ id: 1, data: newData });
                   if (error) throw error;
               }
           } else if (type === 'contracts') {
               setContracts(newData);
-              localStorage.setItem('inss_contracts', JSON.stringify(newData));
+              safeSetLocalStorage('inss_contracts', JSON.stringify(newData));
               if (supabase) {
                   const { error } = await supabase.from('clients').upsert({ id: 2, data: newData });
                   if (error) throw error;
               }
           } else if (type === 'calculations') {
               setSavedCalculations(newData);
-              localStorage.setItem('inss_calculations', JSON.stringify(newData));
+              safeSetLocalStorage('inss_calculations', JSON.stringify(newData));
               if (supabase) {
                   const { error } = await supabase.from('clients').upsert({ id: 3, data: newData });
                   if (error) throw error;
               }
           } else if (type === 'social_calculations') {
               setSavedSocialCalculations(newData);
-              localStorage.setItem('social_security_calculations', JSON.stringify(newData));
+              safeSetLocalStorage('social_security_calculations', JSON.stringify(newData));
               if (supabase) {
                   const { error } = await supabase.from('clients').upsert({ id: 4, data: newData });
                   if (error) throw error;
               }
           } else if (type === 'dr_michel') {
               setDrMichelSessions(newData);
-              localStorage.setItem('dr_michel_sessions', JSON.stringify(newData));
+              safeSetLocalStorage('dr_michel_sessions', JSON.stringify(newData));
               if (supabase) {
                   const { error } = await supabase.from('clients').upsert({ id: 5, data: newData });
                   if (error) throw error;
               }
           } else if (type === 'dra_luana') {
               setDraLuanaSessions(newData);
-              localStorage.setItem('dra_luana_sessions', JSON.stringify(newData));
+              safeSetLocalStorage('dra_luana_sessions', JSON.stringify(newData));
               if (supabase) {
                   const { error } = await supabase.from('clients').upsert({ id: 6, data: newData });
                   if (error) throw error;
               }
           }
       } catch (err: any) {
-          console.error("Erro ao salvar na nuvem:", err);
+          console.error("Erro ao salvar:", err);
           setSaveError("Erro: " + (err.message || "Falha na conexão"));
       } finally {
           setTimeout(() => setIsSyncing(false), 800);
@@ -408,7 +416,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           await supabaseService.saveLaborCalculation(calc);
           const updated = await supabaseService.getLaborCalculations();
           setSavedCalculations(updated);
-          localStorage.setItem('inss_calculations', JSON.stringify(updated));
+          safeSetLocalStorage('inss_calculations', JSON.stringify(updated));
       } catch (error) {
           console.error("Error saving labor calculation:", error);
       }
@@ -420,7 +428,7 @@ const Dashboard: React.FC<DashboardProps> = ({
               await supabaseService.deleteLaborCalculation(id);
               const updated = savedCalculations.filter(c => c.id !== id);
               setSavedCalculations(updated);
-              localStorage.setItem('inss_calculations', JSON.stringify(updated));
+              safeSetLocalStorage('inss_calculations', JSON.stringify(updated));
           } catch (error) {
               console.error("Error deleting labor calculation:", error);
           }
@@ -439,7 +447,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           await supabaseService.saveCalculation(newCalc);
           const updated = [newCalc, ...savedSocialCalculations];
           setSavedSocialCalculations(updated);
-          localStorage.setItem('social_security_calculations', JSON.stringify(updated));
+          safeSetLocalStorage('social_security_calculations', JSON.stringify(updated));
           alert('Cálculo Previdenciário salvo com sucesso no banco de dados!');
       } catch (error) {
           console.error("Error saving social calculation:", error);
@@ -450,12 +458,12 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleSaveDrMichelSessions = async (sessions: any[]) => {
       // Since DrMichelFelix now handles its own sync, this is mostly for local state sync
       setDrMichelSessions(sessions);
-      localStorage.setItem('dr_michel_sessions', JSON.stringify(sessions));
+      safeSetLocalStorage('dr_michel_sessions', JSON.stringify(sessions));
   };
 
   const handleSaveDraLuanaSessions = async (sessions: any[]) => {
       setDraLuanaSessions(sessions);
-      localStorage.setItem('dra_luana_sessions', JSON.stringify(sessions));
+      safeSetLocalStorage('dra_luana_sessions', JSON.stringify(sessions));
   };
 
   // Sorting and Filtering Logic
@@ -731,7 +739,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     onSaveCalculation={handleSaveSocialCalculation}
                     onUpdateCalculations={(list) => {
                         setSavedSocialCalculations(list);
-                        localStorage.setItem('social_security_calculations', JSON.stringify(list));
+                        safeSetLocalStorage('social_security_calculations', JSON.stringify(list));
                     }}
                  />
              ) : currentView === 'clients' ? (
