@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { CloudIcon, CheckIcon, ExclamationTriangleIcon, ArchiveBoxArrowDownIcon } from '@heroicons/react/24/outline';
 import { getDbConfig, DB_CONFIG_KEY } from '../supabaseClient';
+import { safeSetLocalStorage } from '../utils';
 
 const SettingsModal = ({ isOpen, onClose, onSave, onRestoreBackup }: { isOpen: boolean, onClose: () => void, onSave: () => void, onRestoreBackup: () => void }) => {
     const [url, setUrl] = useState('');
@@ -21,7 +22,7 @@ const SettingsModal = ({ isOpen, onClose, onSave, onRestoreBackup }: { isOpen: b
 
     const handleSave = () => {
         if (!isEnvManaged) {
-            localStorage.setItem(DB_CONFIG_KEY, JSON.stringify({ url, key }));
+            safeSetLocalStorage(DB_CONFIG_KEY, JSON.stringify({ url, key }));
         }
         onSave();
         onClose();
