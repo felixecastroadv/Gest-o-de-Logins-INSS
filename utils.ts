@@ -1,3 +1,11 @@
+export const safeSetLocalStorage = (key: string, value: string) => {
+    try {
+        localStorage.setItem(key, value);
+    } catch (err: any) {
+        console.warn(`Erro ao salvar no localStorage (${key}):`, err.message);
+    }
+};
+
 export const parseDate = (dateStr: string): Date | null => {
   if (!dateStr) return null;
   const parts = dateStr.split('/');
