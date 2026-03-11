@@ -70,26 +70,38 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
     const loadFromSupabase = async () => {
       try {
         const dbSessions = await supabaseService.getAIConversations('michel');
-        if (dbSessions && dbSessions.length > 0) {
-          const formattedSessions = dbSessions.map(s => ({
-            id: s.id,
-            title: s.title,
-            date: s.date,
-            messages: s.messages
-          }));
+        let formattedSessions = dbSessions && dbSessions.length > 0 ? dbSessions.map(s => ({
+          id: s.id,
+          title: s.title,
+          date: s.date,
+          messages: s.messages
+        })) : [];
+
+        // Merge with local storage to prevent data loss on page refresh
+        const localSaved = localStorage.getItem('dr_michel_sessions');
+        if (localSaved) {
+          try {
+            const parsed = JSON.parse(localSaved);
+            const mergedSessions = [...formattedSessions];
+            for (const localSession of parsed) {
+              const dbIndex = mergedSessions.findIndex(s => s.id === localSession.id);
+              if (dbIndex === -1) {
+                mergedSessions.push(localSession);
+              } else if (localSession.messages && mergedSessions[dbIndex].messages && localSession.messages.length > mergedSessions[dbIndex].messages.length) {
+                mergedSessions[dbIndex] = localSession;
+              }
+            }
+            mergedSessions.sort((a, b) => Number(b.id) - Number(a.id));
+            formattedSessions = mergedSessions;
+          } catch (e) {
+            console.error("Error parsing local sessions:", e);
+          }
+        }
+
+        if (formattedSessions.length > 0) {
           setSessions(formattedSessions);
           if (!currentSessionId) {
             setCurrentSessionId(formattedSessions[0].id);
-          }
-        } else {
-          // Fallback to local if DB is empty (first time or error)
-          const localSaved = localStorage.getItem('dr_michel_sessions');
-          if (localSaved) {
-            const parsed = JSON.parse(localSaved);
-            setSessions(parsed);
-            if (!currentSessionId && parsed.length > 0) {
-              setCurrentSessionId(parsed[0].id);
-            }
           }
         }
       } catch (error) {
