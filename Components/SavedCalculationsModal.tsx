@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { XCircleIcon, TrashIcon, FolderOpenIcon, PencilSquareIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { SocialSecurityData } from '../SocialSecurityCalc';
 import { supabaseService } from '../services/supabaseService';
+import { safeSetLocalStorage } from '../utils';
 
 interface SavedCalculationsModalProps {
     isOpen: boolean;
@@ -65,7 +66,7 @@ const SavedCalculationsModal: React.FC<SavedCalculationsModalProps> = ({
                 if (onUpdateCalculations) {
                     onUpdateCalculations(newCalculations);
                 } else {
-                    localStorage.setItem('social_security_calculations', JSON.stringify(newCalculations));
+                    safeSetLocalStorage('social_security_calculations', JSON.stringify(newCalculations));
                 }
             } catch (error) {
                 console.error("Erro ao excluir cálculo do Supabase:", error);
@@ -108,7 +109,7 @@ const SavedCalculationsModal: React.FC<SavedCalculationsModalProps> = ({
             if (onUpdateCalculations) {
                 onUpdateCalculations(newCalculations);
             } else {
-                localStorage.setItem('social_security_calculations', JSON.stringify(newCalculations));
+                safeSetLocalStorage('social_security_calculations', JSON.stringify(newCalculations));
             }
             setEditingId(null);
             setEditName('');
