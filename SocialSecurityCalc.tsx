@@ -11,7 +11,7 @@ import {
   ChartBarIcon, FolderOpenIcon, PencilSquareIcon
 } from '@heroicons/react/24/outline';
 import { ClientRecord } from './types';
-import { formatCurrency } from './utils';
+import { formatCurrency, safeSetLocalStorage } from './utils';
 import BenefitAnalysisModal from './Components/BenefitAnalysisModal';
 import SavedCalculationsModal from './Components/SavedCalculationsModal';
 import { supabaseService } from './services/supabaseService';
@@ -242,8 +242,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                 } else {
                     const data = await fetchINPCData();
                     setInpcIndices(processINPCIndices(data));
-                    localStorage.setItem('inpc_indices_cache', JSON.stringify(data));
-                    localStorage.setItem('inpc_indices_date', now.toString());
+                    safeSetLocalStorage('inpc_indices_cache', JSON.stringify(data));
+                    safeSetLocalStorage('inpc_indices_date', now.toString());
                 }
 
                 // Check local storage for IBGE
@@ -255,8 +255,8 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                 } else {
                     const data = await fetchIBGELifeExpectancy();
                     setIbgeTable(data);
-                    localStorage.setItem('ibge_table_cache', JSON.stringify(data));
-                    localStorage.setItem('ibge_table_date', now.toString());
+                    safeSetLocalStorage('ibge_table_cache', JSON.stringify(data));
+                    safeSetLocalStorage('ibge_table_date', now.toString());
                 }
             } catch (e) {
                 console.error("Failed to load indices or IBGE table", e);
@@ -1115,7 +1115,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                 
                 const saved = localStorage.getItem('social_security_calculations');
                 const calculations = saved ? JSON.parse(saved) : [];
-                localStorage.setItem('social_security_calculations', JSON.stringify([newCalc, ...calculations]));
+                safeSetLocalStorage('social_security_calculations', JSON.stringify([newCalc, ...calculations]));
                 alert("Novo cálculo salvo com sucesso no banco de dados!");
             } catch (e) {
                 console.error("Error saving", e);
@@ -1155,7 +1155,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
             if (onUpdateCalculations) {
                 onUpdateCalculations(updatedList);
             } else {
-                localStorage.setItem('social_security_calculations', JSON.stringify(updatedList));
+                safeSetLocalStorage('social_security_calculations', JSON.stringify(updatedList));
             }
             alert("Alterações salvas com sucesso no banco de dados!");
             
