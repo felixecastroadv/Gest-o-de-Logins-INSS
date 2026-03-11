@@ -49,9 +49,26 @@ export const getDbConfig = () => {
 };
 
 export const initSupabase = () => {
-    const config = getDbConfig();
-    if (config && config.url && config.key) {
-        return createClient(config.url, config.key);
+    // Prioridade 1: Configuração salva pelo usuário na interface (localStorage)
+    const stored = localStorage.getItem(DB_CONFIG_KEY);
+    if (stored) {
+        const config = JSON.parse(stored);
+        if (config && config.url && config.key) {
+            return createClient(config.url, config.key);
+        }
     }
+
+    // Prioridade 2: Variáveis de ambiente
+    const envUrl = getEnvVar('NEXT_PUBLIC_SUPABASE_URL') || getEnvVar('VITE_SUPABASE_URL');
+    const envKey = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY') || getEnvVar('VITE_SUPABASE_ANON_KEY');
+    if (envUrl && envKey) {
+        return createClient(envUrl, envKey);
+    }
+
+    // Prioridade 3: Configuração global (fallback)
+    if (GLOBAL_SUPABASE_URL && GLOBAL_SUPABASE_KEY) {
+        return createClient(GLOBAL_SUPABASE_URL, GLOBAL_SUPABASE_KEY);
+    }
+
     return null;
 };
