@@ -38,7 +38,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigure
           <div className="bg-gradient-to-tr from-primary-600 to-primary-400 w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-primary-500/30 transform rotate-3 hover:rotate-6 transition-transform duration-300">
             <ScaleIcon className="h-10 w-10 text-white" />
           </div>
-          <h2 className="text-3xl font-bold text-white tracking-tight">Gestão INSS</h2>
+          <h2 className="text-3xl font-bold text-white tracking-tight">Gestão do Escritório</h2>
           <p className="text-slate-300 mt-2 font-medium">Acesso Exclusivo Jurídico</p>
           {!isCloudConfigured && (
               <span className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700/50">
@@ -97,7 +97,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, onOpenSettings, isCloudConfigure
         </form>
         
         <div className="mt-8 text-center text-xs text-slate-500">
-            &copy; 2025 Gestão Jurídica Inteligente
+            &copy; 2025 Felix e Castro Advocacia Especializada
         </div>
       </div>
     </div>
