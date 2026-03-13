@@ -1,9 +1,9 @@
 
 import React, { useMemo } from 'react';
-import { UserGroupIcon, DocumentTextIcon, ScaleIcon, StarIcon } from '@heroicons/react/24/outline';
+import { UserGroupIcon, DocumentTextIcon, ScaleIcon, StarIcon, CalendarIcon } from '@heroicons/react/24/outline';
 import { ClientRecord } from '../types';
 
-const StatsCards = ({ records }: { records: ClientRecord[] }) => {
+const StatsCards = ({ records, onOpenAgenda }: { records: ClientRecord[], onOpenAgenda: () => void }) => {
     const stats = useMemo(() => {
         const total = records.length;
         const bpc = records.filter(r => r.type?.toLowerCase().includes('bpc')).length;
@@ -13,7 +13,7 @@ const StatsCards = ({ records }: { records: ClientRecord[] }) => {
     }, [records]);
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
             <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-4">
                 <div className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 rounded-lg">
                     <UserGroupIcon className="h-6 w-6" />
@@ -50,6 +50,18 @@ const StatsCards = ({ records }: { records: ClientRecord[] }) => {
                     <p className="text-2xl font-bold text-slate-800 dark:text-white">{stats.priority}</p>
                 </div>
             </div>
+            <button 
+                onClick={onOpenAgenda}
+                className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-4 hover:border-primary-500 transition"
+            >
+                <div className="p-3 bg-primary-50 dark:bg-primary-900/20 text-primary-600 dark:text-primary-400 rounded-lg">
+                    <CalendarIcon className="h-6 w-6" />
+                </div>
+                <div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 font-medium uppercase">Próximos Compromissos</p>
+                    <p className="text-sm font-bold text-primary-600 dark:text-primary-400">Ver Agenda</p>
+                </div>
+            </button>
         </div>
     )
 }
