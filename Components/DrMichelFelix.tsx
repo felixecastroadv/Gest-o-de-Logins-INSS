@@ -512,10 +512,48 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
 
       for (const file of fileArray) {
         if (file.type === 'application/pdf') {
-          const { text, images, isScanned } = await extractTextFromPDF(file);
-          combinedText += `\n--- CONTEÚDO DO ARQUIVO: ${file.name} ---\n${text}\n`;
+          const { text: extractedText, images, isScanned, fileHash } = await extractTextFromPDF(file);
           
-          if (isScanned && images.length > 0) {
+          let finalPdfText = extractedText;
+          
+          // 1. Check Cache
+          if (fileHash) {
+            const cachedText = await supabaseService.getPdfCache(fileHash);
+            if (cachedText) {
+              console.log(`Usando cache para o arquivo: ${file.name}`);
+              finalPdfText = cachedText;
+            } else {
+              // 2. If Scanned and no cache, perform OCR
+              if (isScanned && images.length > 0) {
+                console.log(`Iniciando OCR para o arquivo digitalizado: ${file.name}`);
+                try {
+                  const ocrResponse = await fetch('/api/ocr', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ images })
+                  });
+                  
+                  if (ocrResponse.ok) {
+                    const ocrData = await ocrResponse.json();
+                    if (ocrData.text) {
+                      finalPdfText += `\n--- TEXTO EXTRAÍDO VIA OCR ---\n${ocrData.text}\n`;
+                      // 3. Save to Cache
+                      await supabaseService.savePdfCache(fileHash, file.name, finalPdfText);
+                    }
+                  }
+                } catch (ocrErr) {
+                  console.error("Erro no processo de OCR:", ocrErr);
+                }
+              } else if (extractedText.trim() && fileHash) {
+                // Save digital text to cache too
+                await supabaseService.savePdfCache(fileHash, file.name, extractedText);
+              }
+            }
+          }
+
+          combinedText += `\n--- CONTEÚDO DO ARQUIVO: ${file.name} ---\n${finalPdfText}\n`;
+          
+          if (isScanned && !finalPdfText.includes('--- TEXTO EXTRAÍDO VIA OCR ---')) {
             combinedText += `\n[AVISO: Este arquivo contém ${images.length} páginas digitalizadas/manuscritas que foram convertidas para imagem para análise visual]\n`;
             imagesToSend.push(...images);
           }
