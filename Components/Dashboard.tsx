@@ -58,6 +58,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [drMichelSessions, setDrMichelSessions] = useState<any[]>([]);
   const [draLuanaSessions, setDraLuanaSessions] = useState<any[]>([]);
   const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>([]);
+  const [resolvedAlerts, setResolvedAlerts] = useState<string[]>([]);
   
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -99,6 +100,9 @@ const Dashboard: React.FC<DashboardProps> = ({
         const localCalculations = localStorage.getItem('inss_calculations');
         let fetchedCalculations = localCalculations ? JSON.parse(localCalculations) : [];
         setSavedCalculations(fetchedCalculations);
+
+        const localResolved = localStorage.getItem('inss_resolved_alerts');
+        if (localResolved) setResolvedAlerts(JSON.parse(localResolved));
 
         const localSocialCalculations = localStorage.getItem('social_security_calculations');
         let fetchedSocialCalculations = localSocialCalculations ? JSON.parse(localSocialCalculations) : [];
@@ -241,27 +245,30 @@ const Dashboard: React.FC<DashboardProps> = ({
   // Compute Alerts
   const activeAlerts = useMemo(() => {
       const alerts: NotificationItem[] = [];
+      const today = startOfDay(new Date());
+
       records.forEach(r => {
           if (r.isArchived) return; // Ignorar arquivados
-          if (isUrgentDate(r.extensionDate)) {
-              alerts.push({ id: r.id + '_ext', clientName: r.name, type: 'Prorrogação', date: r.extensionDate });
-          }
-          if (isUrgentDate(r.medExpertiseDate)) {
-              alerts.push({ id: r.id + '_med', clientName: r.name, type: 'Perícia Médica', date: r.medExpertiseDate });
-          }
-          if (isUrgentDate(r.socialExpertiseDate)) {
-              alerts.push({ id: r.id + '_soc', clientName: r.name, type: 'Perícia Social', date: r.socialExpertiseDate });
-          }
-          if (isUrgentDate(r.securityMandateDate)) {
-              alerts.push({ id: r.id + '_mand', clientName: r.name, type: 'Mandado de Segurança', date: r.securityMandateDate });
-          }
+          
+          const checkDate = (dateStr: string, type: string, suffix: string) => {
+              if (isUrgentDate(dateStr)) {
+                  const id = r.id + suffix;
+                  if (resolvedAlerts.includes(id)) return;
+                  alerts.push({ id, clientName: r.name, type, date: dateStr });
+              }
+          };
+
+          checkDate(r.extensionDate, 'Prorrogação', '_ext');
+          checkDate(r.medExpertiseDate, 'Perícia Médica', '_med');
+          checkDate(r.socialExpertiseDate, 'Perícia Social', '_soc');
+          checkDate(r.securityMandateDate, 'Mandado de Segurança', '_mand');
       });
 
-      const today = startOfDay(new Date());
       agendaEvents.forEach(e => {
+          if (resolvedAlerts.includes(e.id)) return;
           const eventDate = parseISO(e.date);
           const diffDays = differenceInDays(eventDate, today);
-          if (diffDays >= 0 && diffDays <= 15) {
+          if (diffDays <= 15) {
               const typeLabel = e.type.charAt(0).toUpperCase() + e.type.slice(1);
               const dateParts = e.date.split('-');
               const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
@@ -274,8 +281,35 @@ const Dashboard: React.FC<DashboardProps> = ({
           }
       });
 
-      return alerts;
-  }, [records, agendaEvents]);
+      // Sorting: Overdue first, then by date proximity
+      return alerts.sort((a, b) => {
+          const dateA = a.date.includes('/') ? 
+            new Date(parseInt(a.date.split('/')[2]), parseInt(a.date.split('/')[1]) - 1, parseInt(a.date.split('/')[0])) : 
+            new Date();
+          const dateB = b.date.includes('/') ? 
+            new Date(parseInt(b.date.split('/')[2]), parseInt(b.date.split('/')[1]) - 1, parseInt(b.date.split('/')[0])) : 
+            new Date();
+
+          const diffA = differenceInDays(dateA, today);
+          const diffB = differenceInDays(dateB, today);
+
+          // Both overdue
+          if (diffA < 0 && diffB < 0) return diffA - diffB; // Most overdue first? Or closest to today? User said "vencido" first.
+          // A overdue, B not
+          if (diffA < 0 && diffB >= 0) return -1;
+          // B overdue, A not
+          if (diffB < 0 && diffA >= 0) return 1;
+          
+          // Both upcoming
+          return diffA - diffB;
+      });
+  }, [records, agendaEvents, resolvedAlerts]);
+
+  const handleResolveAlert = (id: string) => {
+      const updated = [...resolvedAlerts, id];
+      setResolvedAlerts(updated);
+      safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(updated));
+  };
 
   // Save Logic (Generic)
   const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana' | 'agenda', newData: any[]) => {
@@ -1091,6 +1125,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             isOpen={isNotificationsOpen}
             onClose={() => setIsNotificationsOpen(false)}
             notifications={activeAlerts}
+            onResolve={handleResolveAlert}
         />
         <AgendaModal 
             isOpen={isAgendaModalOpen}
