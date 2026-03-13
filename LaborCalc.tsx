@@ -1452,14 +1452,17 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       }));
   };
 
-  const handleSave = async () => {
+  const handleSave = async (forceNew = false) => {
       if (!data.employeeName) {
           alert("Informe o nome do cliente para salvar.");
           return;
       }
       
+      const newId = Math.random().toString(36).substr(2, 9);
+      const recordId = forceNew ? newId : (editingId || newId);
+
       const record: CalculationRecord = {
-          id: editingId || Math.random().toString(36).substr(2, 9),
+          id: recordId,
           date: new Date().toISOString(),
           employeeName: data.employeeName,
           totalValue: totalValue,
@@ -1472,8 +1475,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
           if (onSaveCalculation) {
               onSaveCalculation(record);
           }
-          setEditingId(null);
-          alert("Cálculo salvo com sucesso no banco de dados!");
+          setEditingId(recordId);
+          alert(editingId && !forceNew ? "Cálculo atualizado com sucesso!" : "Cálculo salvo com sucesso!");
       } catch (error) {
           console.error("Error saving labor calculation:", error);
           alert("Erro ao salvar cálculo no banco de dados.");
@@ -3033,9 +3036,20 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                               <button onClick={() => setActiveTab(1)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-sm transition">
                                   Revisar Dados
                               </button>
-                              <button onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-lg shadow-blue-500/50 flex items-center gap-2 transition">
-                                  <ArchiveBoxIcon className="h-5 w-5" /> Salvar
-                              </button>
+                              {editingId ? (
+                                  <>
+                                      <button onClick={() => handleSave(false)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-sm shadow-lg shadow-emerald-500/50 flex items-center gap-2 transition">
+                                          <ArrowPathIcon className="h-5 w-5" /> Atualizar
+                                      </button>
+                                      <button onClick={() => handleSave(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-lg shadow-blue-500/50 flex items-center gap-2 transition">
+                                          <PlusIcon className="h-5 w-5" /> Salvar Novo
+                                      </button>
+                                  </>
+                              ) : (
+                                  <button onClick={() => handleSave(false)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm shadow-lg shadow-blue-500/50 flex items-center gap-2 transition">
+                                      <ArchiveBoxIcon className="h-5 w-5" /> Salvar
+                                  </button>
+                              )}
                               <button onClick={() => generatePDF()} className="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-bold text-sm shadow-lg shadow-indigo-500/50 flex items-center gap-2 transition">
                                   <DocumentTextIcon className="h-5 w-5" /> PDF
                               </button>
