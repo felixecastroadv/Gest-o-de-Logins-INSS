@@ -81,117 +81,95 @@ const Dashboard: React.FC<DashboardProps> = ({
     const supabase = initSupabase();
 
     try {
-        // 1. Initialize with Local Data (Fallback)
+        // 1. Initialize with Local Data (Immediate UI response)
         const localClients = localStorage.getItem('inss_records');
         let fetchedClients = localClients ? JSON.parse(localClients) : INITIAL_DATA;
+        setRecords(fetchedClients);
 
         const localContracts = localStorage.getItem('inss_contracts');
         let fetchedContracts = localContracts ? JSON.parse(localContracts) : INITIAL_CONTRACTS_LIST;
+        setContracts(fetchedContracts);
 
         const localCalculations = localStorage.getItem('inss_calculations');
         let fetchedCalculations = localCalculations ? JSON.parse(localCalculations) : [];
+        setSavedCalculations(fetchedCalculations);
 
         const localSocialCalculations = localStorage.getItem('social_security_calculations');
         let fetchedSocialCalculations = localSocialCalculations ? JSON.parse(localSocialCalculations) : [];
+        setSavedSocialCalculations(fetchedSocialCalculations);
 
         const localMichel = localStorage.getItem('dr_michel_sessions');
         let fetchedDrMichelSessions = localMichel ? JSON.parse(localMichel) : [];
+        setDrMichelSessions(fetchedDrMichelSessions);
 
         const localLuana = localStorage.getItem('dra_luana_sessions');
         let fetchedDraLuanaSessions = localLuana ? JSON.parse(localLuana) : [];
-
-        if (supabase) {
-            // Cloud Fetch - Clients (ID 1)
-            try {
-                const { data: clientData, error: clientError } = await supabase
-                    .from('clients')
-                    .select('data')
-                    .eq('id', 1)
-                    .single();
-                    
-                if (clientData && clientData.data) {
-                    fetchedClients = clientData.data;
-                    safeSetLocalStorage('inss_records', JSON.stringify(clientData.data));
-                } else if (clientError) {
-                    console.error("Error fetching clients:", clientError);
-                    setDbError("Erro ao buscar clientes na nuvem. Exibindo dados locais.");
-                }
-            } catch (err) {
-                console.error("Exception fetching clients:", err);
-                setDbError("Erro de conexão (Clientes). Exibindo dados locais.");
-            }
-
-            // Cloud Fetch - Contracts (ID 2)
-            try {
-                const { data: contractData, error: contractError } = await supabase
-                    .from('clients')
-                    .select('data')
-                    .eq('id', 2)
-                    .single();
-
-                if (contractData && contractData.data) {
-                    fetchedContracts = contractData.data;
-                    safeSetLocalStorage('inss_contracts', JSON.stringify(contractData.data));
-                } else if (contractError && contractError.code === 'PGRST116') {
-                     await supabase.from('clients').upsert({ id: 2, data: INITIAL_CONTRACTS_LIST });
-                }
-            } catch (err) {
-                 console.error("Exception fetching contracts:", err);
-            }
-
-            // New Fetch Logic using dedicated tables
-            try {
-                const laborCalcs = await supabaseService.getLaborCalculations();
-                if (laborCalcs && laborCalcs.length > 0) {
-                    fetchedCalculations = laborCalcs;
-                    safeSetLocalStorage('inss_calculations', JSON.stringify(fetchedCalculations));
-                }
-            } catch (err) { console.error("Error fetching labor calculations:", err); }
-
-            try {
-                const socialCalcs = await supabaseService.getCalculations();
-                if (socialCalcs && socialCalcs.length > 0) {
-                    fetchedSocialCalculations = socialCalcs;
-                    safeSetLocalStorage('social_security_calculations', JSON.stringify(fetchedSocialCalculations));
-                }
-            } catch (err) { console.error("Error fetching social calculations:", err); }
-
-            /* 
-            // Optimized: Moved fetching to the component itself to save bandwidth/IO
-            try {
-                const michelSessions = await supabaseService.getAIConversations('michel');
-                if (michelSessions && michelSessions.length > 0) {
-                    fetchedDrMichelSessions = michelSessions;
-                    safeSetLocalStorage('dr_michel_sessions', JSON.stringify(fetchedDrMichelSessions));
-                }
-            } catch (err) { console.error("Error fetching Michel sessions:", err); }
-
-            try {
-                const luanaSessions = await supabaseService.getAIConversations('luana');
-                if (luanaSessions && luanaSessions.length > 0) {
-                    fetchedDraLuanaSessions = luanaSessions;
-                    safeSetLocalStorage('dra_luana_sessions', JSON.stringify(fetchedDraLuanaSessions));
-                }
-            } catch (err) { console.error("Error fetching Luana sessions:", err); }
-            */
-
-        }
-
-        setRecords(fetchedClients);
-        setContracts(fetchedContracts);
-        setSavedCalculations(fetchedCalculations);
-        setSavedSocialCalculations(fetchedSocialCalculations);
-        setDrMichelSessions(fetchedDrMichelSessions);
         setDraLuanaSessions(fetchedDraLuanaSessions);
 
-    } catch (e) {
-        console.error("Erro geral", e);
-        setDbError("Erro crítico. Tentando recuperar backup local.");
-        // Last resort fallback
-        const localClients = localStorage.getItem('inss_records');
-        if (localClients) setRecords(JSON.parse(localClients));
-    } finally {
+        if (supabase) {
+            // Cloud Fetch with Timeout Resilience
+            const fetchWithTimeout = async (id: number) => {
+                try {
+                    const { data, error } = await supabase
+                        .from('clients')
+                        .select('data')
+                        .eq('id', id)
+                        .single();
+                    
+                    if (error) {
+                        if (error.message?.includes('timeout') || error.code === '57014') {
+                            return null; // Signal timeout
+                        }
+                        throw error;
+                    }
+                    return data?.data;
+                } catch (err) {
+                    console.error(`Fetch error for ID ${id}:`, err);
+                    return null;
+                }
+            };
+
+            // Run fetches in parallel but don't block
+            Promise.all([
+                fetchWithTimeout(1),
+                fetchWithTimeout(2),
+                supabaseService.getLaborCalculations().catch(() => null),
+                supabaseService.getCalculations().catch(() => null)
+            ]).then(([cData, conData, labData, socData]) => {
+                let partialSync = false;
+
+                if (cData) {
+                    setRecords(cData);
+                    safeSetLocalStorage('inss_records', JSON.stringify(cData));
+                } else partialSync = true;
+
+                if (conData) {
+                    setContracts(conData);
+                    safeSetLocalStorage('inss_contracts', JSON.stringify(conData));
+                } else partialSync = true;
+
+                if (labData && labData.length > 0) {
+                    setSavedCalculations(labData);
+                    safeSetLocalStorage('inss_calculations', JSON.stringify(labData));
+                }
+                
+                if (socData && socData.length > 0) {
+                    setSavedSocialCalculations(socData);
+                    safeSetLocalStorage('social_security_calculations', JSON.stringify(socData));
+                }
+
+                if (partialSync) {
+                    setDbError("Sincronização parcial (Timeout). Dados locais preservados.");
+                }
+                setIsLoading(false);
+            });
+        } else {
+            setIsLoading(false);
+        }
+    } catch (err) {
+        console.error("Exception in fetchData:", err);
         setIsLoading(false);
+        setDbError("Erro de carregamento. Usando dados locais.");
     }
   };
 
@@ -276,53 +254,75 @@ const Dashboard: React.FC<DashboardProps> = ({
               setRecords(newData);
               safeSetLocalStorage('inss_records', JSON.stringify(newData));
               if (supabase) {
-                  const { error } = await supabase.from('clients').upsert({ id: 1, data: newData });
-                  if (error) throw error;
+                  // Background sync for large payloads
+                  supabase.from('clients').upsert({ id: 1, data: newData }).then(({ error }) => {
+                      if (error) {
+                          console.error("Sync error (clients):", error);
+                          setSaveError("Erro de sincronização (Clientes).");
+                      }
+                      setIsSyncing(false);
+                  });
+                  return;
               }
           } else if (type === 'contracts') {
               setContracts(newData);
               safeSetLocalStorage('inss_contracts', JSON.stringify(newData));
               if (supabase) {
-                  const { error } = await supabase.from('clients').upsert({ id: 2, data: newData });
-                  if (error) throw error;
+                  supabase.from('clients').upsert({ id: 2, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (contracts):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
               }
           } else if (type === 'calculations') {
               setSavedCalculations(newData);
               safeSetLocalStorage('inss_calculations', JSON.stringify(newData));
               if (supabase) {
-                  const { error } = await supabase.from('clients').upsert({ id: 3, data: newData });
-                  if (error) throw error;
+                  supabase.from('clients').upsert({ id: 3, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (calculations):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
               }
           } else if (type === 'social_calculations') {
               setSavedSocialCalculations(newData);
               safeSetLocalStorage('social_security_calculations', JSON.stringify(newData));
               if (supabase) {
-                  const { error } = await supabase.from('clients').upsert({ id: 4, data: newData });
-                  if (error) throw error;
+                  supabase.from('clients').upsert({ id: 4, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (social):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
               }
           } else if (type === 'dr_michel') {
               setDrMichelSessions(newData);
               safeSetLocalStorage('dr_michel_sessions', JSON.stringify(newData));
               if (supabase) {
-                  const { error } = await supabase.from('clients').upsert({ id: 5, data: newData });
-                  if (error) throw error;
+                  supabase.from('clients').upsert({ id: 5, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (Michel):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
               }
           } else if (type === 'dra_luana') {
               setDraLuanaSessions(newData);
               safeSetLocalStorage('dra_luana_sessions', JSON.stringify(newData));
               if (supabase) {
-                  const { error } = await supabase.from('clients').upsert({ id: 6, data: newData });
-                  if (error) throw error;
+                  supabase.from('clients').upsert({ id: 6, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (Luana):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
               }
           }
+          setIsSyncing(false);
       } catch (err: any) {
           console.error("Erro ao salvar:", err);
           setSaveError("Erro: " + (err.message || "Falha na conexão"));
-      } finally {
-          setTimeout(() => setIsSyncing(false), 800);
+          setIsSyncing(false);
       }
-  }
-  
+  };
+
   // Handlers for Clients
   const handleClientCreate = (data: ClientRecord) => {
     const newRecord = { ...data, id: Math.random().toString(36).substr(2, 9) };
