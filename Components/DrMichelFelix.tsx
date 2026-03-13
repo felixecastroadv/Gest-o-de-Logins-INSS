@@ -48,6 +48,7 @@ interface DrMichelFelixProps {
 
 const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSessions }) => {
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions || []);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -121,6 +122,8 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
         }
       } catch (error) {
         console.error("Error loading from Supabase:", error);
+      } finally {
+        setIsLoaded(true);
       }
     };
     
@@ -145,6 +148,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
 
   // Save to Local Storage immediately
   useEffect(() => {
+    if (!isLoaded) return;
     try {
       const currentStr = JSON.stringify(sanitizedSessions);
       const storageKey = 'dr_michel_sessions';
@@ -160,10 +164,11 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
     } catch (error) {
       console.warn("Failed to save sessions locally:", error);
     }
-  }, [sanitizedSessions, onSaveSessions]);
+  }, [sanitizedSessions, onSaveSessions, isLoaded]);
 
   // Save to Supabase with debounce
   useEffect(() => {
+    if (!isLoaded) return;
     let hasChanges = false;
     sanitizedSessions.forEach(session => {
       const sessionStr = JSON.stringify(session);
