@@ -4,10 +4,10 @@ import {
   ArrowPathRoundedSquareIcon, CloudIcon, BellIcon, Cog6ToothIcon, SunIcon, MoonIcon,
   ArchiveBoxIcon, MagnifyingGlassIcon, PlusIcon, StarIcon, ArrowUturnLeftIcon, 
   PencilSquareIcon, TrashIcon, ExclamationTriangleIcon, ChevronUpIcon, ChevronDownIcon, 
-  ChevronLeftIcon, ChevronRightIcon
+  ChevronLeftIcon, ChevronRightIcon, CalendarIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
-import { DashboardProps, ClientRecord, ContractRecord, NotificationItem } from '../types';
+import { DashboardProps, ClientRecord, ContractRecord, NotificationItem, AgendaEvent } from '../types';
 import { INITIAL_DATA, INITIAL_CONTRACTS_LIST } from '../data';
 import LaborCalc, { CalculationRecord } from '../LaborCalc';
 import SocialSecurityCalc, { SocialSecurityData } from '../SocialSecurityCalc';
@@ -22,15 +22,18 @@ export interface SocialSecurityCalculationRecord {
 import { initSupabase } from '../supabaseClient';
 import { supabaseService } from '../services/supabaseService';
 import { isUrgentDate, formatCurrency } from '../utils';
+import { parseISO, differenceInDays, startOfDay } from 'date-fns';
 import StatsCards from './StatsCards';
 import FinancialStats from './FinancialStats';
 import RecordModal from './RecordModal';
 import ContractModal from './ContractModal';
+import AgendaModal from './AgendaModal';
 import SettingsModal from './SettingsModal';
 import NotificationsModal from './NotificationsModal';
 import CopyButton from './CopyButton';
 import DrMichelFelix from './DrMichelFelix';
 import DraLuanaCastro from './DraLuanaCastro';
+import Agenda from './Agenda';
 import { safeSetLocalStorage } from '../utils';
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -45,7 +48,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSettingsSaved,
   onRestoreBackup
 }) => {
-  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana'>('clients');
+  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda'>('clients');
   const [showArchived, setShowArchived] = useState(false);
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
@@ -54,6 +57,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [savedSocialCalculations, setSavedSocialCalculations] = useState<SocialSecurityCalculationRecord[]>([]);
   const [drMichelSessions, setDrMichelSessions] = useState<any[]>([]);
   const [draLuanaSessions, setDraLuanaSessions] = useState<any[]>([]);
+  const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>([]);
   
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -63,6 +67,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
   const [currentContract, setCurrentContract] = useState<ContractRecord | null>(null);
+  
+  const [isAgendaModalOpen, setIsAgendaModalOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -106,6 +112,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         let fetchedDraLuanaSessions = localLuana ? JSON.parse(localLuana) : [];
         setDraLuanaSessions(fetchedDraLuanaSessions);
 
+        const localAgenda = localStorage.getItem('agenda_events');
+        let fetchedAgendaEvents = localAgenda ? JSON.parse(localAgenda) : [];
+        setAgendaEvents(fetchedAgendaEvents);
+
         if (supabase) {
             // Cloud Fetch with Timeout Resilience
             const fetchWithTimeout = async (id: number) => {
@@ -134,8 +144,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                 fetchWithTimeout(1),
                 fetchWithTimeout(2),
                 supabaseService.getLaborCalculations().catch(() => null),
-                supabaseService.getCalculations().catch(() => null)
-            ]).then(([cData, conData, labData, socData]) => {
+                supabaseService.getCalculations().catch(() => null),
+                fetchWithTimeout(7)
+            ]).then(([cData, conData, labData, socData, agendaData]) => {
                 let partialSync = false;
 
                 if (cData) {
@@ -156,6 +167,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                 if (socData && socData.length > 0) {
                     setSavedSocialCalculations(socData);
                     safeSetLocalStorage('social_security_calculations', JSON.stringify(socData));
+                }
+
+                if (agendaData) {
+                    setAgendaEvents(agendaData);
+                    safeSetLocalStorage('agenda_events', JSON.stringify(agendaData));
                 }
 
                 if (partialSync) {
@@ -240,11 +256,29 @@ const Dashboard: React.FC<DashboardProps> = ({
               alerts.push({ id: r.id + '_mand', clientName: r.name, type: 'Mandado de Segurança', date: r.securityMandateDate });
           }
       });
+
+      const today = startOfDay(new Date());
+      agendaEvents.forEach(e => {
+          const eventDate = parseISO(e.date);
+          const diffDays = differenceInDays(eventDate, today);
+          if (diffDays >= 0 && diffDays <= 15) {
+              const typeLabel = e.type.charAt(0).toUpperCase() + e.type.slice(1);
+              const dateParts = e.date.split('-');
+              const formattedDate = `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
+              alerts.push({ 
+                  id: e.id, 
+                  clientName: e.clientName || 'Evento sem cliente', 
+                  type: `Agenda: ${typeLabel} às ${e.time}`, 
+                  date: formattedDate 
+              });
+          }
+      });
+
       return alerts;
-  }, [records]);
+  }, [records, agendaEvents]);
 
   // Save Logic (Generic)
-  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana', newData: any[]) => {
+  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana' | 'agenda', newData: any[]) => {
       setIsSyncing(true);
       setSaveError(null);
       const supabase = initSupabase();
@@ -310,6 +344,16 @@ const Dashboard: React.FC<DashboardProps> = ({
               if (supabase) {
                   supabase.from('clients').upsert({ id: 6, data: newData }).then(({ error }) => {
                       if (error) console.error("Sync error (Luana):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
+              }
+          } else if (type === 'agenda') {
+              setAgendaEvents(newData);
+              safeSetLocalStorage('agenda_events', JSON.stringify(newData));
+              if (supabase) {
+                  supabase.from('clients').upsert({ id: 7, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (Agenda):", error);
                       setIsSyncing(false);
                   });
                   return;
@@ -457,6 +501,23 @@ const Dashboard: React.FC<DashboardProps> = ({
   const handleSaveDraLuanaSessions = async (sessions: any[]) => {
       setDraLuanaSessions(sessions);
       safeSetLocalStorage('dra_luana_sessions', JSON.stringify(sessions));
+  };
+
+  const handleSaveAgendaEvent = (event: AgendaEvent) => {
+      const existing = agendaEvents.find(e => e.id === event.id);
+      let updated;
+      if (existing) {
+          updated = agendaEvents.map(e => e.id === event.id ? event : e);
+      } else {
+          updated = [...agendaEvents, event];
+      }
+      saveData('agenda', updated);
+  };
+
+  const handleDeleteAgendaEvent = (id: string) => {
+      if (confirm('Excluir este compromisso?')) {
+          saveData('agenda', agendaEvents.filter(e => e.id !== id));
+      }
   };
 
   // Sorting and Filtering Logic
@@ -625,6 +686,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                </button>
 
                <button 
+                   onClick={() => setCurrentView('dra_luana')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'dra_luana' ? 'bg-pink-600 shadow-lg shadow-pink-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <StarIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Dra. Luana Castro (IA)</span>
+               </button>
+
+               <button 
                    onClick={() => setCurrentView('social_calc')}
                    className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'social_calc' ? 'bg-orange-600 shadow-lg shadow-orange-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
                >
@@ -641,11 +710,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                </button>
 
                <button 
-                   onClick={() => setCurrentView('dra_luana')}
-                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'dra_luana' ? 'bg-rose-600 shadow-lg shadow-rose-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+                   onClick={() => setCurrentView('agenda')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'agenda' ? 'bg-slate-600 shadow-lg shadow-slate-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
                >
-                   <StarIcon className="h-6 w-6 lg:mr-3" />
-                   <span className="hidden lg:block font-medium">Dra. Luana Castro (IA)</span>
+                   <CalendarIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Agenda</span>
                </button>
            </div>
            
@@ -677,6 +746,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       currentView === 'labor_calc' ? 'Cálculos Trabalhistas' :
                       currentView === 'dr_michel' ? 'Dr. Michel Felix - IA Jurídica' :
                       currentView === 'dra_luana' ? 'Dra. Luana Castro - IA Trabalhista' :
+                      currentView === 'agenda' ? 'Agenda' :
                       'Cálculos Previdenciários'}
                  </h2>
                  {isSyncing ? (
@@ -717,6 +787,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                     initialSessions={draLuanaSessions} 
                     onSaveSessions={handleSaveDraLuanaSessions} 
                   />
+             ) : currentView === 'agenda' ? (
+                 <Agenda 
+                    events={agendaEvents}
+                    clients={records}
+                    onSaveEvent={handleSaveAgendaEvent}
+                    onDeleteEvent={handleDeleteAgendaEvent}
+                 />
              ) : currentView === 'labor_calc' ? (
                  <LaborCalc 
                     clients={records} 
@@ -738,11 +815,12 @@ const Dashboard: React.FC<DashboardProps> = ({
              ) : currentView === 'clients' ? (
                  <>
                     {/* ... (Conteúdo de Clients Mantido - Oculto aqui para brevidade, mas o código completo está no topo) ... */}
-                    <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-6">
-                        <div className="flex-1">
-                             <StatsCards records={records.filter(r => !r.isArchived)} />
-                        </div>
-                    </div>
+                     <div className="grid grid-cols-1 mb-6">
+                         <StatsCards 
+                            records={records.filter(r => !r.isArchived)} 
+                            onOpenAgenda={() => setIsAgendaModalOpen(true)}
+                         />
+                     </div>
                     
                     {/* Action Bar Clients */}
                     <div className="flex flex-col gap-4 mb-6">
@@ -935,7 +1013,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                 </thead>
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {paginatedList.map((contract: any) => {
-                                        const totalPaid = (contract.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0);
+                                        const totalPaid = (contract.payments || []).reduce((sum: number, p: any) => p.isPaid ? sum + p.amount : sum, 0);
                                         const totalFee = Number(contract.totalFee) || 0;
                                         const percentPaid = totalFee > 0 ? (totalPaid / totalFee) * 100 : 0;
                                         
@@ -999,6 +1077,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             onClose={() => setIsContractModalOpen(false)} 
             onSave={handleSaveContract}
             initialData={currentContract}
+            clients={records}
         />
         
         <SettingsModal 
@@ -1012,6 +1091,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             isOpen={isNotificationsOpen}
             onClose={() => setIsNotificationsOpen(false)}
             notifications={activeAlerts}
+        />
+        <AgendaModal 
+            isOpen={isAgendaModalOpen}
+            onClose={() => setIsAgendaModalOpen(false)}
+            events={agendaEvents}
+            onUpdateEvent={handleSaveAgendaEvent}
         />
       </div>
     </div>
