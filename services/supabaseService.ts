@@ -202,5 +202,40 @@ export const supabaseService = {
       console.error('Error deleting labor calculation from Supabase:', error);
       throw error;
     }
+  },
+
+  // PDF Text Cache
+  async getPdfCache(fileHash: string) {
+    if (!supabase) return null;
+    
+    const { data, error } = await supabase
+      .from('pdf_text_cache')
+      .select('full_text')
+      .eq('file_hash', fileHash)
+      .maybeSingle();
+      
+    if (error) {
+      console.error('Error fetching PDF cache from Supabase:', error);
+      return null;
+    }
+    return data?.full_text || null;
+  },
+
+  async savePdfCache(fileHash: string, fileName: string, fullText: string) {
+    if (!supabase) return null;
+    
+    const { error } = await supabase
+      .from('pdf_text_cache')
+      .upsert({
+        file_hash: fileHash,
+        file_name: fileName,
+        full_text: fullText,
+        created_at: new Date().toISOString()
+      }, { onConflict: 'file_hash' });
+      
+    if (error) {
+      console.error('Error saving PDF cache to Supabase:', error);
+      // We don't throw here to not block the user if cache fails
+    }
   }
 };
