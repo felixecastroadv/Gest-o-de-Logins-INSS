@@ -7,6 +7,18 @@ export interface ScannedDocument {
   date: string;
 }
 
+export interface AgendaEvent {
+  id: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM
+  type: 'audiência' | 'perícia' | 'atendimento' | 'prazo' | 'outro';
+  clientId?: string;
+  clientName?: string;
+  description: string;
+  status?: 'pending' | 'resolved' | 'cancelled';
+  resolvedAt?: string;
+}
+
 export interface ClientRecord {
   id: string;
   name: string;
@@ -33,6 +45,7 @@ export interface ClientRecord {
   legalRepresentativeAddress?: string;
 
   isDailyAttention?: boolean;
+  isUrgentAttention?: boolean;
   isArchived?: boolean;
   documents?: ScannedDocument[];
 }
@@ -59,12 +72,15 @@ export const AUTHORIZED_USERS = [
 export interface PaymentEntry {
   id: string;
   date: string; // ISO Date YYYY-MM-DD
+  dueDate: string; // ISO Date YYYY-MM-DD
   amount: number;
+  isPaid: boolean;
   note?: string;
 }
 
 export interface ContractRecord {
   id: string;
+  clientId?: string;
   firstName: string;
   lastName: string;
   cpf: string;
@@ -92,6 +108,7 @@ export interface ContractModalProps {
   onClose: () => void;
   onSave: (record: ContractRecord) => void;
   initialData?: ContractRecord | null;
+  clients: ClientRecord[];
 }
 
 export interface LoginProps {
