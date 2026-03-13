@@ -43,8 +43,8 @@ export const isUrgentDate = (dateStr: string): boolean => {
   const diffTime = target.getTime() - today.getTime();
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   
-  // Prazo de 15 dias para alerta
-  return diffDays >= 0 && diffDays <= 15;
+  // Alerta se estiver vencido ou nos próximos 15 dias
+  return diffDays <= 15;
 };
 
 export const formatCurrency = (value: number) => {
