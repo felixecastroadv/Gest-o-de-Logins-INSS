@@ -1708,7 +1708,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
           doc.setPage(i);
           doc.setFontSize(8);
           doc.setTextColor(150);
-          doc.text(`Gerado por Gestão INSS Jurídico em ${new Date().toLocaleDateString()} - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: "center" });
+          doc.text(`Gerado por Felix e Castro Advocacia Especializada em ${new Date().toLocaleDateString()} - Página ${i} de ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: "center" });
       }
 
       doc.save(`Relatorio_Calculo_${dataToUse.employeeName || 'Trabalhista'}.pdf`);
