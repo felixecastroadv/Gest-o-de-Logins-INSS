@@ -51,6 +51,8 @@ interface LaborData {
   terminationReason: 'sem_justa_causa' | 'pedido_demissao' | 'justa_causa' | 'rescisao_indireta' | 'sem_anotacao';
   noticePeriod: 'trabalhado' | 'indenizado' | 'dispensado' | 'nao_pago'; // 'nao_pago' treated as indenizado for calculation but maybe different label? User said "quando não tem o pagamento... que seria indenizado"
   hasFgtsBalance: number; // Saldo já depositado para cálculo da multa
+  hasFgtsPenaltyBalance: number; // Multa de 40% já paga
+  fgtsPenaltyAllDeposited: boolean; // Se a multa de 40% foi totalmente depositada
   
   // Jornada Contratual (Informativo)
   contractualSchedule: {
@@ -181,6 +183,8 @@ const INITIAL_LABOR_DATA: LaborData = {
   terminationReason: 'sem_justa_causa',
   noticePeriod: 'indenizado',
   hasFgtsBalance: 0,
+  hasFgtsPenaltyBalance: 0,
+  fgtsPenaltyAllDeposited: false,
   contractualSchedule: {
       type: 'segunda_sexta',
       startTime: '08:00',
@@ -1095,21 +1099,28 @@ const calculateLaborResults = (calcData: LaborData) => {
     const totalFgtsParaMulta = totalFgtsDeposited + totalFgtsMissing + stabilityFgts + fgtsOnRescisory;
     
     if (calcData.terminationReason === 'sem_justa_causa' || calcData.terminationReason === 'rescisao_indireta' || calcData.terminationReason === 'sem_anotacao') {
-        const multa40 = totalFgtsParaMulta * 0.40;
+        const multa40Total = totalFgtsParaMulta * 0.40;
+        const multa40Paga = calcData.fgtsPenaltyAllDeposited ? multa40Total : (Number(calcData.hasFgtsPenaltyBalance) || 0);
+        const multa40Restante = Math.max(0, multa40Total - multa40Paga);
         
-        let fineDetails = `Base de Cálculo da Multa de 40%:\n`;
-        if (totalFgtsDeposited > 0) fineDetails += `(+) FGTS Depositado: ${formatCurrency(totalFgtsDeposited)}\n`;
-        if (totalFgtsMissing > 0) fineDetails += `(+) FGTS Não Depositado: ${formatCurrency(totalFgtsMissing)}\n`;
-        if (fgtsOnRescisory > 0) fineDetails += `(+) FGTS sobre Rescisão: ${formatCurrency(fgtsOnRescisory)}\n`;
-        if (stabilityFgts > 0) fineDetails += `(+) FGTS sobre Estabilidade: ${formatCurrency(stabilityFgts)}\n`;
-        fineDetails += `(=) Base Total: ${formatCurrency(totalFgtsParaMulta)}\nMulta (40%): ${formatCurrency(multa40)}`;
+        if (multa40Restante > 0) {
+            let fineDetails = `Base de Cálculo da Multa de 40%:\n`;
+            if (totalFgtsDeposited > 0) fineDetails += `(+) FGTS Depositado: ${formatCurrency(totalFgtsDeposited)}\n`;
+            if (totalFgtsMissing > 0) fineDetails += `(+) FGTS Não Depositado: ${formatCurrency(totalFgtsMissing)}\n`;
+            if (fgtsOnRescisory > 0) fineDetails += `(+) FGTS sobre Rescisão: ${formatCurrency(fgtsOnRescisory)}\n`;
+            if (stabilityFgts > 0) fineDetails += `(+) FGTS sobre Estabilidade: ${formatCurrency(stabilityFgts)}\n`;
+            fineDetails += `(=) Base Total: ${formatCurrency(totalFgtsParaMulta)}\n`;
+            fineDetails += `(x) Alíquota (40%): ${formatCurrency(multa40Total)}\n`;
+            if (multa40Paga > 0) fineDetails += `(-) Valor Já Pago: ${formatCurrency(multa40Paga)}\n`;
+            fineDetails += `(=) Multa em Falta: ${formatCurrency(multa40Restante)}`;
 
-        results.push({ 
-            desc: `Multa 40% do FGTS (Base: ${formatCurrency(totalFgtsParaMulta)})`, 
-            value: multa40, 
-            category: 'FGTS',
-            details: fineDetails
-        });
+            results.push({ 
+                desc: `Multa 40% do FGTS (Em Falta)`, 
+                value: multa40Restante, 
+                category: 'FGTS',
+                details: fineDetails
+            });
+        }
     }
 
     // 11. Multas Art. 477 e 467
@@ -1859,8 +1870,31 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                       />
                                       <span className="text-xs font-bold text-slate-700 dark:text-slate-300">FGTS Totalmente Depositado (Período Integral)</span>
                                   </label>
-                                  <p className="text-[10px] text-slate-500 mt-1 ml-6 leading-tight">
+                                  <p className="text-[10px] text-slate-500 mt-1 ml-6 leading-tight mb-4">
                                       Marque se o valor acima corresponde ao total devido de todo o contrato. Se desmarcado, o sistema considerará como valor parcial.
+                                  </p>
+
+                                  <label className={STYLES.LABEL_TEXT}>Multa 40% FGTS (Já paga)</label>
+                                  <input 
+                                    type="number" 
+                                    className={STYLES.INPUT_FIELD} 
+                                    value={data.hasFgtsPenaltyBalance} 
+                                    onChange={e => handleInputChange('hasFgtsPenaltyBalance', e.target.value)} 
+                                    placeholder="Multa 40% paga..." 
+                                    disabled={data.fgtsNoDeposits}
+                                  />
+                                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                                      <input 
+                                        type="checkbox" 
+                                        checked={data.fgtsPenaltyAllDeposited} 
+                                        onChange={e => handleInputChange('fgtsPenaltyAllDeposited', e.target.checked)} 
+                                        className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                        disabled={data.fgtsNoDeposits}
+                                      />
+                                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Multa 40% FGTS Totalmente Depositada (Período Integral)</span>
+                                  </label>
+                                  <p className="text-[10px] text-slate-500 mt-1 ml-6 leading-tight">
+                                      Marque se o valor da multa acima corresponde ao total devido. Se desmarcado, o sistema considerará como valor parcial.
                                   </p>
                               </div>
                           </div>
