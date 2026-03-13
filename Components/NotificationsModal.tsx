@@ -3,7 +3,7 @@ import React from 'react';
 import { BellAlertIcon, XMarkIcon, ExclamationTriangleIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { NotificationItem } from '../types';
 
-const NotificationsModal = ({ isOpen, onClose, notifications }: { isOpen: boolean, onClose: () => void, notifications: NotificationItem[] }) => {
+const NotificationsModal = ({ isOpen, onClose, notifications, onResolve }: { isOpen: boolean, onClose: () => void, notifications: NotificationItem[], onResolve: (id: string) => void }) => {
     if (!isOpen) return null;
 
     return (
@@ -30,9 +30,9 @@ const NotificationsModal = ({ isOpen, onClose, notifications }: { isOpen: boolea
                     ) : (
                         <ul className="space-y-1">
                             {notifications.map((notif, idx) => (
-                                <li key={`${notif.id}-${idx}`} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition border border-transparent hover:border-slate-100 dark:hover:border-slate-700/50">
+                                <li key={`${notif.id}-${idx}`} className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition border border-transparent hover:border-slate-100 dark:hover:border-slate-700/50 group relative">
                                     <div className="flex justify-between items-start mb-1">
-                                        <span className="font-bold text-slate-800 dark:text-slate-200 text-sm line-clamp-1">{notif.clientName}</span>
+                                        <span className="font-bold text-slate-800 dark:text-slate-200 text-sm line-clamp-1 pr-8">{notif.clientName}</span>
                                         <span className="text-[10px] font-mono bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded border border-orange-200 dark:border-orange-800/30">
                                             {notif.date}
                                         </span>
@@ -41,6 +41,14 @@ const NotificationsModal = ({ isOpen, onClose, notifications }: { isOpen: boolea
                                         <ExclamationTriangleIcon className="h-3.5 w-3.5 text-orange-500" />
                                         {notif.type}
                                     </p>
+                                    
+                                    <button 
+                                        onClick={() => onResolve(notif.id)}
+                                        className="absolute right-3 bottom-3 opacity-0 group-hover:opacity-100 p-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg hover:bg-emerald-200 dark:hover:bg-emerald-800/50 transition-all duration-200"
+                                        title="Marcar como resolvido"
+                                    >
+                                        <CheckIcon className="h-4 w-4" />
+                                    </button>
                                 </li>
                             ))}
                         </ul>
