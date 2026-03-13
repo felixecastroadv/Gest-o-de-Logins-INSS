@@ -8,6 +8,43 @@ dotenv.config();
 const app = express();
 app.use(express.json({ limit: '50mb' }));
 
+// OCR Endpoint
+app.post("/api/ocr", async (req, res) => {
+  try {
+    const { images } = req.body;
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return res.status(400).json({ error: "Images are required for OCR" });
+    }
+
+    const parts = [
+      { text: "Extraia todo o texto destas imagens de forma precisa e organizada. Retorne APENAS o texto extraído, sem comentários adicionais. Preserve a ordem das páginas se possível." }
+    ];
+
+    images.forEach((base64Image: string) => {
+      parts.push({
+        inlineData: {
+          mimeType: "image/jpeg",
+          data: base64Image
+        }
+      } as any);
+    });
+
+    const response = await callGemini({
+      model: "gemini-3-flash-preview",
+      contents: { role: "user", parts },
+      config: {
+        temperature: 0.1,
+        maxOutputTokens: 16384
+      }
+    });
+
+    res.json({ text: response.text || "" });
+  } catch (error: any) {
+    console.error("Error in OCR:", error);
+    res.status(500).json({ error: error.message || "Falha no OCR" });
+  }
+});
+
 // AI Service Logic Integrated
 const DR_MICHEL_SYSTEM_PROMPT = `
 PERFIL: Dr. Michel Felix - Advogado Previdenciarista de Elite (OAB/RJ).
