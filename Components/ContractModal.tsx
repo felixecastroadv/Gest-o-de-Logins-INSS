@@ -4,16 +4,21 @@ import { BriefcaseIcon, XMarkIcon, PlusIcon, TrashIcon, BanknotesIcon, CheckIcon
 import { ContractRecord, ContractModalProps, PaymentEntry } from '../types';
 import { formatCurrency } from '../utils';
 
-const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, initialData, clients }) => {
     const [formData, setFormData] = useState<Partial<ContractRecord>>({
         payments: []
     });
     const [newPaymentAmount, setNewPaymentAmount] = useState('');
     const [newPaymentDate, setNewPaymentDate] = useState(new Date().toISOString().split('T')[0]);
+    const [newPaymentDueDate, setNewPaymentDueDate] = useState(new Date().toISOString().split('T')[0]);
 
     useEffect(() => {
         if (initialData) {
-            setFormData(initialData);
+            const normalizedPayments = initialData.payments?.map(p => ({
+                ...p,
+                dueDate: p.dueDate || p.date // Fallback to date if dueDate is missing
+            })) || [];
+            setFormData({ ...initialData, payments: normalizedPayments });
         } else {
             setFormData({ 
                 status: 'Pendente', 
@@ -29,7 +34,32 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
     if (!isOpen) return null;
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        if (e.target.name === 'clientId') {
+            const client = clients.find(c => c.id === e.target.value);
+            if (client) {
+                setFormData({ ...formData, clientId: client.id, firstName: client.name, lastName: '', cpf: client.cpf });
+            } else {
+                setFormData({ ...formData, clientId: undefined });
+            }
+        } else if (e.target.name === 'paymentMethod') {
+            const method = e.target.value as 'À Vista' | 'Parcelado';
+            const totalFee = Number(formData.totalFee) || 0;
+            if (method === 'À Vista' && totalFee > 0 && (formData.payments || []).length === 0) {
+                const payment: PaymentEntry = {
+                    id: Math.random().toString(36).substr(2, 9),
+                    date: new Date().toISOString().split('T')[0],
+                    dueDate: new Date().toISOString().split('T')[0],
+                    amount: totalFee,
+                    isPaid: false,
+                    note: 'Pagamento à vista'
+                };
+                setFormData({ ...formData, paymentMethod: method, payments: [payment] });
+            } else {
+                setFormData({ ...formData, paymentMethod: method });
+            }
+        } else {
+            setFormData({ ...formData, [e.target.name]: e.target.value });
+        }
     };
 
     const handleAddPayment = () => {
@@ -37,7 +67,9 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
         const payment: PaymentEntry = {
             id: Math.random().toString(36).substr(2, 9),
             date: newPaymentDate,
+            dueDate: newPaymentDueDate,
             amount: Number(newPaymentAmount),
+            isPaid: false,
             note: 'Pagamento registrado'
         };
         const updatedPayments = [...(formData.payments || []), payment];
@@ -55,7 +87,7 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
         onSave(formData as ContractRecord);
     };
 
-    const totalPaid = (formData.payments || []).reduce((sum, p) => sum + p.amount, 0);
+    const totalPaid = (formData.payments || []).reduce((sum, p) => p.isPaid ? sum + p.amount : sum, 0);
     const totalFee = Number(formData.totalFee) || 0;
     const remaining = Math.max(0, totalFee - totalPaid);
     const progress = totalFee > 0 ? (totalPaid / totalFee) * 100 : 0;
@@ -83,6 +115,14 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
                 <form onSubmit={handleSubmit} className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
                      <div className="md:col-span-2">
                         <h4 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide border-b border-slate-100 dark:border-slate-800 pb-2 mb-4">Dados do Cliente</h4>
+                     </div>
+
+                     <div className="md:col-span-2">
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Selecionar Cliente Existente</label>
+                        <select name="clientId" value={formData.clientId || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white">
+                            <option value="">Novo Cliente</option>
+                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
                      </div>
 
                      <div>
@@ -176,12 +216,12 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
                         
                         <div className="flex gap-2 mb-4 items-end">
                             <div className="flex-1">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Valor do Pagamento</label>
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Valor</label>
                                 <input type="number" value={newPaymentAmount} onChange={e => setNewPaymentAmount(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-sm" placeholder="R$ 0,00" />
                             </div>
                             <div className="flex-1">
-                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data</label>
-                                <input type="date" value={newPaymentDate} onChange={e => setNewPaymentDate(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-sm" />
+                                <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Data Vencimento</label>
+                                <input type="date" value={newPaymentDueDate} onChange={e => setNewPaymentDueDate(e.target.value)} className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-600 rounded-lg text-sm" />
                             </div>
                             <button type="button" onClick={handleAddPayment} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition">
                                 <PlusIcon className="h-5 w-5" />
@@ -193,17 +233,33 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
                                 formData.payments.map((p, idx) => (
                                     <div key={idx} className="flex justify-between items-center bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 text-sm">
                                         <div className="flex items-center gap-3">
-                                            <div className="bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 p-1.5 rounded">
+                                            <div className={`p-1.5 rounded ${p.isPaid ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400'}`}>
                                                 <BanknotesIcon className="h-4 w-4" />
                                             </div>
                                             <div>
                                                 <span className="block font-bold dark:text-slate-200">{formatCurrency(p.amount)}</span>
-                                                <span className="text-[10px] text-slate-500 uppercase">{new Date(p.date).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</span>
+                                                <input 
+                                                    type="date" 
+                                                    value={p.dueDate || p.date || new Date().toISOString().split('T')[0]} 
+                                                    onChange={(e) => {
+                                                        const updatedPayments = formData.payments!.map(pay => pay.id === p.id ? {...pay, dueDate: e.target.value} : pay);
+                                                        setFormData({...formData, payments: updatedPayments});
+                                                    }}
+                                                    className="text-[10px] text-slate-500 uppercase bg-transparent border-none p-0 focus:ring-0"
+                                                />
                                             </div>
                                         </div>
-                                        <button type="button" onClick={() => handleRemovePayment(p.id)} className="text-slate-400 hover:text-red-500 transition">
-                                            <TrashIcon className="h-4 w-4" />
-                                        </button>
+                                        <div className="flex items-center gap-2">
+                                            <button type="button" onClick={() => {
+                                                const updatedPayments = formData.payments!.map(pay => pay.id === p.id ? {...pay, isPaid: !pay.isPaid} : pay);
+                                                setFormData({...formData, payments: updatedPayments});
+                                            }} className={`p-2 rounded-lg transition ${p.isPaid ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
+                                                <CheckIcon className="h-4 w-4" />
+                                            </button>
+                                            <button type="button" onClick={() => handleRemovePayment(p.id)} className="text-slate-400 hover:text-red-500 transition">
+                                                <TrashIcon className="h-4 w-4" />
+                                            </button>
+                                        </div>
                                     </div>
                                 ))
                             ) : (
