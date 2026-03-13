@@ -330,6 +330,8 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
       s.id === sessionId ? { ...s, messages: [...s.messages, userMsg], title: s.messages.length === 0 ? messageText.slice(0, 30) : s.title } : s
     ));
     setInput('');
+    const textarea = document.getElementById('chat-input-luana');
+    if (textarea) textarea.style.height = 'auto';
     setIsLoading(true);
 
     try {
@@ -839,17 +841,16 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
           <div className="max-w-4xl mx-auto relative">
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-lg focus-within:ring-2 focus-within:ring-rose-500 transition-all">
               <textarea 
+                id="chat-input-luana"
                 rows={1}
                 placeholder="Como posso te ajudar, Dra. Luana?"
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  e.target.style.height = 'auto';
+                  e.target.style.height = `${e.target.scrollHeight}px`;
                 }}
-                className="w-full p-4 bg-transparent outline-none text-slate-800 dark:text-white resize-none min-h-[56px] max-h-40"
+                className="w-full p-4 bg-transparent outline-none text-slate-800 dark:text-white resize-none min-h-[56px] max-h-40 overflow-y-auto"
               />
               <div className="flex items-center justify-between px-4 py-3 border-t border-slate-100 dark:border-slate-800">
                 <div className="flex items-center gap-2">
