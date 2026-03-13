@@ -4,7 +4,7 @@ import {
   ArrowPathRoundedSquareIcon, CloudIcon, BellIcon, Cog6ToothIcon, SunIcon, MoonIcon,
   ArchiveBoxIcon, MagnifyingGlassIcon, PlusIcon, StarIcon, ArrowUturnLeftIcon, 
   PencilSquareIcon, TrashIcon, ExclamationTriangleIcon, ChevronUpIcon, ChevronDownIcon, 
-  ChevronLeftIcon, ChevronRightIcon, CalendarIcon
+  ChevronLeftIcon, ChevronRightIcon, CalendarIcon, CheckIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import { DashboardProps, ClientRecord, ContractRecord, NotificationItem, AgendaEvent } from '../types';
@@ -149,8 +149,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                 fetchWithTimeout(2),
                 supabaseService.getLaborCalculations().catch(() => null),
                 supabaseService.getCalculations().catch(() => null),
-                fetchWithTimeout(7)
-            ]).then(([cData, conData, labData, socData, agendaData]) => {
+                fetchWithTimeout(7),
+                fetchWithTimeout(8)
+            ]).then(([cData, conData, labData, socData, agendaData, resData]) => {
                 let partialSync = false;
 
                 if (cData) {
@@ -176,6 +177,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                 if (agendaData) {
                     setAgendaEvents(agendaData);
                     safeSetLocalStorage('agenda_events', JSON.stringify(agendaData));
+                }
+
+                if (resData) {
+                    setResolvedAlerts(resData);
+                    safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(resData));
                 }
 
                 if (partialSync) {
@@ -215,6 +221,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                          } else if (payload.new.id === 2) {
                              setContracts(payload.new.data);
                              safeSetLocalStorage('inss_contracts', JSON.stringify(payload.new.data));
+                         } else if (payload.new.id === 8) {
+                             setResolvedAlerts(payload.new.data);
+                             safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(payload.new.data));
                          }
                      }
                 }
@@ -307,12 +316,11 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleResolveAlert = (id: string) => {
       const updated = [...resolvedAlerts, id];
-      setResolvedAlerts(updated);
-      safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(updated));
+      saveData('resolved_alerts', updated);
   };
 
   // Save Logic (Generic)
-  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana' | 'agenda', newData: any[]) => {
+  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana' | 'agenda' | 'resolved_alerts', newData: any[]) => {
       setIsSyncing(true);
       setSaveError(null);
       const supabase = initSupabase();
@@ -388,6 +396,16 @@ const Dashboard: React.FC<DashboardProps> = ({
               if (supabase) {
                   supabase.from('clients').upsert({ id: 7, data: newData }).then(({ error }) => {
                       if (error) console.error("Sync error (Agenda):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
+              }
+          } else if (type === 'resolved_alerts') {
+              setResolvedAlerts(newData);
+              safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(newData));
+              if (supabase) {
+                  supabase.from('clients').upsert({ id: 8, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (Resolved Alerts):", error);
                       setIsSyncing(false);
                   });
                   return;
@@ -630,12 +648,16 @@ const Dashboard: React.FC<DashboardProps> = ({
   );
 
   // Helper for Date Cells with Alerts
-  const renderDateCell = (dateStr: string) => {
+  const renderDateCell = (dateStr: string, recordId?: string, suffix?: string) => {
       const urgent = isUrgentDate(dateStr);
+      const isResolved = recordId && suffix ? resolvedAlerts.includes(recordId + suffix) : false;
+      const showAsUrgent = urgent && !isResolved;
+
       return (
           <td className="px-4 py-3">
-              <div className={`flex items-center gap-1.5 ${urgent ? 'text-red-600 dark:text-red-400 font-bold' : 'dark:text-slate-400'}`}>
-                  {urgent && <ExclamationTriangleIcon className="h-4 w-4 animate-pulse" />}
+              <div className={`flex items-center gap-1.5 ${showAsUrgent ? 'text-red-600 dark:text-red-400 font-bold' : isResolved ? 'text-emerald-600 dark:text-emerald-400 font-medium' : 'dark:text-slate-400'}`}>
+                  {showAsUrgent && <ExclamationTriangleIcon className="h-4 w-4 animate-pulse" />}
+                  {isResolved && <CheckIcon className="h-4 w-4" />}
                   {dateStr || '-'}
               </div>
           </td>
@@ -967,12 +989,12 @@ const Dashboard: React.FC<DashboardProps> = ({
                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${!record.type ? 'bg-slate-100 text-slate-500 border-slate-200' : 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-900/20 dark:text-blue-300 dark:border-blue-800'}`}>{record.type || 'N/D'}</span>
                                                 </td>
                                                 <td className="px-4 py-3 dark:text-slate-400">{record.der || '-'}</td>
-                                                {renderDateCell(record.medExpertiseDate)}
-                                                {renderDateCell(record.socialExpertiseDate)}
-                                                {renderDateCell(record.extensionDate)}
+                                                {renderDateCell(record.medExpertiseDate, record.id, '_med')}
+                                                {renderDateCell(record.socialExpertiseDate, record.id, '_soc')}
+                                                {renderDateCell(record.extensionDate, record.id, '_ext')}
                                                 {renderDateCell(record.dcbDate)}
                                                 <td className="px-4 py-3 text-xs italic text-slate-400">{record.ninetyDaysDate || '-'}</td>
-                                                {renderDateCell(record.securityMandateDate)}
+                                                {renderDateCell(record.securityMandateDate, record.id, '_mand')}
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex justify-end gap-1">
                                                         {!showArchived ? (
