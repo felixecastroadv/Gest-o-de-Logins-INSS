@@ -8,6 +8,52 @@ export interface PDFContent {
   text: string;
   images: string[]; // Base64 strings for pages that need OCR/Vision
   isScanned: boolean;
+  fileHash?: string;
+}
+
+/**
+ * Applies a high-contrast black and white filter to a canvas.
+ * This is the "Filtro de Xerox" to optimize OCR and reduce token usage.
+ */
+function applyXeroxFilter(canvas: HTMLCanvasElement) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+
+  // Threshold for black and white conversion
+  // 128 is the middle, but we can adjust for better contrast
+  const threshold = 140; 
+
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    
+    // Grayscale using luminance formula
+    const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+    
+    // Thresholding
+    const value = gray > threshold ? 255 : 0;
+    
+    data[i] = value;     // R
+    data[i + 1] = value; // G
+    data[i + 2] = value; // B
+    // data[i+3] is alpha, leave it as is or set to 255
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+}
+
+/**
+ * Generates a SHA-256 hash of a file to use as a cache key.
+ */
+async function getFileHash(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 export async function extractTextFromPDF(file: File): Promise<PDFContent> {
@@ -21,6 +67,7 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
   }
 
   try {
+    const fileHash = await getFileHash(file);
     const arrayBuffer = await file.arrayBuffer();
     
     const loadingTask = pdfjsLib.getDocument({ 
@@ -40,9 +87,8 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
     const images: string[] = [];
     
     // MEMORY SAFE OCR SETTINGS
-    // We limit image extraction to 20 pages to prevent Out Of Memory (OOM) crashes (Black Screen)
-    // Text is still extracted from ALL pages.
-    const MAX_PAGES_FOR_OCR = 20; 
+    // We limit image extraction to 30 pages now that we optimize them
+    const MAX_PAGES_FOR_OCR = 30; 
     
     for (let i = 1; i <= pdf.numPages; i++) {
       try {
@@ -63,41 +109,47 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
         
         // 2. Extract Image (OCR for handwritten/scanned docs)
         // Only do this if the page has very little digital text AND we are under the safety limit
-        const isLowTextDensity = pageText.length < 150; 
+        const isLowTextDensity = pageText.trim().length < 100; 
 
         if (isLowTextDensity && i <= MAX_PAGES_FOR_OCR) {
             try {
-                // SCALE: 1.2 is a good balance. It provides enough resolution for Gemini Vision 
-                // to read handwriting and small text, while keeping memory usage reasonable.
-                const viewport = page.getViewport({ scale: 1.2 }); 
+                // SCALE: 1.5 for better OCR accuracy, but Xerox filter will keep it light
+                const viewport = page.getViewport({ scale: 1.5 }); 
                 
                 // Safety check for abnormally large pages
-                if (viewport.width * viewport.height > 5000000) {
+                if (viewport.width * viewport.height > 8000000) {
                    fullText += `[AVISO: Imagem da página ${i} muito pesada, leitura visual ignorada para evitar travamento]\n`;
                    continue;
                 }
 
                 const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d', { alpha: false }); // alpha: false saves memory
+                const context = canvas.getContext('2d', { alpha: false }); 
                 
                 if (context) {
                   canvas.height = viewport.height;
                   canvas.width = viewport.width;
                   
+                  // Fill white background before rendering
+                  context.fillStyle = '#FFFFFF';
+                  context.fillRect(0, 0, canvas.width, canvas.height);
+
                   const renderTask = page.render({ 
                     canvasContext: context, 
                     viewport: viewport 
                   }).promise;
                   
                   const renderTimeout = new Promise((_, reject) => 
-                    setTimeout(() => reject(new Error("Render timeout")), 15000)
+                    setTimeout(() => reject(new Error("Render timeout")), 20000)
                   );
                   
                   await Promise.race([renderTask, renderTimeout]);
                   
-                  // COMPRESSION: JPEG at 70% quality. 
-                  // Good balance between file size and text legibility for the AI.
-                  const base64 = canvas.toDataURL('image/jpeg', 0.7).split(',')[1];
+                  // APPLY XEROX FILTER (High Contrast B&W)
+                  applyXeroxFilter(canvas);
+                  
+                  // COMPRESSION: PNG is better for B&W text, but JPEG is usually smaller
+                  // We'll use JPEG with low quality but high contrast (Xerox filter already did the work)
+                  const base64 = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
                   images.push(base64);
                   
                   // AGGRESSIVE MEMORY CLEANUP
@@ -124,11 +176,12 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
        return { 
          text: "AVISO: Não foi possível extrair conteúdo deste arquivo.", 
          images: [], 
-         isScanned: false 
+         isScanned: false,
+         fileHash
        };
     }
 
-    return { text: fullText, images, isScanned };
+    return { text: fullText, images, isScanned, fileHash };
 
   } catch (error: any) {
     console.error("PDF Extraction Fatal Error:", error);
