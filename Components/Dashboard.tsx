@@ -595,7 +595,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                <div className="bg-gradient-to-br from-primary-500 to-indigo-600 p-1.5 rounded-lg mr-0 lg:mr-3 shadow-lg shadow-indigo-500/30">
                    <ScaleIcon className="h-6 w-6 text-white" />
                </div>
-               <span className="font-bold text-lg hidden lg:block tracking-tight">Gestão INSS</span>
+               <span className="font-bold text-lg hidden lg:block tracking-tight">Gestão do Escritório</span>
            </div>
 
            <div className="flex-1 py-6 px-3 space-y-2">
@@ -604,7 +604,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                    className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'clients' ? 'bg-primary-600 shadow-lg shadow-primary-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
                >
                    <UserGroupIcon className="h-6 w-6 lg:mr-3" />
-                   <span className="hidden lg:block font-medium">Processos</span>
+                   <span className="hidden lg:block font-medium">Clientes</span>
                </button>
 
                <button 
@@ -672,7 +672,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 h-16 flex items-center justify-between px-6 z-30">
              <div className="flex items-center gap-4">
                  <h2 className="text-xl font-bold text-slate-800 dark:text-white">
-                     {currentView === 'clients' ? 'Painel de Processos' : 
+                     {currentView === 'clients' ? 'Painel de Clientes' : 
                       currentView === 'contracts' ? 'Gestão de Contratos' :
                       currentView === 'labor_calc' ? 'Cálculos Trabalhistas' :
                       currentView === 'dr_michel' ? 'Dr. Michel Felix - IA Jurídica' :
