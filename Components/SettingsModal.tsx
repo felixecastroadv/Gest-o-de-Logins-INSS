@@ -2,12 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { CloudIcon, CheckIcon, ExclamationTriangleIcon, ArchiveBoxArrowDownIcon } from '@heroicons/react/24/outline';
 import { getDbConfig, DB_CONFIG_KEY } from '../supabaseClient';
-import { safeSetLocalStorage } from '../utils';
+import { safeSetLocalStorage, getMinWage, setMinWage } from '../utils';
 
 const SettingsModal = ({ isOpen, onClose, onSave, onRestoreBackup }: { isOpen: boolean, onClose: () => void, onSave: () => void, onRestoreBackup: () => void }) => {
     const [url, setUrl] = useState('');
     const [key, setKey] = useState('');
     const [isEnvManaged, setIsEnvManaged] = useState(false);
+    const [minWage, setMinWageState] = useState(1621.00);
 
     useEffect(() => {
         if (isOpen) {
@@ -17,6 +18,7 @@ const SettingsModal = ({ isOpen, onClose, onSave, onRestoreBackup }: { isOpen: b
                 setKey(config.key || '');
                 setIsEnvManaged(!!config.isEnv);
             }
+            setMinWageState(getMinWage());
         }
     }, [isOpen]);
 
@@ -24,6 +26,7 @@ const SettingsModal = ({ isOpen, onClose, onSave, onRestoreBackup }: { isOpen: b
         if (!isEnvManaged) {
             safeSetLocalStorage(DB_CONFIG_KEY, JSON.stringify({ url, key }));
         }
+        setMinWage(minWage);
         onSave();
         onClose();
     };
@@ -83,6 +86,11 @@ const SettingsModal = ({ isOpen, onClose, onSave, onRestoreBackup }: { isOpen: b
 
                 <div className="space-y-4">
                     <div>
+                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Salário Mínimo Vigente (R$)</label>
+                        <input type="number" step="0.01" value={minWage} onChange={e => setMinWageState(parseFloat(e.target.value) || 0)} className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-mono text-slate-600 dark:text-slate-300 focus:ring-2 focus:ring-primary-500 outline-none" placeholder="1621.00" />
+                        <p className="text-[10px] text-slate-400 mt-1">Usado para definir o rito processual (Sumário, Sumaríssimo, Ordinário).</p>
+                    </div>
+                    <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Supabase URL</label>
                         <input type="text" value={url} onChange={e => setUrl(e.target.value)} disabled={isEnvManaged} className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed font-mono text-slate-600 dark:text-slate-300" placeholder="https://xyz.supabase.co" />
                     </div>
