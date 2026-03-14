@@ -802,7 +802,7 @@ app.post("/api/dr-michel/chat", async (req, res) => {
 
 app.post("/api/dra-luana/chat", async (req, res) => {
   try {
-    const { message, history, images } = req.body;
+    const { message, history, images, minWage = '1621.00' } = req.body;
     
     // DETECÇÃO DE INTENÇÃO (TROCA DE CÉREBRO)
     const isStorageRequest = message.includes("INSTRUÇÃO OBRIGATÓRIA: Apenas armazene") || 
@@ -813,6 +813,21 @@ app.post("/api/dra-luana/chat", async (req, res) => {
 
     // Seleciona o "Cérebro" adequado
     let selectedSystemPrompt = DRA_LUANA_SYSTEM_PROMPT;
+    
+    // Injeta regras de Rito Processual
+    const RITE_RULES = `
+    RITOS PROCESSUAIS TRABALHISTAS (ATENÇÃO AO VALOR DA CAUSA):
+    O salário mínimo atual configurado no sistema é de R$ ${minWage}.
+    Você deve classificar o rito processual com base no valor total da causa (soma das verbas devidas):
+    1. Rito Sumário: Valor da causa até 2 salários mínimos (Até R$ ${(parseFloat(minWage) * 2).toFixed(2)}).
+    2. Rito Sumaríssimo: Valor da causa de 2 a 40 salários mínimos (De R$ ${(parseFloat(minWage) * 2).toFixed(2)} até R$ ${(parseFloat(minWage) * 40).toFixed(2)}).
+    3. Rito Ordinário: Valor da causa acima de 40 salários mínimos (Acima de R$ ${(parseFloat(minWage) * 40).toFixed(2)}).
+    
+    Sempre que analisar cálculos ou sugerir estratégias, mencione o rito aplicável e lembre o usuário das regras específicas desse rito (ex: limite de testemunhas, necessidade de pedido líquido no sumaríssimo, etc). Se o valor estiver muito próximo do limite do sumaríssimo (ex: 41 salários mínimos), sugira estrategicamente a renúncia do excedente para enquadramento no rito sumaríssimo, que é mais célere.
+    `;
+    
+    selectedSystemPrompt += "\n" + RITE_RULES;
+
     let temperature = 0.2;
 
     if (isStorageRequest && !isGenerationRequest) {
