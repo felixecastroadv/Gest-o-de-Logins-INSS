@@ -17,6 +17,7 @@ import {
 import { jsPDF } from "jspdf";
 import { ClientRecord, ContractRecord } from './types';
 import { supabaseService } from './services/supabaseService';
+import { getMinWage, getProceduralRite } from './utils';
 
 // --- Estilos CSS (Tailwind) ---
 const STYLES = {
@@ -1656,6 +1657,18 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       doc.text("TOTAL ESTIMADO:", margin + 4, y);
       doc.text(formatCurrency(totalToUse), pageWidth - margin - 4, y, { align: "right" });
 
+      // Rito Processual
+      y += 15;
+      const rite = getProceduralRite(totalToUse);
+      doc.setTextColor(0);
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text(`RITO PROCESSUAL APLICÁVEL: ${rite.name.toUpperCase()}`, margin, y);
+      y += 6;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Base: ${rite.description} (Salário Mínimo: ${formatCurrency(getMinWage())})`, margin, y);
+
       // Memória de Cálculo Detalhada
       doc.addPage();
       y = 30;
@@ -3031,6 +3044,17 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                               <p className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-500">
                                   {formatCurrency(totalValue)}
                               </p>
+                              <div className="mt-2 flex items-center gap-2">
+                                  <span className="text-xs text-slate-400 font-medium">Rito Processual:</span>
+                                  {(() => {
+                                      const rite = getProceduralRite(totalValue);
+                                      return (
+                                          <span className={`px-2 py-0.5 rounded-md text-xs font-bold border ${rite.color}`} title={rite.description}>
+                                              {rite.name}
+                                          </span>
+                                      );
+                                  })()}
+                              </div>
                           </div>
                           <div className="flex gap-3">
                               <button onClick={() => setActiveTab(1)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-sm transition">
