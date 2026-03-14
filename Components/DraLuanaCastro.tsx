@@ -363,7 +363,8 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
         body: JSON.stringify({
           message: messageText,
           history: sessions.find(s => s.id === sessionId)?.messages || [],
-          images: images || []
+          images: images || [],
+          minWage: localStorage.getItem('app_min_wage') || '1621.00'
         }),
         signal: abortController.signal
       });
