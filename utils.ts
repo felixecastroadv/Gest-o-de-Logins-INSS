@@ -50,3 +50,26 @@ export const isUrgentDate = (dateStr: string): boolean => {
 export const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 };
+
+export const getMinWage = (): number => {
+    try {
+        const stored = localStorage.getItem('app_min_wage');
+        if (stored) return parseFloat(stored);
+    } catch (e) {}
+    return 1621.00; // Default 2026
+};
+
+export const setMinWage = (value: number) => {
+    safeSetLocalStorage('app_min_wage', value.toString());
+};
+
+export const getProceduralRite = (totalValue: number): { name: string, description: string, color: string } => {
+    const minWage = getMinWage();
+    if (totalValue <= minWage * 2) {
+        return { name: 'Sumário', description: 'Até 2 salários mínimos', color: 'bg-blue-100 text-blue-800 border-blue-200' };
+    } else if (totalValue <= minWage * 40) {
+        return { name: 'Sumaríssimo', description: 'De 2 a 40 salários mínimos', color: 'bg-amber-100 text-amber-800 border-amber-200' };
+    } else {
+        return { name: 'Ordinário', description: 'Acima de 40 salários mínimos', color: 'bg-purple-100 text-purple-800 border-purple-200' };
+    }
+};
