@@ -1643,6 +1643,12 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
           y += 6;
       });
 
+      // Check space for Total and Rito
+      if (y > pageHeight - 45) {
+          doc.addPage();
+          y = 30;
+      }
+
       // Total
       y += 5;
       doc.setLineWidth(0.5);
