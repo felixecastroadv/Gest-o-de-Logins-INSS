@@ -13,7 +13,8 @@ import {
   UserIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  CalendarIcon
+  CalendarIcon,
+  BriefcaseIcon
 } from '@heroicons/react/24/outline';
 import { jsPDF } from "jspdf";
 import { ClientRecord, ContractRecord } from './types';
@@ -1570,7 +1571,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
     const results = calculateLaborResults(calcData);
     setCalcResult(results);
     setTotalValue(results.reduce((acc, curr) => acc + curr.value, 0));
-    setActiveTab(5); // Ir para resultados
+    setActiveTab(6); // Ir para resultados
   };
 
   const generatePDF = (calcDataInput?: LaborData) => {
@@ -1882,7 +1883,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
 
       {/* Tabs Navigation */}
       <div className="flex overflow-x-auto border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-4 gap-1 shrink-0">
-         {['Dados Contratuais', 'Verbas & Lote', 'Indenizações', 'Estabilidade', 'Resultados'].map((label, idx) => (
+         {['Qualificação e Relato', 'Remuneração e Adicionais', 'Jornada de Trabalho', 'Rescisão e Pendências', 'Situações Especiais', 'Resultados'].map((label, idx) => (
              <button
                 key={idx}
                 onClick={() => setActiveTab(idx + 1)}
@@ -1901,7 +1902,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       <div className="flex-1 overflow-y-auto p-6 scroll-smooth">
           <div className="max-w-5xl mx-auto space-y-6 pb-20">
               
-              {/* TAB 1: DADOS BASE */}
+
+              {/* TAB 1: QUALIFICAÇÃO E RELATO */}
               {activeTab === 1 && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                       <div className={`md:col-span-2 ${STYLES.CARD_SECTION}`}>
@@ -1954,53 +1956,6 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                       <option value="dispensado">Dispensado</option>
                                   </select>
                               </div>
-                              <div>
-                                  <label className={STYLES.LABEL_TEXT}>Saldo FGTS (Conta Vinculada)</label>
-                                  <input 
-                                    type="number" 
-                                    className={STYLES.INPUT_FIELD} 
-                                    value={data.hasFgtsBalance} 
-                                    onChange={e => handleInputChange('hasFgtsBalance', e.target.value)} 
-                                    placeholder="Saldo em conta..." 
-                                    disabled={data.fgtsNoDeposits}
-                                  />
-                                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                                      <input 
-                                        type="checkbox" 
-                                        checked={data.fgtsAllDeposited} 
-                                        onChange={e => handleInputChange('fgtsAllDeposited', e.target.checked)} 
-                                        className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-                                        disabled={data.fgtsNoDeposits}
-                                      />
-                                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">FGTS Totalmente Depositado (Período Integral)</span>
-                                  </label>
-                                  <p className="text-[10px] text-slate-500 mt-1 ml-6 leading-tight mb-4">
-                                      Marque se o valor acima corresponde ao total devido de todo o contrato. Se desmarcado, o sistema considerará como valor parcial.
-                                  </p>
-
-                                  <label className={STYLES.LABEL_TEXT}>Multa 40% FGTS (Já paga)</label>
-                                  <input 
-                                    type="number" 
-                                    className={STYLES.INPUT_FIELD} 
-                                    value={data.hasFgtsPenaltyBalance} 
-                                    onChange={e => handleInputChange('hasFgtsPenaltyBalance', e.target.value)} 
-                                    placeholder="Multa 40% paga..." 
-                                    disabled={data.fgtsNoDeposits}
-                                  />
-                                  <label className="flex items-center gap-2 mt-2 cursor-pointer">
-                                      <input 
-                                        type="checkbox" 
-                                        checked={data.fgtsPenaltyAllDeposited} 
-                                        onChange={e => handleInputChange('fgtsPenaltyAllDeposited', e.target.checked)} 
-                                        className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
-                                        disabled={data.fgtsNoDeposits}
-                                      />
-                                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Multa 40% FGTS Totalmente Depositada (Período Integral)</span>
-                                  </label>
-                                  <p className="text-[10px] text-slate-500 mt-1 ml-6 leading-tight">
-                                      Marque se o valor da multa acima corresponde ao total devido. Se desmarcado, o sistema considerará como valor parcial.
-                                  </p>
-                              </div>
                           </div>
                       </div>
 
@@ -2020,7 +1975,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                           </div>
                       </div>
 
-                      {/* Seção de Jornada de Trabalho (Informativo) */}
+{/* Seção de Jornada de Trabalho (Informativo) */}
                       <div className={`md:col-span-2 ${STYLES.CARD_SECTION}`}>
                           <h3 className={STYLES.CARD_TITLE}>
                               <ClockIcon className="w-5 h-5 text-indigo-500" />
@@ -2235,7 +2190,8 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                           </div>
                       </div>
 
-                      {/* Histórico Salarial */}
+                      
+{/* Histórico Salarial */}
                       <div className={`md:col-span-2 ${STYLES.CARD_SECTION}`}>
                           <div className="flex justify-between items-center mb-4">
                               <h3 className={STYLES.CARD_TITLE}>
@@ -2283,79 +2239,58 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                   </div>
               )}
 
-              {/* TAB 2: VERBAS E LOTE */}
+              {/* TAB 2: REMUNERAÇÃO E ADICIONAIS */}
               {activeTab === 2 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      
-                      {/* Seção Saldo de Salário e Deduções */}
+                      {/* Seção Diferença Salarial */}
                       <div className={STYLES.CARD_SECTION}>
-                          <h3 className={`${STYLES.CARD_TITLE} text-emerald-600 dark:text-emerald-400`}>
-                              <BanknotesIcon className="h-5 w-5" /> Saldo de Salário & Deduções
-                          </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                              {/* Saldo de Salário */}
-                              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl">
-                                  <label className="flex items-center gap-3 cursor-pointer mb-3">
-                                      <input 
-                                          type="checkbox" 
-                                          checked={data.salaryBalance.active} 
-                                          onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, active: e.target.checked } }))} 
-                                          className="w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" 
-                                      />
-                                      <span className="font-bold text-slate-700 dark:text-slate-200">Calcular Saldo de Salário</span>
-                                  </label>
-                                  
-                                  {data.salaryBalance.active && (
-                                      <div className="grid grid-cols-2 gap-3 pl-8">
-                                          <div>
-                                              <label className={STYLES.LABEL_TINY}>Dias Trabalhados (Mês Rescisão)</label>
-                                              <input 
-                                                  type="number" 
-                                                  className={STYLES.INPUT_TINY} 
-                                                  value={data.salaryBalance.days} 
-                                                  onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, days: Number(e.target.value) } }))} 
-                                                  placeholder="0 = Automático"
-                                              />
-                                              <p className="text-[9px] text-slate-400 mt-1">Deixe 0 para usar data de demissão.</p>
-                                          </div>
-                                          <div>
-                                              <label className={STYLES.LABEL_TINY}>Valor Manual (Opcional)</label>
-                                              <input 
-                                                  type="number" 
-                                                  className={STYLES.INPUT_TINY} 
-                                                  value={data.salaryBalance.customAmount || ''} 
-                                                  onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, customAmount: Number(e.target.value) } }))} 
-                                                  placeholder="R$ 0,00"
-                                              />
-                                          </div>
+                          <div className="flex justify-between items-center mb-4">
+                              <h3 className={`${STYLES.CARD_TITLE} text-green-600 dark:text-green-400`}>
+                                  <BanknotesIcon className="h-5 w-5" /> Diferença Salarial (Piso)
+                              </h3>
+                              <button onClick={addWageGap} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Período</button>
+                          </div>
+                          {data.wageGap.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum período de diferença salarial cadastrado.</p>}
+                          {data.wageGap.map((gap, idx) => (
+                              <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative group">
+                                  <button onClick={() => removeWageGap(idx)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Início</label>
+                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.startDate || ''} onChange={(e) => {
+                                              const newGaps = [...data.wageGap]; newGaps[idx].startDate = e.target.value; setData({...data, wageGap: newGaps});
+                                          }} />
                                       </div>
-                                  )}
-                              </div>
-
-                              {/* Deduções */}
-                              <div className="p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-xl">
-                                  <h4 className="font-bold text-red-700 dark:text-red-400 mb-3 text-sm">Deduções / Compensações</h4>
-                                  <div>
-                                      <label className={STYLES.LABEL_TINY}>Valor Pago na Rescisão (TRCT)</label>
-                                      <input 
-                                          type="number" 
-                                          className={STYLES.INPUT_TINY} 
-                                          value={data.severancePaid} 
-                                          onChange={e => handleInputChange('severancePaid', Number(e.target.value))} 
-                                          placeholder="R$ 0,00"
-                                      />
-                                      <p className="text-[9px] text-slate-400 mt-1">Este valor será subtraído do total estimado.</p>
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Fim</label>
+                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.endDate || ''} onChange={(e) => {
+                                              const newGaps = [...data.wageGap]; newGaps[idx].endDate = e.target.value; setData({...data, wageGap: newGaps});
+                                          }} />
+                                      </div>
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Salário Piso (Deveria ser)</label>
+                                          <input type="number" className={`${STYLES.INPUT_TINY} font-bold text-green-600`} value={gap.floorSalary || ''} onChange={(e) => {
+                                              const newGaps = [...data.wageGap]; newGaps[idx].floorSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
+                                          }} />
+                                      </div>
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Salário Pago (Real)</label>
+                                          <input type="number" className={STYLES.INPUT_TINY} value={gap.paidSalary || ''} onChange={(e) => {
+                                              const newGaps = [...data.wageGap]; newGaps[idx].paidSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
+                                          }} />
+                                      </div>
                                   </div>
                               </div>
-                          </div>
+                          ))}
                       </div>
+
 
                       {/* Seção Adicionais Fixos */}
                       <div className={STYLES.CARD_SECTION}>
                           <h3 className={`${STYLES.CARD_TITLE} text-indigo-600 dark:text-indigo-400`}>
                               <PlusIcon className="h-5 w-5" /> Adicionais Recorrentes
                           </h3>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="grid grid-cols-1 md:grid-cols-1 gap-4">
                               <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
                                   <label className={`${STYLES.LABEL_TEXT} mb-2`}>Insalubridade</label>
                                   <select 
@@ -2386,6 +2321,219 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   <p className="text-[10px] text-slate-400 mt-1 pl-8">Base: Salário Base</p>
                               </div>
 
+                          </div>
+                      </div>
+
+
+                      {/* Seção Direitos Normativos (CCT) */}
+                      <div className={STYLES.CARD_SECTION}>
+                          <div className="flex justify-between items-center mb-4">
+                              <h3 className={`${STYLES.CARD_TITLE} text-purple-600 dark:text-purple-400`}>
+                                  <DocumentTextIcon className="h-5 w-5" /> Direitos Normativos (CCT)
+                              </h3>
+                              <button onClick={addCctRight} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Direito</button>
+                          </div>
+                          
+                          {data.cctRights.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum direito normativo cadastrado.</p>}
+                          
+                          {data.cctRights.map((right, idx) => (
+                              <div key={right.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative">
+                                  <button onClick={() => removeCctRight(right.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
+                                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                                      <div className={right.frequency === 'daily' ? "md:col-span-3" : "md:col-span-4"}>
+                                          <label className={STYLES.LABEL_TINY}>Nome do Direito</label>
+                                          <input 
+                                              type="text" 
+                                              className={STYLES.INPUT_TINY} 
+                                              placeholder="Ex: Quebra de Caixa"
+                                              value={right.name}
+                                              onChange={e => updateCctRight(right.id, 'name', e.target.value)}
+                                          />
+                                      </div>
+                                      
+                                      <div className="md:col-span-2">
+                                          <label className={STYLES.LABEL_TINY}>Frequência</label>
+                                          <select 
+                                              className={STYLES.INPUT_TINY}
+                                              value={right.frequency}
+                                              onChange={e => updateCctRight(right.id, 'frequency', e.target.value)}
+                                          >
+                                              <option value="daily">Diário</option>
+                                              <option value="monthly">Mensal</option>
+                                              <option value="annual">Anual</option>
+                                          </select>
+                                      </div>
+
+                                      {right.frequency === 'daily' && (
+                                          <div className="md:col-span-1">
+                                              <label className={STYLES.LABEL_TINY}>Dias/Mês</label>
+                                              <input 
+                                                  type="number" 
+                                                  className={STYLES.INPUT_TINY} 
+                                                  placeholder="Ex: 22"
+                                                  value={right.daysPerMonth || ''}
+                                                  onChange={e => updateCctRight(right.id, 'daysPerMonth', Number(e.target.value))}
+                                              />
+                                          </div>
+                                      )}
+
+                                      {right.frequency === 'annual' ? (
+                                          <div className="md:col-span-4">
+                                              <label className={STYLES.LABEL_TINY}>Ano de Referência</label>
+                                              <input 
+                                                  type="number" 
+                                                  className={STYLES.INPUT_TINY} 
+                                                  placeholder="AAAA"
+                                                  value={right.startYear || ''}
+                                                  onChange={e => updateCctRight(right.id, 'startYear', Number(e.target.value))}
+                                              />
+                                          </div>
+                                      ) : (
+                                          <>
+                                              <div className="md:col-span-2">
+                                                  <label className={STYLES.LABEL_TINY}>Início</label>
+                                                  <input 
+                                                      type="date" 
+                                                      className={STYLES.INPUT_TINY} 
+                                                      value={right.startDate || ''}
+                                                      onChange={e => updateCctRight(right.id, 'startDate', e.target.value)}
+                                                  />
+                                              </div>
+                                              <div className="md:col-span-2">
+                                                  <label className={STYLES.LABEL_TINY}>Fim</label>
+                                                  <input 
+                                                      type="date" 
+                                                      className={STYLES.INPUT_TINY} 
+                                                      value={right.endDate || ''}
+                                                      onChange={e => updateCctRight(right.id, 'endDate', e.target.value)}
+                                                  />
+                                              </div>
+                                          </>
+                                      )}
+
+                                      <div className="md:col-span-2">
+                                          <label className={STYLES.LABEL_TINY}>Valor (R$)</label>
+                                          <input 
+                                              type="text" 
+                                              className={STYLES.INPUT_TINY} 
+                                              placeholder="0,00"
+                                              value={right.value || ''}
+                                              onChange={e => updateCctRight(right.id, 'value', e.target.value)}
+                                          />
+                                      </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 mt-2">
+                                      <input 
+                                          type="checkbox" 
+                                          id={`cct-integra-${right.id}`}
+                                          checked={right.integratesSalary || false}
+                                          onChange={e => updateCctRight(right.id, 'integratesSalary', e.target.checked)}
+                                          className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500"
+                                      />
+                                      <label htmlFor={`cct-integra-${right.id}`} className="text-[10px] text-slate-600 dark:text-slate-400 cursor-pointer select-none">
+                                          Integra salário (Base FGTS)
+                                      </label>
+                                      <p className="text-[9px] text-slate-400 ml-auto">
+                                          {right.frequency === 'daily' ? 'Valor por dia' : right.frequency === 'monthly' ? 'Valor por mês' : 'Valor por ano'}
+                                      </p>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+
+
+                      <div className="flex justify-between mt-8">
+                          <button onClick={() => setActiveTab(1)} className={STYLES.BTN_SECONDARY}>Voltar</button>
+                          <button onClick={() => setActiveTab(3)} className={STYLES.BTN_PRIMARY}>Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
+                      </div>
+                  </div>
+              )}
+
+              {/* TAB 3: JORNADA DE TRABALHO */}
+              {activeTab === 3 && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      {/* Seção Horas Extras */}
+                      <div className={STYLES.CARD_SECTION}>
+                          <div className="flex justify-between items-center mb-4">
+                              <h3 className={`${STYLES.CARD_TITLE} text-orange-600 dark:text-orange-400`}>
+                                  <ClockIcon className="h-5 w-5" /> Horas Extras em Lote
+                              </h3>
+                              <button onClick={addOvertimeBatch} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Lote</button>
+                          </div>
+                          
+                          {data.overtime.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum lote de horas extras cadastrado.</p>}
+                          
+                          {data.overtime.map((ot, idx) => (
+                              <div key={ot.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative">
+                                  <button onClick={() => removeOvertimeBatch(ot.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
+                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
+                                      <div className="col-span-1">
+                                          <label className={STYLES.LABEL_TINY}>Adicional (%)</label>
+                                          <select 
+                                            className={STYLES.INPUT_TINY} 
+                                            value={ot.percentage} 
+                                            onChange={(e) => {
+                                                const newOt = [...data.overtime];
+                                                newOt[idx].percentage = Number(e.target.value);
+                                                setData({...data, overtime: newOt});
+                                            }}
+                                          >
+                                              <option value={50}>50%</option>
+                                              <option value={60}>60%</option>
+                                              <option value={100}>100%</option>
+                                              <option value={-1}>Outro...</option>
+                                          </select>
+                                          {ot.percentage === -1 && (
+                                              <input 
+                                                type="number" 
+                                                className={`${STYLES.INPUT_TINY} mt-1`} 
+                                                placeholder="%" 
+                                                value={ot.customPercentage || ''}
+                                                onChange={(e) => {
+                                                    const newOt = [...data.overtime];
+                                                    newOt[idx].customPercentage = Number(e.target.value);
+                                                    setData({...data, overtime: newOt});
+                                                }}
+                                              />
+                                          )}
+                                      </div>
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Horas/Mês (Média)</label>
+                                          <input type="number" className={STYLES.INPUT_TINY} value={ot.hoursPerMonth || ''} onChange={(e) => {
+                                              const newOt = [...data.overtime]; newOt[idx].hoursPerMonth = Number(e.target.value); setData({...data, overtime: newOt});
+                                          }} />
+                                      </div>
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>De</label>
+                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.startDate || ''} onChange={(e) => {
+                                              const newOt = [...data.overtime]; newOt[idx].startDate = e.target.value; setData({...data, overtime: newOt});
+                                          }} />
+                                      </div>
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Até</label>
+                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.endDate || ''} onChange={(e) => {
+                                              const newOt = [...data.overtime]; newOt[idx].endDate = e.target.value; setData({...data, overtime: newOt});
+                                          }} />
+                                      </div>
+                                      <div className="flex items-center h-10">
+                                           <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300 select-none">
+                                               <input type="checkbox" checked={ot.applyDsr} onChange={(e) => {
+                                                   const newOt = [...data.overtime]; newOt[idx].applyDsr = e.target.checked; setData({...data, overtime: newOt});
+                                               }} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
+                                               Reflexo DSR
+                                           </label>
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+
+
+                      <div className={STYLES.CARD_SECTION}>
+                          <h3 className={`${STYLES.CARD_TITLE} text-indigo-600 dark:text-indigo-400`}>
+                              <ClockIcon className="h-5 w-5" /> Adicional Noturno e Intrajornada
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
                               <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 col-span-1 md:col-span-3">
                                   <div className="flex justify-between items-center mb-2">
                                       <label className="flex items-center gap-3 cursor-pointer">
@@ -2531,6 +2679,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   )}
                               </div>
 
+
                               {/* Intrajornada */}
                               <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50 col-span-1 md:col-span-3">
                                   <div className="flex justify-between items-center mb-2">
@@ -2619,243 +2768,9 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                       </div>
                                   )}
                               </div>
+
                           </div>
                       </div>
-
-                      {/* Seção Direitos Normativos (CCT) */}
-                      <div className={STYLES.CARD_SECTION}>
-                          <div className="flex justify-between items-center mb-4">
-                              <h3 className={`${STYLES.CARD_TITLE} text-purple-600 dark:text-purple-400`}>
-                                  <DocumentTextIcon className="h-5 w-5" /> Direitos Normativos (CCT)
-                              </h3>
-                              <button onClick={addCctRight} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Direito</button>
-                          </div>
-                          
-                          {data.cctRights.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum direito normativo cadastrado.</p>}
-                          
-                          {data.cctRights.map((right, idx) => (
-                              <div key={right.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative">
-                                  <button onClick={() => removeCctRight(right.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
-                                  <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                                      <div className={right.frequency === 'daily' ? "md:col-span-3" : "md:col-span-4"}>
-                                          <label className={STYLES.LABEL_TINY}>Nome do Direito</label>
-                                          <input 
-                                              type="text" 
-                                              className={STYLES.INPUT_TINY} 
-                                              placeholder="Ex: Quebra de Caixa"
-                                              value={right.name}
-                                              onChange={e => updateCctRight(right.id, 'name', e.target.value)}
-                                          />
-                                      </div>
-                                      
-                                      <div className="md:col-span-2">
-                                          <label className={STYLES.LABEL_TINY}>Frequência</label>
-                                          <select 
-                                              className={STYLES.INPUT_TINY}
-                                              value={right.frequency}
-                                              onChange={e => updateCctRight(right.id, 'frequency', e.target.value)}
-                                          >
-                                              <option value="daily">Diário</option>
-                                              <option value="monthly">Mensal</option>
-                                              <option value="annual">Anual</option>
-                                          </select>
-                                      </div>
-
-                                      {right.frequency === 'daily' && (
-                                          <div className="md:col-span-1">
-                                              <label className={STYLES.LABEL_TINY}>Dias/Mês</label>
-                                              <input 
-                                                  type="number" 
-                                                  className={STYLES.INPUT_TINY} 
-                                                  placeholder="Ex: 22"
-                                                  value={right.daysPerMonth || ''}
-                                                  onChange={e => updateCctRight(right.id, 'daysPerMonth', Number(e.target.value))}
-                                              />
-                                          </div>
-                                      )}
-
-                                      {right.frequency === 'annual' ? (
-                                          <div className="md:col-span-4">
-                                              <label className={STYLES.LABEL_TINY}>Ano de Referência</label>
-                                              <input 
-                                                  type="number" 
-                                                  className={STYLES.INPUT_TINY} 
-                                                  placeholder="AAAA"
-                                                  value={right.startYear || ''}
-                                                  onChange={e => updateCctRight(right.id, 'startYear', Number(e.target.value))}
-                                              />
-                                          </div>
-                                      ) : (
-                                          <>
-                                              <div className="md:col-span-2">
-                                                  <label className={STYLES.LABEL_TINY}>Início</label>
-                                                  <input 
-                                                      type="date" 
-                                                      className={STYLES.INPUT_TINY} 
-                                                      value={right.startDate || ''}
-                                                      onChange={e => updateCctRight(right.id, 'startDate', e.target.value)}
-                                                  />
-                                              </div>
-                                              <div className="md:col-span-2">
-                                                  <label className={STYLES.LABEL_TINY}>Fim</label>
-                                                  <input 
-                                                      type="date" 
-                                                      className={STYLES.INPUT_TINY} 
-                                                      value={right.endDate || ''}
-                                                      onChange={e => updateCctRight(right.id, 'endDate', e.target.value)}
-                                                  />
-                                              </div>
-                                          </>
-                                      )}
-
-                                      <div className="md:col-span-2">
-                                          <label className={STYLES.LABEL_TINY}>Valor (R$)</label>
-                                          <input 
-                                              type="text" 
-                                              className={STYLES.INPUT_TINY} 
-                                              placeholder="0,00"
-                                              value={right.value || ''}
-                                              onChange={e => updateCctRight(right.id, 'value', e.target.value)}
-                                          />
-                                      </div>
-                                  </div>
-                                  <div className="flex items-center gap-2 mt-2">
-                                      <input 
-                                          type="checkbox" 
-                                          id={`cct-integra-${right.id}`}
-                                          checked={right.integratesSalary || false}
-                                          onChange={e => updateCctRight(right.id, 'integratesSalary', e.target.checked)}
-                                          className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500"
-                                      />
-                                      <label htmlFor={`cct-integra-${right.id}`} className="text-[10px] text-slate-600 dark:text-slate-400 cursor-pointer select-none">
-                                          Integra salário (Base FGTS)
-                                      </label>
-                                      <p className="text-[9px] text-slate-400 ml-auto">
-                                          {right.frequency === 'daily' ? 'Valor por dia' : right.frequency === 'monthly' ? 'Valor por mês' : 'Valor por ano'}
-                                      </p>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-
-                      {/* Seção Diferença Salarial */}
-                      <div className={STYLES.CARD_SECTION}>
-                          <div className="flex justify-between items-center mb-4">
-                              <h3 className={`${STYLES.CARD_TITLE} text-green-600 dark:text-green-400`}>
-                                  <BanknotesIcon className="h-5 w-5" /> Diferença Salarial (Piso)
-                              </h3>
-                              <button onClick={addWageGap} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Período</button>
-                          </div>
-                          {data.wageGap.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum período de diferença salarial cadastrado.</p>}
-                          {data.wageGap.map((gap, idx) => (
-                              <div key={idx} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative group">
-                                  <button onClick={() => removeWageGap(idx)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Início</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.startDate || ''} onChange={(e) => {
-                                              const newGaps = [...data.wageGap]; newGaps[idx].startDate = e.target.value; setData({...data, wageGap: newGaps});
-                                          }} />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Fim</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={gap.endDate || ''} onChange={(e) => {
-                                              const newGaps = [...data.wageGap]; newGaps[idx].endDate = e.target.value; setData({...data, wageGap: newGaps});
-                                          }} />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Salário Piso (Deveria ser)</label>
-                                          <input type="number" className={`${STYLES.INPUT_TINY} font-bold text-green-600`} value={gap.floorSalary || ''} onChange={(e) => {
-                                              const newGaps = [...data.wageGap]; newGaps[idx].floorSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
-                                          }} />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Salário Pago (Real)</label>
-                                          <input type="number" className={STYLES.INPUT_TINY} value={gap.paidSalary || ''} onChange={(e) => {
-                                              const newGaps = [...data.wageGap]; newGaps[idx].paidSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
-                                          }} />
-                                      </div>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-
-                      {/* Seção Horas Extras */}
-                      <div className={STYLES.CARD_SECTION}>
-                          <div className="flex justify-between items-center mb-4">
-                              <h3 className={`${STYLES.CARD_TITLE} text-orange-600 dark:text-orange-400`}>
-                                  <ClockIcon className="h-5 w-5" /> Horas Extras em Lote
-                              </h3>
-                              <button onClick={addOvertimeBatch} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Lote</button>
-                          </div>
-                          
-                          {data.overtime.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum lote de horas extras cadastrado.</p>}
-                          
-                          {data.overtime.map((ot, idx) => (
-                              <div key={ot.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative">
-                                  <button onClick={() => removeOvertimeBatch(ot.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
-                                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3 items-end">
-                                      <div className="col-span-1">
-                                          <label className={STYLES.LABEL_TINY}>Adicional (%)</label>
-                                          <select 
-                                            className={STYLES.INPUT_TINY} 
-                                            value={ot.percentage} 
-                                            onChange={(e) => {
-                                                const newOt = [...data.overtime];
-                                                newOt[idx].percentage = Number(e.target.value);
-                                                setData({...data, overtime: newOt});
-                                            }}
-                                          >
-                                              <option value={50}>50%</option>
-                                              <option value={60}>60%</option>
-                                              <option value={100}>100%</option>
-                                              <option value={-1}>Outro...</option>
-                                          </select>
-                                          {ot.percentage === -1 && (
-                                              <input 
-                                                type="number" 
-                                                className={`${STYLES.INPUT_TINY} mt-1`} 
-                                                placeholder="%" 
-                                                value={ot.customPercentage || ''}
-                                                onChange={(e) => {
-                                                    const newOt = [...data.overtime];
-                                                    newOt[idx].customPercentage = Number(e.target.value);
-                                                    setData({...data, overtime: newOt});
-                                                }}
-                                              />
-                                          )}
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Horas/Mês (Média)</label>
-                                          <input type="number" className={STYLES.INPUT_TINY} value={ot.hoursPerMonth || ''} onChange={(e) => {
-                                              const newOt = [...data.overtime]; newOt[idx].hoursPerMonth = Number(e.target.value); setData({...data, overtime: newOt});
-                                          }} />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>De</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.startDate || ''} onChange={(e) => {
-                                              const newOt = [...data.overtime]; newOt[idx].startDate = e.target.value; setData({...data, overtime: newOt});
-                                          }} />
-                                      </div>
-                                      <div>
-                                          <label className={STYLES.LABEL_TINY}>Até</label>
-                                          <input type="date" className={STYLES.INPUT_TINY} value={ot.endDate || ''} onChange={(e) => {
-                                              const newOt = [...data.overtime]; newOt[idx].endDate = e.target.value; setData({...data, overtime: newOt});
-                                          }} />
-                                      </div>
-                                      <div className="flex items-center h-10">
-                                           <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-300 select-none">
-                                               <input type="checkbox" checked={ot.applyDsr} onChange={(e) => {
-                                                   const newOt = [...data.overtime]; newOt[idx].applyDsr = e.target.checked; setData({...data, overtime: newOt});
-                                               }} className="w-4 h-4 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
-                                               Reflexo DSR
-                                           </label>
-                                      </div>
-                                  </div>
-                              </div>
-                          ))}
-                      </div>
-
                       {/* Feriados, Domingos e Banco de Horas */}
                       <div className={STYLES.CARD_SECTION}>
                           <h3 className={`${STYLES.CARD_TITLE} text-blue-600 dark:text-blue-400`}>
@@ -2895,32 +2810,86 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                           </div>
                       </div>
 
-                      <div className="md:col-span-2 flex justify-between">
-                          <button onClick={() => setActiveTab(1)} className={STYLES.BTN_SECONDARY}>Voltar</button>
-                          <button onClick={() => setActiveTab(3)} className={STYLES.BTN_PRIMARY}>Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
+
+                      <div className="flex justify-between mt-8">
+                          <button onClick={() => setActiveTab(2)} className={STYLES.BTN_SECONDARY}>Voltar</button>
+                          <button onClick={() => setActiveTab(4)} className={STYLES.BTN_PRIMARY}>Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
                       </div>
                   </div>
               )}
 
-              {/* TAB 3: INDENIZAÇÕES E MULTAS */}
-              {activeTab === 3 && (
+              {/* TAB 4: RESCISÃO E PENDÊNCIAS */}
+              {activeTab === 4 && (
                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                      
-                       <div className={STYLES.CARD_SECTION}>
-                           <h3 className={`${STYLES.CARD_TITLE} text-red-600 dark:text-red-400`}>
-                               <ExclamationTriangleIcon className="h-5 w-5" /> Multas e Verbas Vencidas
-                           </h3>
-                           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                               <div className="space-y-3">
-                                   <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
-                                       <input type="checkbox" checked={data.applyFine477} onChange={e => handleInputChange('applyFine477', e.target.checked)} className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
-                                       <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 477 (Atraso Pagamento)</span>
-                                   </label>
-                                   <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
-                                       <input type="checkbox" checked={data.applyFine467} onChange={e => handleInputChange('applyFine467', e.target.checked)} className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
-                                       <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 467 (Verbas Incontroversas)</span>
-                                   </label>
-                                   
+                      {/* Seção Saldo de Salário e Deduções */}
+                      <div className={STYLES.CARD_SECTION}>
+                          <h3 className={`${STYLES.CARD_TITLE} text-emerald-600 dark:text-emerald-400`}>
+                              <BanknotesIcon className="h-5 w-5" /> Saldo de Salário & Deduções
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              {/* Saldo de Salário */}
+                              <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl">
+                                  <label className="flex items-center gap-3 cursor-pointer mb-3">
+                                      <input 
+                                          type="checkbox" 
+                                          checked={data.salaryBalance.active} 
+                                          onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, active: e.target.checked } }))} 
+                                          className="w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500" 
+                                      />
+                                      <span className="font-bold text-slate-700 dark:text-slate-200">Calcular Saldo de Salário</span>
+                                  </label>
+                                  
+                                  {data.salaryBalance.active && (
+                                      <div className="grid grid-cols-2 gap-3 pl-8">
+                                          <div>
+                                              <label className={STYLES.LABEL_TINY}>Dias Trabalhados (Mês Rescisão)</label>
+                                              <input 
+                                                  type="number" 
+                                                  className={STYLES.INPUT_TINY} 
+                                                  value={data.salaryBalance.days} 
+                                                  onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, days: Number(e.target.value) } }))} 
+                                                  placeholder="0 = Automático"
+                                              />
+                                              <p className="text-[9px] text-slate-400 mt-1">Deixe 0 para usar data de demissão.</p>
+                                          </div>
+                                          <div>
+                                              <label className={STYLES.LABEL_TINY}>Valor Manual (Opcional)</label>
+                                              <input 
+                                                  type="number" 
+                                                  className={STYLES.INPUT_TINY} 
+                                                  value={data.salaryBalance.customAmount || ''} 
+                                                  onChange={e => setData(prev => ({ ...prev, salaryBalance: { ...prev.salaryBalance, customAmount: Number(e.target.value) } }))} 
+                                                  placeholder="R$ 0,00"
+                                              />
+                                          </div>
+                                      </div>
+                                  )}
+                              </div>
+
+                              {/* Deduções */}
+                              <div className="p-4 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 rounded-xl">
+                                  <h4 className="font-bold text-red-700 dark:text-red-400 mb-3 text-sm">Deduções / Compensações</h4>
+                                  <div>
+                                      <label className={STYLES.LABEL_TINY}>Valor Pago na Rescisão (TRCT)</label>
+                                      <input 
+                                          type="number" 
+                                          className={STYLES.INPUT_TINY} 
+                                          value={data.severancePaid} 
+                                          onChange={e => handleInputChange('severancePaid', Number(e.target.value))} 
+                                          placeholder="R$ 0,00"
+                                      />
+                                      <p className="text-[9px] text-slate-400 mt-1">Este valor será subtraído do total estimado.</p>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+
+
+                      <div className={STYLES.CARD_SECTION}>
+                          <h3 className={`${STYLES.CARD_TITLE} text-red-600 dark:text-red-400`}>
+                              <ExclamationTriangleIcon className="h-5 w-5" /> Férias e 13º Salário
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
                                    <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
                                        <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">Férias</h4>
                                        <label className="flex items-center gap-3 mb-2 cursor-pointer">
@@ -2979,6 +2948,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                        </div>
                                    </div>
 
+
                                    <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
                                        <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">13º Salário</h4>
                                        <label className="flex items-center gap-3 mb-2 cursor-pointer">
@@ -3021,95 +2991,147 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                            )}
                                        </div>
                                    </div>
-                               </div>
-                               <div className="space-y-4">
-                                   <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 text-sm">FGTS Não Depositado</h4>
-                                       
-                                       <label className="flex items-center gap-3 mb-4 cursor-pointer p-2 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
-                                            <input 
+
+                          </div>
+                      </div>
+                      <div className={STYLES.CARD_SECTION}>
+                          <h3 className={`${STYLES.CARD_TITLE} text-blue-600 dark:text-blue-400`}>
+                              <BanknotesIcon className="h-5 w-5" /> FGTS e Multas Rescisórias
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                              <div className="space-y-4">
+                                  <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                      <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 text-sm">FGTS (Conta Vinculada)</h4>
+                                      <div>
+                                          <label className={STYLES.LABEL_TEXT}>Saldo FGTS (Conta Vinculada)</label>
+                                          <input 
+                                            type="number" 
+                                            className={STYLES.INPUT_FIELD} 
+                                            value={data.hasFgtsBalance} 
+                                            onChange={e => handleInputChange('hasFgtsBalance', e.target.value)} 
+                                            placeholder="Saldo em conta..." 
+                                            disabled={data.fgtsNoDeposits}
+                                          />
+                                          <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                                              <input 
                                                 type="checkbox" 
-                                                checked={data.fgtsNoDeposits} 
-                                                onChange={e => handleInputChange('fgtsNoDeposits', e.target.checked)} 
-                                                className="w-5 h-5 text-red-600 rounded focus:ring-red-500" 
-                                            />
-                                            <span className="text-sm font-bold text-red-600 dark:text-red-400">Nenhum depósito realizado (Período Integral)</span>
-                                       </label>
+                                                checked={data.fgtsAllDeposited} 
+                                                onChange={e => handleInputChange('fgtsAllDeposited', e.target.checked)} 
+                                                className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                                disabled={data.fgtsNoDeposits}
+                                              />
+                                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">FGTS Totalmente Depositado (Período Integral)</span>
+                                          </label>
+                                          <p className="text-[10px] text-slate-500 mt-1 ml-6 leading-tight mb-4">
+                                              Marque se o valor acima corresponde ao total devido de todo o contrato. Se desmarcado, o sistema considerará como valor parcial.
+                                          </p>
 
-                                       {!data.fgtsNoDeposits && (
-                                           <div className="space-y-4">
-                                               <div>
-                                                   <div className="flex justify-between items-center mb-2">
-                                                       <label className={STYLES.LABEL_TINY}>Períodos sem depósito (Específicos)</label>
-                                                       <button onClick={addFgtsPeriod} className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold hover:bg-indigo-200 transition">+ Adicionar</button>
-                                                   </div>
-                                                   {data.fgtsSpecificMissingPeriods.length > 0 ? (
-                                                       <div className="space-y-2 mb-4">
-                                                           {data.fgtsSpecificMissingPeriods.map((period, idx) => (
-                                                               <div key={period.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
-                                                                   <div className="flex-1 grid grid-cols-2 gap-2">
-                                                                       <input type="date" className={STYLES.INPUT_TINY} value={period.startDate} onChange={e => updateFgtsPeriod(period.id, 'startDate', e.target.value)} />
-                                                                       <input type="date" className={STYLES.INPUT_TINY} value={period.endDate} onChange={e => updateFgtsPeriod(period.id, 'endDate', e.target.value)} />
-                                                                   </div>
-                                                                   <button onClick={() => removeFgtsPeriod(period.id)} className="text-slate-400 hover:text-red-500 p-1"><TrashIcon className="h-4 w-4" /></button>
-                                                               </div>
-                                                           ))}
-                                                       </div>
-                                                   ) : (
-                                                       <p className="text-xs text-slate-400 italic mb-4">Nenhum período específico adicionado.</p>
-                                                   )}
-                                               </div>
+                                          <label className={STYLES.LABEL_TEXT}>Multa 40% FGTS (Já paga)</label>
+                                          <input 
+                                            type="number" 
+                                            className={STYLES.INPUT_FIELD} 
+                                            value={data.hasFgtsPenaltyBalance} 
+                                            onChange={e => handleInputChange('hasFgtsPenaltyBalance', e.target.value)} 
+                                            placeholder="Multa 40% paga..." 
+                                            disabled={data.fgtsNoDeposits}
+                                          />
+                                          <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                                              <input 
+                                                type="checkbox" 
+                                                checked={data.fgtsPenaltyAllDeposited} 
+                                                onChange={e => handleInputChange('fgtsPenaltyAllDeposited', e.target.checked)} 
+                                                className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                                                disabled={data.fgtsNoDeposits}
+                                              />
+                                              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Multa 40% FGTS Totalmente Depositada (Período Integral)</span>
+                                          </label>
+                                          <p className="text-[10px] text-slate-500 mt-1 ml-6 leading-tight">
+                                              Marque se o valor da multa acima corresponde ao total devido. Se desmarcado, o sistema considerará como valor parcial.
+                                          </p>
+                                      </div>
+                                  </div>
+                                  
+                                  <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                      <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 text-sm">FGTS Não Depositado</h4>
+                                      
+                                      <label className="flex items-center gap-3 mb-4 cursor-pointer p-2 bg-white dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700">
+                                           <input 
+                                               type="checkbox" 
+                                               checked={data.fgtsNoDeposits} 
+                                               onChange={e => handleInputChange('fgtsNoDeposits', e.target.checked)} 
+                                               className="w-5 h-5 text-red-600 rounded focus:ring-red-500" 
+                                           />
+                                           <span className="text-sm font-bold text-red-600 dark:text-red-400">Nenhum depósito realizado (Período Integral)</span>
+                                      </label>
 
-                                               <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                                                   <label className={STYLES.LABEL_TINY}>Ou Quantidade de Meses (Simples)</label>
-                                                   <input 
-                                                       type="number" 
-                                                       className={STYLES.INPUT_FIELD} 
-                                                       value={data.unpaidFgtsMonths} 
-                                                       onChange={e => handleInputChange('unpaidFgtsMonths', Number(e.target.value))}
-                                                       placeholder="Ex: 5"
-                                                   />
-                                                   <p className="text-[10px] text-slate-400 mt-1">Use apenas se não quiser detalhar os períodos acima.</p>
-                                               </div>
-                                           </div>
-                                       )}
-                                   </div>
-                                   <div>
-                                       <label className={STYLES.LABEL_TEXT}>Indenização por Danos Morais (Estimativa R$)</label>
-                                       <input type="number" className={STYLES.INPUT_FIELD} value={data.moralDamages} onChange={e => handleInputChange('moralDamages', Number(e.target.value))} placeholder="0.00" />
-                                   </div>
-                                   
-                                   <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
-                                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">Honorários Advocatícios</h4>
-                                       <label className={STYLES.LABEL_TINY}>Percentual de Sucumbência</label>
-                                       <select 
-                                           className={STYLES.INPUT_TINY} 
-                                           value={data.attorneyFees} 
-                                           onChange={e => handleInputChange('attorneyFees', Number(e.target.value))}
-                                       >
-                                           <option value={0}>Não aplicar</option>
-                                           <option value={5}>5%</option>
-                                           <option value={10}>10%</option>
-                                           <option value={15}>15%</option>
-                                           <option value={20}>20%</option>
-                                           <option value={25}>25%</option>
-                                           <option value={30}>30%</option>
-                                       </select>
-                                   </div>
-                               </div>
-                           </div>
-                       </div>
+                                      {!data.fgtsNoDeposits && (
+                                          <div className="space-y-4">
+                                              <div>
+                                                  <div className="flex justify-between items-center mb-2">
+                                                      <label className={STYLES.LABEL_TINY}>Períodos sem depósito (Específicos)</label>
+                                                      <button onClick={addFgtsPeriod} className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold hover:bg-indigo-200 transition">+ Adicionar</button>
+                                                  </div>
+                                                  {data.fgtsSpecificMissingPeriods.length > 0 ? (
+                                                      <div className="space-y-2 mb-4">
+                                                          {data.fgtsSpecificMissingPeriods.map((period, idx) => (
+                                                              <div key={period.id} className="flex items-center gap-2 p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-sm">
+                                                                  <div className="flex-1 grid grid-cols-2 gap-2">
+                                                                      <input type="date" className={STYLES.INPUT_TINY} value={period.startDate} onChange={e => updateFgtsPeriod(period.id, 'startDate', e.target.value)} />
+                                                                      <input type="date" className={STYLES.INPUT_TINY} value={period.endDate} onChange={e => updateFgtsPeriod(period.id, 'endDate', e.target.value)} />
+                                                                  </div>
+                                                                  <button onClick={() => removeFgtsPeriod(period.id)} className="text-slate-400 hover:text-red-500 p-1"><TrashIcon className="h-4 w-4" /></button>
+                                                              </div>
+                                                          ))}
+                                                      </div>
+                                                  ) : (
+                                                      <p className="text-xs text-slate-400 italic mb-4">Nenhum período específico adicionado.</p>
+                                                  )}
+                                              </div>
 
-                       <div className="md:col-span-2 flex justify-between">
-                          <button onClick={() => setActiveTab(2)} className={STYLES.BTN_SECONDARY}>Voltar</button>
-                          <button onClick={() => setActiveTab(4)} className={STYLES.BTN_PRIMARY}>Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
+                                              <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
+                                                  <label className={STYLES.LABEL_TINY}>Ou Quantidade de Meses (Simples)</label>
+                                                  <input 
+                                                      type="number" 
+                                                      className={STYLES.INPUT_FIELD} 
+                                                      value={data.unpaidFgtsMonths} 
+                                                      onChange={e => handleInputChange('unpaidFgtsMonths', Number(e.target.value))}
+                                                      placeholder="Ex: 5"
+                                                  />
+                                                  <p className="text-[10px] text-slate-400 mt-1">Use apenas se não quiser detalhar os períodos acima.</p>
+                                              </div>
+                                          </div>
+                                      )}
+                                  </div>
+                              </div>
+                              
+                              <div className="space-y-4">
+                                  <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                      <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-3 text-sm">Multas Rescisórias</h4>
+                                      <div className="space-y-3">
+                                          <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
+                                              <input type="checkbox" checked={data.applyFine477} onChange={e => handleInputChange('applyFine477', e.target.checked)} className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
+                                              <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 477 (Atraso Pagamento)</span>
+                                          </label>
+                                          <label className="flex items-center gap-3 p-3 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition cursor-pointer">
+                                              <input type="checkbox" checked={data.applyFine467} onChange={e => handleInputChange('applyFine467', e.target.checked)} className="w-5 h-5 text-indigo-600 bg-slate-50 dark:bg-slate-700 border-slate-400 dark:border-slate-500 rounded focus:ring-indigo-500" />
+                                              <span className="text-sm font-semibold dark:text-slate-200">Multa Art. 467 (Verbas Incontroversas)</span>
+                                          </label>
+                                      </div>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+                      <div className="flex justify-between mt-8">
+                          <button onClick={() => setActiveTab(3)} className={STYLES.BTN_SECONDARY}>Voltar</button>
+                          <button onClick={() => setActiveTab(5)} className={STYLES.BTN_PRIMARY}>Próxima Etapa <ArrowPathIcon className="h-4 w-4" /></button>
                       </div>
                   </div>
               )}
 
-              {/* TAB 4: ESTABILIDADE GESTANTE */}
-              {activeTab === 4 && (
-                   <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              {/* TAB 5: SITUAÇÕES ESPECIAIS E CONFIGURAÇÕES */}
+              {activeTab === 5 && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              
                         <div className={`${STYLES.CARD_SECTION} bg-pink-50 dark:bg-pink-900/10 border-pink-100 dark:border-pink-900/30`}>
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="p-2 bg-pink-100 dark:bg-pink-900/40 rounded-full text-pink-600 dark:text-pink-400">
@@ -3161,25 +3183,60 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                             )}
                         </div>
 
-                        <div className="md:col-span-2 flex justify-between">
-                          <button onClick={() => setActiveTab(3)} className={STYLES.BTN_SECONDARY}>Voltar</button>
+                      <div className={STYLES.CARD_SECTION}>
+                          <h3 className={`${STYLES.CARD_TITLE} text-purple-600 dark:text-purple-400`}>
+                              <BriefcaseIcon className="h-5 w-5" /> Indenizações e Honorários
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                              <div className="space-y-4">
+                                  <div className="p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                    <div>
+                                        <label className={STYLES.LABEL_TEXT}>Indenização por Danos Morais (Estimativa R$)</label>
+                                        <input type="number" className={STYLES.INPUT_FIELD} value={data.moralDamages} onChange={e => handleInputChange('moralDamages', Number(e.target.value))} placeholder="0.00" />
+                                    </div>
+                                  </div>
+                              </div>
+                              <div className="space-y-4">
+                                   <div className="p-3 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-900/50">
+                                       <h4 className="font-bold text-slate-700 dark:text-slate-300 mb-2 text-sm">Honorários Advocatícios</h4>
+                                       <label className={STYLES.LABEL_TINY}>Percentual de Sucumbência</label>
+                                       <select 
+                                           className={STYLES.INPUT_TINY} 
+                                           value={data.attorneyFees} 
+                                           onChange={e => handleInputChange('attorneyFees', Number(e.target.value))}
+                                       >
+                                           <option value={0}>Não aplicar</option>
+                                           <option value={5}>5%</option>
+                                           <option value={10}>10%</option>
+                                           <option value={15}>15%</option>
+                                           <option value={20}>20%</option>
+                                           <option value={25}>25%</option>
+                                           <option value={30}>30%</option>
+                                       </select>
+                                   </div>
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="flex justify-between mt-8">
+                          <button onClick={() => setActiveTab(4)} className={STYLES.BTN_SECONDARY}>Voltar</button>
                           <button 
                             onClick={() => {
                                 const results = calculateLaborResults(data);
                                 setCalcResult(results);
                                 setTotalValue(results.reduce((acc, curr) => acc + curr.value, 0));
-                                setActiveTab(5);
+                                setActiveTab(6);
                             }} 
                             className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-8 rounded-xl shadow-lg shadow-green-500/30 flex items-center gap-2 transform hover:scale-105 transition-all"
                           >
                              <CalculatorIcon className="h-5 w-5" /> Calcular Tudo
                           </button>
                       </div>
-                   </div>
+                  </div>
               )}
 
-              {/* TAB 5: RESULTADOS */}
-              {activeTab === 5 && (
+              {/* TAB 6: RESULTADOS */}
+              {activeTab === 6 && (
                   <div className="animate-in zoom-in-95 duration-500 space-y-6">
                       <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl flex flex-col md:flex-row justify-between items-center gap-4">
                           <div>
@@ -3200,7 +3257,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                               </div>
                           </div>
                           <div className="flex gap-3">
-                              <button onClick={() => setActiveTab(1)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-sm transition">
+                              <button onClick={() => setActiveTab(5)} className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg font-bold text-sm transition">
                                   Revisar Dados
                               </button>
                               {editingId ? (
