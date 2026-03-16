@@ -12,7 +12,8 @@ import {
   PencilSquareIcon,
   UserIcon,
   ChevronUpIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  CalendarIcon
 } from '@heroicons/react/24/outline';
 import { jsPDF } from "jspdf";
 import { ClientRecord, ContractRecord } from './types';
@@ -54,6 +55,7 @@ interface LaborData {
   hasFgtsBalance: number; // Saldo já depositado para cálculo da multa
   hasFgtsPenaltyBalance: number; // Multa de 40% já paga
   fgtsPenaltyAllDeposited: boolean; // Se a multa de 40% foi totalmente depositada
+  clientReport?: string; // Relato do cliente / Fatos relevantes
   
   // Jornada Contratual (Informativo)
   contractualSchedule: {
@@ -112,6 +114,14 @@ interface LaborData {
     endDate: string;
     applyDsr: boolean;
   }[];
+
+  // Feriados, Domingos e Banco de Horas
+  employeeGender?: 'M' | 'F';
+  uncompensatedHolidays?: number;
+  uncompensatedSundays?: number;
+  consecutiveSundaysWorked?: number; // Para mulheres (Art 386 CLT)
+  timeBankBalance?: number;
+  timeBankOvertimePercentage?: number;
 
   // Direitos CCT
   cctRights: {
@@ -178,6 +188,7 @@ interface LaborData {
 
 const INITIAL_LABOR_DATA: LaborData = {
   employeeName: '',
+  clientReport: '',
   startDate: '',
   endDate: '',
   baseSalary: 0,
@@ -201,6 +212,12 @@ const INITIAL_LABOR_DATA: LaborData = {
   intrajornada: { active: false, periods: [] },
   wageGap: [],
   overtime: [],
+  employeeGender: 'M',
+  uncompensatedHolidays: 0,
+  uncompensatedSundays: 0,
+  consecutiveSundaysWorked: 0,
+  timeBankBalance: 0,
+  timeBankOvertimePercentage: 50,
   cctRights: [],
   stability: { active: false, type: 'gestante', endDate: '' },
   applyFine477: false,
@@ -897,6 +914,53 @@ const calculateLaborResults = (calcData: LaborData) => {
             }
         }
     });
+
+    // 7.1 Feriados, Domingos e Banco de Horas
+    if (calcData.uncompensatedHolidays && calcData.uncompensatedHolidays > 0) {
+        const dailyRate = salary / 30;
+        const holidaysValue = calcData.uncompensatedHolidays * (dailyRate * 2);
+        results.push({
+            desc: `Feriados Trabalhados em Dobro (${calcData.uncompensatedHolidays} dias)`,
+            value: holidaysValue,
+            category: 'Horas Extras',
+            details: `Salário Dia: ${formatCurrency(dailyRate)}\nDias Trabalhados: ${calcData.uncompensatedHolidays}\nCálculo: ${calcData.uncompensatedHolidays} x (${formatCurrency(dailyRate)} x 2) = ${formatCurrency(holidaysValue)}\nFundamento: Súmula 146 do TST`
+        });
+    }
+
+    if (calcData.uncompensatedSundays && calcData.uncompensatedSundays > 0) {
+        const dailyRate = salary / 30;
+        const sundaysValue = calcData.uncompensatedSundays * (dailyRate * 2);
+        results.push({
+            desc: `Domingos Trabalhados em Dobro (${calcData.uncompensatedSundays} dias)`,
+            value: sundaysValue,
+            category: 'Horas Extras',
+            details: `Salário Dia: ${formatCurrency(dailyRate)}\nDias Trabalhados: ${calcData.uncompensatedSundays}\nCálculo: ${calcData.uncompensatedSundays} x (${formatCurrency(dailyRate)} x 2) = ${formatCurrency(sundaysValue)}\nFundamento: Súmula 146 do TST`
+        });
+    }
+
+    if (calcData.employeeGender === 'F' && calcData.consecutiveSundaysWorked && calcData.consecutiveSundaysWorked > 0) {
+        const dailyRate = salary / 30;
+        const consecutiveSundaysValue = calcData.consecutiveSundaysWorked * (dailyRate * 2);
+        results.push({
+            desc: `Domingos Consecutivos - Mulheres (${calcData.consecutiveSundaysWorked} dias)`,
+            value: consecutiveSundaysValue,
+            category: 'Horas Extras',
+            details: `Salário Dia: ${formatCurrency(dailyRate)}\nDomingos Irregulares: ${calcData.consecutiveSundaysWorked}\nCálculo: ${calcData.consecutiveSundaysWorked} x (${formatCurrency(dailyRate)} x 2) = ${formatCurrency(consecutiveSundaysValue)}\nFundamento: Art. 386 da CLT e ADPF 151 do STF`
+        });
+    }
+
+    if (calcData.timeBankBalance && calcData.timeBankBalance > 0) {
+        const hourlyRate = salary / 220;
+        const perc = calcData.timeBankOvertimePercentage || 50;
+        const timeBankRate = hourlyRate * (1 + (perc / 100));
+        const timeBankValue = calcData.timeBankBalance * timeBankRate;
+        results.push({
+            desc: `Saldo de Banco de Horas (${calcData.timeBankBalance}h a ${perc}%)`,
+            value: timeBankValue,
+            category: 'Horas Extras',
+            details: `Salário Hora: ${formatCurrency(hourlyRate)}\nAdicional: ${perc}%\nHora Extra: ${formatCurrency(timeBankRate)}\nTotal de Horas: ${calcData.timeBankBalance}\nCálculo: ${calcData.timeBankBalance} x ${formatCurrency(timeBankRate)} = ${formatCurrency(timeBankValue)}`
+        });
+    }
 
     // 8. Estabilidade Provisória
     let stabilityFgts = 0;
@@ -1604,8 +1668,22 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
           doc.text(scheduleDesc, margin, y);
       }
 
+      // Relato do Cliente
+      if (dataToUse.clientReport) {
+          y += 10;
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          doc.text("RELATO DO CLIENTE / FATOS RELEVANTES:", margin, y);
+          y += 5;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          const reportLines = doc.splitTextToSize(dataToUse.clientReport, pageWidth - (margin * 2));
+          doc.text(reportLines, margin, y);
+          y += (reportLines.length * 4) + 5;
+      }
+
       // Tabela de Verbas
-      y += 15;
+      y += 10;
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
       doc.text("DETALHAMENTO DAS VERBAS", margin, y);
@@ -1840,6 +1918,10 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                           {clients.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
                                           {contracts.map(c => <option key={c.id} value={`${c.firstName} ${c.lastName}`}>{c.firstName} {c.lastName}</option>)}
                                       </select>
+                                      <select className={`${STYLES.INPUT_FIELD} w-1/4`} value={data.employeeGender || 'M'} onChange={e => handleInputChange('employeeGender', e.target.value)}>
+                                          <option value="M">Masculino</option>
+                                          <option value="F">Feminino</option>
+                                      </select>
                                   </div>
                               </div>
                               <div>
@@ -1919,6 +2001,22 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                       Marque se o valor da multa acima corresponde ao total devido. Se desmarcado, o sistema considerará como valor parcial.
                                   </p>
                               </div>
+                          </div>
+                      </div>
+
+                      {/* Relato do Cliente */}
+                      <div className={`md:col-span-2 ${STYLES.CARD_SECTION}`}>
+                          <h3 className={STYLES.CARD_TITLE}>
+                              <DocumentTextIcon className="w-5 h-5 text-indigo-500" />
+                              Relato do Cliente / Fatos Relevantes
+                          </h3>
+                          <div className="mt-4">
+                              <textarea 
+                                  className={`${STYLES.INPUT_FIELD} min-h-[120px] resize-y`} 
+                                  value={data.clientReport || ''} 
+                                  onChange={e => handleInputChange('clientReport', e.target.value)} 
+                                  placeholder="Descreva aqui os fatos relevantes do caso, histórico do trabalhador, detalhes sobre as condições de trabalho, etc. Esta informação constará no relatório PDF."
+                              />
                           </div>
                       </div>
 
@@ -2756,6 +2854,45 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   </div>
                               </div>
                           ))}
+                      </div>
+
+                      {/* Feriados, Domingos e Banco de Horas */}
+                      <div className={STYLES.CARD_SECTION}>
+                          <h3 className={`${STYLES.CARD_TITLE} text-blue-600 dark:text-blue-400`}>
+                              <CalendarIcon className="h-5 w-5" /> Feriados, Domingos e Banco de Horas
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+                              <div className="p-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/30 rounded-xl space-y-4">
+                                  <div>
+                                      <label className={STYLES.LABEL_TEXT}>Feriados Trabalhados (Não Compensados)</label>
+                                      <input type="number" className={STYLES.INPUT_FIELD} value={data.uncompensatedHolidays || ''} onChange={e => handleInputChange('uncompensatedHolidays', Number(e.target.value))} placeholder="Qtd. de dias" />
+                                      <p className="text-[10px] text-slate-500 mt-1">Serão pagos em dobro (100%).</p>
+                                  </div>
+                                  <div>
+                                      <label className={STYLES.LABEL_TEXT}>Domingos Trabalhados (Não Compensados)</label>
+                                      <input type="number" className={STYLES.INPUT_FIELD} value={data.uncompensatedSundays || ''} onChange={e => handleInputChange('uncompensatedSundays', Number(e.target.value))} placeholder="Qtd. de dias" />
+                                  </div>
+                                  {data.employeeGender === 'F' && (
+                                      <div>
+                                          <label className={STYLES.LABEL_TEXT}>Domingos Consecutivos (Art. 386 CLT)</label>
+                                          <input type="number" className={STYLES.INPUT_FIELD} value={data.consecutiveSundaysWorked || ''} onChange={e => handleInputChange('consecutiveSundaysWorked', Number(e.target.value))} placeholder="Qtd. de domingos" />
+                                          <p className="text-[10px] text-slate-500 mt-1">Mulheres: DSR deve coincidir com o domingo a cada 15 dias. O descumprimento gera pagamento em dobro.</p>
+                                      </div>
+                                  )}
+                              </div>
+                              <div className="p-4 bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl space-y-4">
+                                  <div>
+                                      <label className={STYLES.LABEL_TEXT}>Saldo Banco de Horas (Positivo)</label>
+                                      <input type="number" className={STYLES.INPUT_FIELD} value={data.timeBankBalance || ''} onChange={e => handleInputChange('timeBankBalance', Number(e.target.value))} placeholder="Qtd. de horas" />
+                                      <p className="text-[10px] text-slate-500 mt-1">Horas não compensadas até a rescisão.</p>
+                                  </div>
+                                  <div>
+                                      <label className={STYLES.LABEL_TEXT}>Adicional do Banco de Horas (%)</label>
+                                      <input type="number" className={STYLES.INPUT_FIELD} value={data.timeBankOvertimePercentage || ''} onChange={e => handleInputChange('timeBankOvertimePercentage', Number(e.target.value))} placeholder="Ex: 50" />
+                                      <p className="text-[10px] text-slate-500 mt-1">Geralmente 50%, salvo convenção coletiva.</p>
+                                  </div>
+                              </div>
+                          </div>
                       </div>
 
                       <div className="md:col-span-2 flex justify-between">
