@@ -50,9 +50,13 @@ export const calculateTimeForPeriod = (
     endDateStr: string, 
     gender: 'M' | 'F'
 ) => {
-    const activeBonds = bonds.filter(b => b.useInCalculation && b.startDate);
+    // Filter bonds just like SocialSecurityCalc.tsx does
+    const activeBonds = bonds.filter(b => b.useInCalculation && b.startDate && b.endDate);
     
-    if (activeBonds.length === 0) return { years: 0, months: 0, days: 0, totalDays: 0 };
+    // Filter benefit bonds that are intercalated
+    const bondsToProcess = activeBonds.filter(b => !b.isBenefit || isBondIntercalated(b, bonds));
+    
+    if (bondsToProcess.length === 0) return { years: 0, months: 0, days: 0, totalDays: 0 };
 
     const targetEndMs = parseDateLocal(endDateStr).setHours(12, 0, 0, 0);
 
@@ -60,12 +64,11 @@ export const calculateTimeForPeriod = (
     let minDateMs = Infinity;
     let maxDateMs = -Infinity;
 
-    const processedBonds = activeBonds.map(b => {
-        const start = parseDateLocal(b.startDate);
+    const processedBonds = bondsToProcess.map(b => {
+        const start = parseDateLocal(b.startDate!);
         start.setHours(12, 0, 0, 0);
         
-        // End date is the bond end date OR the target calculation date, whichever is earlier
-        let bondEnd = b.endDate ? parseDateLocal(b.endDate) : new Date();
+        let bondEnd = parseDateLocal(b.endDate!);
         bondEnd.setHours(12, 0, 0, 0);
 
         // Cap bond end at target date
@@ -83,8 +86,6 @@ export const calculateTimeForPeriod = (
 
         // Determine Factor
         let factor = 1.0;
-        // Special Time factors only apply Pre-Reform (handled in loop)
-        // But we store the potential factor here
         if (b.activityType === 'special_25') factor = gender === 'M' ? 1.4 : 1.2;
         else if (b.activityType === 'special_20') factor = gender === 'M' ? 1.75 : 1.5;
         else if (b.activityType === 'special_15') factor = gender === 'M' ? 2.33 : 2.0;
@@ -529,19 +530,19 @@ export const isBondIntercalated = (benefit: CNISBond, allBonds: CNISBond[]) => {
     
     const contributionBonds = allBonds.filter(b => !b.isBenefit && b.useInCalculation && b.startDate && b.endDate);
     
-    // Must have a contribution BEFORE (within grace period, approx 12-24 months)
+    // Must have a contribution BEFORE (within grace period, approx 13 months)
     const hasContribBefore = contributionBonds.some(c => {
         const cEnd = parseDateLocal(c.endDate!).getTime();
         const gap = bStart - cEnd;
-        // 24 months + 1.5 months buffer for payment
-        return cEnd <= bStart && gap <= (365 * 24 * 60 * 60 * 1000 * 2.2);
+        // 13 months buffer (1.1 years) to match SocialSecurityCalc.tsx
+        return cEnd <= bStart && gap <= (365 * 24 * 60 * 60 * 1000 * 1.1);
     });
 
     // Must have a contribution AFTER (within grace period)
     const hasContribAfter = contributionBonds.some(c => {
         const cStart = parseDateLocal(c.startDate!).getTime();
         const gap = cStart - bEnd;
-        return cStart >= bEnd && gap <= (365 * 24 * 60 * 60 * 1000 * 2.2);
+        return cStart >= bEnd && gap <= (365 * 24 * 60 * 60 * 1000 * 1.1);
     });
 
     return hasContribBefore && hasContribAfter;
