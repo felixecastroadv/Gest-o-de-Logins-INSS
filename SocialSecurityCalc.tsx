@@ -331,10 +331,16 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
             }
         }
         
-        const years = Math.floor(totalAdjustedDays / 365.25);
-        const months = Math.floor((totalAdjustedDays % 365.25) / 30.44);
-        const days = Math.floor((totalAdjustedDays % 365.25) % 30.44);
-
+        let years = Math.floor(totalAdjustedDays / 365);
+        let remainingDays = totalAdjustedDays % 365;
+        let months = Math.floor(remainingDays / 30);
+        let days = Math.floor(remainingDays % 30);
+        
+        if (months >= 12) {
+            years += 1;
+            months -= 12;
+        }
+        
         return { years, months, days, totalDays: totalAdjustedDays };
     };
     
@@ -451,11 +457,18 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
             loops++;
         }
 
-        const years = Math.floor(totalAdjustedDays / 365.25);
-        const months = Math.floor((totalAdjustedDays % 365.25) / 30.44);
-        const days = Math.floor((totalAdjustedDays % 365.25) % 30.44);
+        const years = Math.floor(totalAdjustedDays / 365);
+        const months = Math.floor((totalAdjustedDays % 365) / 30);
+        const days = Math.floor((totalAdjustedDays % 365) % 30);
         
-        return `${years} anos, ${months} meses e ${days} dias`;
+        let adjYears = years;
+        let adjMonths = months;
+        if (adjMonths >= 12) {
+            adjYears += 1;
+            adjMonths -= 12;
+        }
+        
+        return `${adjYears} anos, ${adjMonths} meses e ${days} dias`;
     }, [data.bonds, data.gender, data.der]);
 
     // Unified Carência Calculation (Merge Months)
