@@ -61,10 +61,15 @@ interface LaborData {
   // Jornada Contratual (Informativo)
   contractualSchedule: {
       type: 'segunda_sexta' | 'segunda_sabado' | '6x1' | '12x36' | '24x48' | 'outros';
-      startTime: string; // HH:mm
-      endTime: string; // HH:mm
-      breakStartTime: string; // HH:mm
-      breakEndTime: string; // HH:mm
+      schedules: {
+          id: string;
+          days: string; // e.g., "Segunda a Sexta"
+          selectedDays?: number[]; // [1, 2, 3, 4, 5] for Mon-Fri
+          startTime: string; // HH:mm
+          endTime: string; // HH:mm
+          breakStartTime: string; // HH:mm
+          breakEndTime: string; // HH:mm
+      }[];
       customDescription?: string;
       customMonthlyDays?: number; // Para escalas personalizadas
   };
@@ -185,6 +190,12 @@ interface LaborData {
     endDate: string;
     salary: number;
   }[];
+  salaryOffTheBooks: {
+    id: string;
+    amount: number;
+    startDate: string;
+    endDate: string;
+  }[];
 }
 
 const INITIAL_LABOR_DATA: LaborData = {
@@ -200,10 +211,17 @@ const INITIAL_LABOR_DATA: LaborData = {
   fgtsPenaltyAllDeposited: false,
   contractualSchedule: {
       type: 'segunda_sexta',
-      startTime: '08:00',
-      endTime: '17:00',
-      breakStartTime: '12:00',
-      breakEndTime: '13:00',
+      schedules: [
+          {
+              id: 'initial',
+              days: 'Segunda a Sexta',
+              selectedDays: [1, 2, 3, 4, 5],
+              startTime: '08:00',
+              endTime: '17:00',
+              breakStartTime: '12:00',
+              breakEndTime: '13:00'
+          }
+      ],
       customDescription: '',
       customMonthlyDays: 22
   },
@@ -235,7 +253,8 @@ const INITIAL_LABOR_DATA: LaborData = {
   attorneyFees: 0,
   salaryBalance: { active: true, days: 0 },
   severancePaid: 0,
-  salaryHistory: []
+  salaryHistory: [],
+  salaryOffTheBooks: []
 };
 
 // --- Helpers de Cálculo ---
@@ -1247,7 +1266,116 @@ const calculateLaborResults = (calcData: LaborData) => {
         });
     }
 
-    // 14. Deduções
+    // 14. Integração de Salário por Fora (Reflexos)
+    calcData.salaryOffTheBooks.forEach((off, idx) => {
+        const offStart = parseDate(off.startDate) || start;
+        const offEnd = parseDate(off.endDate) || end;
+        
+        if (offStart && offEnd && off.amount > 0) {
+            // Cálculo do valor proporcional acumulado no período
+            const result = calculateBenefitExact(offStart, offEnd, [], off.amount, (val, days) => {
+                return (val / 30) * days;
+            });
+            
+            const totalOff = result.value;
+            const months = result.months;
+
+            // 1. Reflexo em DSR (1/6) - Súmula 172 TST
+            const reflexDsr = totalOff * 0.1666;
+            
+            // 2. Reflexo em 13º Salário (1/12 por mês)
+            const reflex13 = (totalOff / 12);
+            
+            // 3. Reflexo em Férias + 1/3 (1/12 + 1/3)
+            const reflexVac = (totalOff / 12) * 1.3333;
+            
+            // 4. Reflexo em FGTS (8%)
+            const reflexFgts = totalOff * 0.08;
+            
+            // 5. Reflexo em Multa FGTS (40% sobre o reflexo do FGTS)
+            const reflexFgtsFine = reflexFgts * 0.4;
+            
+            // 6. Reflexo em Aviso Prévio (se indenizado e se o período cobre o fim do contrato)
+            let reflexNotice = 0;
+            if (shouldPayNotice && offEnd >= (end || new Date())) {
+                reflexNotice = (off.amount / 30) * noticeDays;
+            }
+
+            // 7. Reflexos em Adicionais (Periculosidade e Noturno)
+            let reflexPeri = 0;
+            if (calcData.periculosidade) {
+                reflexPeri = totalOff * 0.30;
+            }
+
+            let reflexNoturno = 0;
+            if (calcData.adicionalNoturno.active) {
+                calcData.adicionalNoturno.periods.forEach(p => {
+                    const pStart = parseDate(p.startDate) || start;
+                    const pEnd = parseDate(p.endDate) || end;
+                    
+                    if (pStart && pEnd) {
+                        const overlapStart = offStart > pStart ? offStart : pStart;
+                        const overlapEnd = offEnd < pEnd ? offEnd : pEnd;
+                        
+                        if (overlapStart && overlapEnd && overlapStart < overlapEnd && p.hoursPerMonth > 0) {
+                            const resultNot = calculateBenefitExact(overlapStart, overlapEnd, [], off.amount, (val, days) => {
+                                const hourlyRate = val / 220;
+                                const nightRate = hourlyRate * 0.20;
+                                return (nightRate * p.hoursPerMonth / 30) * days;
+                            });
+                            reflexNoturno += resultNot.value;
+                        }
+                    }
+                });
+            }
+
+            let reflexHe = 0;
+            calcData.overtime.forEach(ot => {
+                const otStart = parseDate(ot.startDate) || start;
+                const otEnd = parseDate(ot.endDate) || end;
+                if (otStart && otEnd) {
+                    const overlapStart = offStart > otStart ? offStart : otStart;
+                    const overlapEnd = offEnd < otEnd ? offEnd : otEnd;
+                    
+                    if (overlapStart && overlapEnd && overlapStart < overlapEnd && ot.hoursPerMonth > 0) {
+                        const perc = ot.percentage === -1 ? (ot.customPercentage || 50) : ot.percentage;
+                        const resultHe = calculateBenefitExact(overlapStart, overlapEnd, [], off.amount, (val, days) => {
+                            const hourlyRate = val / 220;
+                            const otRate = hourlyRate * (1 + (perc / 100));
+                            return (otRate * ot.hoursPerMonth / 30) * days;
+                        });
+                        reflexHe += resultHe.value;
+                    }
+                }
+            });
+
+            const totalReflex = reflexDsr + reflex13 + reflexVac + reflexFgts + reflexFgtsFine + reflexNotice + reflexPeri + reflexNoturno + reflexHe;
+
+            results.push({
+                desc: `Integração Salário por Fora (Reflexos - Período ${idx + 1})`,
+                value: totalReflex,
+                category: 'Reflexos',
+                details: `Valor Mensal "Por Fora": ${formatCurrency(off.amount)}\n` +
+                         `Período: ${offStart.toLocaleDateString('pt-BR')} a ${offEnd.toLocaleDateString('pt-BR')}\n` +
+                         `Meses Calculados: ${months}\n` +
+                         `Total Acumulado no Período: ${formatCurrency(totalOff)}\n\n` +
+                         `Reflexos Calculados:\n` +
+                         `- DSR (1/6): ${formatCurrency(reflexDsr)}\n` +
+                         `- 13º Salário: ${formatCurrency(reflex13)}\n` +
+                         `- Férias + 1/3: ${formatCurrency(reflexVac)}\n` +
+                         `- FGTS (8%): ${formatCurrency(reflexFgts)}\n` +
+                         `- Multa FGTS (40%): ${formatCurrency(reflexFgtsFine)}\n` +
+                         (reflexNotice > 0 ? `- Aviso Prévio (${noticeDays} dias): ${formatCurrency(reflexNotice)}\n` : '') +
+                         (reflexPeri > 0 ? `- Adicional Periculosidade (30%): ${formatCurrency(reflexPeri)}\n` : '') +
+                         (reflexNoturno > 0 ? `- Adicional Noturno: ${formatCurrency(reflexNoturno)}\n` : '') +
+                         (reflexHe > 0 ? `- Horas Extras: ${formatCurrency(reflexHe)}\n` : '') +
+                         `Total de Reflexos Devidos: ${formatCurrency(totalReflex)}\n\n` +
+                         `Fundamento: Art. 457, §1º da CLT.`
+            });
+        }
+    });
+
+    // 15. Deduções
     if (calcData.severancePaid > 0) {
         results.push({ desc: `Valor Pago na Rescisão (Dedução)`, value: -Math.abs(calcData.severancePaid), category: 'Deduções' });
     }
@@ -1391,6 +1519,75 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
           ...prev,
           fgtsSpecificMissingPeriods: prev.fgtsSpecificMissingPeriods.filter(p => p.id !== id)
       }));
+  };
+
+  const addSalaryOffTheBooks = () => {
+    setData(prev => ({
+      ...prev,
+      salaryOffTheBooks: [...prev.salaryOffTheBooks, {
+        id: Math.random().toString(36).substr(2, 9),
+        amount: 0,
+        startDate: prev.startDate,
+        endDate: prev.endDate
+      }]
+    }));
+  };
+
+  const removeSalaryOffTheBooks = (id: string) => {
+    setData(prev => ({
+      ...prev,
+      salaryOffTheBooks: prev.salaryOffTheBooks.filter(s => s.id !== id)
+    }));
+  };
+
+  const updateSalaryOffTheBooks = (id: string, field: string, value: any) => {
+    setData(prev => ({
+      ...prev,
+      salaryOffTheBooks: prev.salaryOffTheBooks.map(s => s.id === id ? { ...s, [field]: value } : s)
+    }));
+  };
+
+  const addContractualSchedule = () => {
+    setData(prev => ({
+      ...prev,
+      contractualSchedule: {
+        ...prev.contractualSchedule,
+        schedules: [
+          ...(prev.contractualSchedule.schedules || []),
+          {
+            id: Math.random().toString(36).substr(2, 9),
+            days: 'Sábado',
+            selectedDays: [6],
+            startTime: '08:00',
+            endTime: '12:00',
+            breakStartTime: '',
+            breakEndTime: ''
+          }
+        ]
+      }
+    }));
+  };
+
+  const removeContractualSchedule = (id: string) => {
+    setData(prev => ({
+      ...prev,
+      contractualSchedule: {
+        ...prev.contractualSchedule,
+        schedules: prev.contractualSchedule.schedules.filter(s => s.id !== id)
+      }
+    }));
+  };
+
+  const updateContractualScheduleItem = (id: string, field: string, value: any) => {
+    setData(prev => ({
+      ...prev,
+      contractualSchedule: {
+        ...prev.contractualSchedule,
+        schedules: prev.contractualSchedule.schedules.map(s => 
+          s.id === id ? { ...s, [field]: value } : s
+        )
+      }
+    }));
   };
 
   const updateFgtsPeriod = (id: string, field: 'startDate' | 'endDate', value: string) => {
@@ -1625,8 +1822,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
       // Jornada Contratual
       if (dataToUse.contractualSchedule) {
           y += 6;
-          const { type, startTime, endTime, breakStartTime, breakEndTime, customDescription } = dataToUse.contractualSchedule;
-          let scheduleDesc = '';
+          const { type, schedules, customDescription } = dataToUse.contractualSchedule;
           
           const typeLabels: any = {
               'segunda_sexta': 'Segunda a Sexta',
@@ -1636,37 +1832,15 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
               'outros': 'Personalizada'
           };
           
-          // Calculate monthly estimate for report
-          let days = 0;
-          let hours = 0;
-          const [h1, m1] = (startTime || '08:00').split(':').map(Number);
-          const [h2, m2] = (endTime || '17:00').split(':').map(Number);
-          let dailyHours = (h2 + m2/60) - (h1 + m1/60);
-          if (dailyHours < 0) dailyHours += 24;
-
-          // Subtract break if defined
-          let breakInfo = '';
-          if (breakStartTime && breakEndTime) {
-              const [bh1, bm1] = breakStartTime.split(':').map(Number);
-              const [bh2, bm2] = breakEndTime.split(':').map(Number);
-              let breakDuration = (bh2 + bm2/60) - (bh1 + bm1/60);
-              if (breakDuration < 0) breakDuration += 24;
-              dailyHours -= breakDuration;
-              breakInfo = ` (Int: ${breakStartTime}-${breakEndTime})`;
-          }
-
-          if (type === 'segunda_sexta') { days = 22; hours = dailyHours * days; }
-          else if (type === 'segunda_sabado') { days = 26; hours = dailyHours * days; }
-          else if (type === '12x36') { days = 15; hours = dailyHours * 15; }
-          else if (type === '24x48') { days = 10; hours = dailyHours * 10; }
-          else if (type === 'outros') { days = 22; hours = dailyHours * days; }
-
           let label = typeLabels[type] || type;
           if (type === 'outros' && customDescription) label += ` (${customDescription})`;
+          doc.text(`Escala: ${label}`, margin, y);
 
-          scheduleDesc = `Jornada: ${label} (${startTime} às ${endTime}${breakInfo}) - Est. Mensal: ~${days} dias / ~${hours.toFixed(1)}h`;
-          
-          doc.text(scheduleDesc, margin, y);
+          (schedules || []).forEach(s => {
+              y += 6;
+              const breakInfo = s.breakStartTime && s.breakEndTime ? ` (Int: ${s.breakStartTime}-${s.breakEndTime})` : ' (Sem int.)';
+              doc.text(`- ${s.days}: ${s.startTime} às ${s.endTime}${breakInfo}`, margin + 5, y);
+          });
       }
 
       // Relato do Cliente
@@ -1977,13 +2151,21 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
 
 {/* Seção de Jornada de Trabalho (Informativo) */}
                       <div className={`md:col-span-2 ${STYLES.CARD_SECTION}`}>
-                          <h3 className={STYLES.CARD_TITLE}>
-                              <ClockIcon className="w-5 h-5 text-indigo-500" />
-                              Jornada de Trabalho Prevista (Contratual)
-                          </h3>
+                          <div className="flex justify-between items-center mb-4">
+                              <h3 className={STYLES.CARD_TITLE}>
+                                  <ClockIcon className="w-5 h-5 text-indigo-500" />
+                                  Jornada de Trabalho Prevista (Contratual)
+                              </h3>
+                              <button 
+                                  onClick={addContractualSchedule}
+                                  className={STYLES.BTN_SECONDARY_SM}
+                              >
+                                  <PlusIcon className="h-3 w-3" /> Adicionar Horário
+                              </button>
+                          </div>
                           
-                          <div className="flex flex-col gap-4">
-                              {/* Linha 1: Tipo de Escala e Descrição */}
+                          <div className="flex flex-col gap-6">
+                              {/* Tipo de Escala e Descrição */}
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                   <div className={data.contractualSchedule?.type === 'outros' ? "md:col-span-1" : "md:col-span-1"}>
                                       <label className={STYLES.LABEL_TEXT}>Tipo de Escala</label>
@@ -1992,7 +2174,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                           onChange={(e) => setData(prev => ({
                                               ...prev,
                                               contractualSchedule: {
-                                                  ...(prev.contractualSchedule || { startTime: '08:00', endTime: '17:00' }),
+                                                  ...prev.contractualSchedule,
                                                   type: e.target.value as any
                                               }
                                           }))}
@@ -2014,34 +2196,11 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                               value={data.contractualSchedule?.customDescription || ''}
                                               onChange={(e) => {
                                                   const val = e.target.value;
-                                                  let days = data.contractualSchedule?.customMonthlyDays || 22;
-                                                  
-                                                  // Try to parse "AxB" pattern (e.g., 12x36, 5x2)
-                                                  const match = val.match(/(\d+)[xX](\d+)/);
-                                                  if (match) {
-                                                      const n1 = parseInt(match[1]);
-                                                      const n2 = parseInt(match[2]);
-                                                      if (!isNaN(n1) && !isNaN(n2)) {
-                                                          if (n1 + n2 > 0) {
-                                                              // If sum > 10, assume hours (e.g. 12x36). Total hours in month = 720.
-                                                              // Cycles = 720 / (n1 + n2). Work days = Cycles * (n1/24... wait, usually 1 shift per cycle).
-                                                              // Let's use simple cycle count for shifts.
-                                                              if (n1 + n2 > 10) {
-                                                                  days = 720 / (n1 + n2);
-                                                              } else {
-                                                                  // Assume days (e.g. 5x2). 30 days / (5+2) * 5.
-                                                                  days = (30 / (n1 + n2)) * n1;
-                                                              }
-                                                          }
-                                                      }
-                                                  }
-                                                  
                                                   setData(prev => ({
                                                       ...prev,
                                                       contractualSchedule: { 
-                                                          ...prev.contractualSchedule!, 
-                                                          customDescription: val,
-                                                          customMonthlyDays: Number(days.toFixed(1))
+                                                          ...prev.contractualSchedule, 
+                                                          customDescription: val
                                                       }
                                                   }))
                                               }}
@@ -2052,65 +2211,120 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   )}
                               </div>
 
-                              {/* Linha 2: Horários (Entrada -> Intervalo -> Saída) */}
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                  <div>
-                                      <label className={STYLES.LABEL_TEXT}>Entrada</label>
-                                      <input
-                                          type="time"
-                                          value={data.contractualSchedule?.startTime || '08:00'}
-                                          onChange={(e) => setData(prev => ({
-                                              ...prev,
-                                              contractualSchedule: { ...prev.contractualSchedule!, startTime: e.target.value }
-                                          }))}
-                                          className={STYLES.INPUT_FIELD}
-                                      />
-                                  </div>
-                                  
-                                  <div>
-                                      <label className={STYLES.LABEL_TEXT}>Início Intervalo</label>
-                                      <input
-                                          type="time"
-                                          value={data.contractualSchedule?.breakStartTime || ''}
-                                          onChange={(e) => setData(prev => ({
-                                              ...prev,
-                                              contractualSchedule: { ...prev.contractualSchedule!, breakStartTime: e.target.value }
-                                          }))}
-                                          className={STYLES.INPUT_FIELD}
-                                      />
-                                  </div>
-
-                                  <div>
-                                      <label className={STYLES.LABEL_TEXT}>Fim Intervalo</label>
-                                      <input
-                                          type="time"
-                                          value={data.contractualSchedule?.breakEndTime || ''}
-                                          onChange={(e) => setData(prev => ({
-                                              ...prev,
-                                              contractualSchedule: { ...prev.contractualSchedule!, breakEndTime: e.target.value }
-                                          }))}
-                                          className={STYLES.INPUT_FIELD}
-                                      />
-                                  </div>
-
-                                  <div>
-                                      <label className={STYLES.LABEL_TEXT}>Saída</label>
-                                      <input
-                                          type="time"
-                                          value={data.contractualSchedule?.endTime || '17:00'}
-                                          onChange={(e) => setData(prev => ({
-                                              ...prev,
-                                              contractualSchedule: { ...prev.contractualSchedule!, endTime: e.target.value }
-                                          }))}
-                                          className={STYLES.INPUT_FIELD}
-                                      />
-                                  </div>
+                              {/* Lista de Horários */}
+                              <div className="space-y-4">
+                                  {(data.contractualSchedule?.schedules || []).map((schedule, idx) => (
+                                      <div key={schedule.id} className="p-4 bg-slate-50 dark:bg-slate-900/30 rounded-xl border border-slate-200 dark:border-slate-800 relative group">
+                                          {idx > 0 && (
+                                              <button 
+                                                  onClick={() => removeContractualSchedule(schedule.id)}
+                                                  className="absolute -top-2 -right-2 p-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-red-500 rounded-full shadow-sm hover:bg-red-50 transition opacity-0 group-hover:opacity-100"
+                                              >
+                                                  <TrashIcon className="h-3.5 w-3.5" />
+                                              </button>
+                                          )}
+                                          
+                                          <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+                                              <div className="md:col-span-2">
+                                                  <label className={STYLES.LABEL_TINY}>Dias da Semana</label>
+                                                  <div className="flex flex-wrap gap-1 mt-1">
+                                                      {[
+                                                          { id: 1, label: 'S' },
+                                                          { id: 2, label: 'T' },
+                                                          { id: 3, label: 'Q' },
+                                                          { id: 4, label: 'Q' },
+                                                          { id: 5, label: 'S' },
+                                                          { id: 6, label: 'S' },
+                                                          { id: 7, label: 'D' }
+                                                      ].map(day => {
+                                                          const isSelected = (schedule.selectedDays || []).includes(day.id);
+                                                          return (
+                                                              <button
+                                                                  key={day.id}
+                                                                  type="button"
+                                                                  onClick={() => {
+                                                                      const current = schedule.selectedDays || [];
+                                                                      const next = isSelected 
+                                                                          ? current.filter(d => d !== day.id)
+                                                                          : [...current, day.id].sort();
+                                                                      updateContractualScheduleItem(schedule.id, 'selectedDays', next);
+                                                                      
+                                                                      // Update the text description too
+                                                                      const dayNames = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sab', 'Dom'];
+                                                                      const selectedNames = next.map(d => dayNames[d-1]);
+                                                                      if (next.length === 5 && next.every((d, i) => d === i + 1)) {
+                                                                          updateContractualScheduleItem(schedule.id, 'days', 'Seg a Sex');
+                                                                      } else if (next.length === 6 && next.every((d, i) => d === i + 1)) {
+                                                                          updateContractualScheduleItem(schedule.id, 'days', 'Seg a Sab');
+                                                                      } else if (next.length > 0) {
+                                                                          updateContractualScheduleItem(schedule.id, 'days', selectedNames.join(', '));
+                                                                      } else {
+                                                                          updateContractualScheduleItem(schedule.id, 'days', '');
+                                                                      }
+                                                                  }}
+                                                                  className={`w-7 h-7 rounded-md text-[10px] font-bold transition-colors ${
+                                                                      isSelected 
+                                                                          ? 'bg-indigo-600 text-white' 
+                                                                          : 'bg-slate-200 dark:bg-slate-800 text-slate-500 hover:bg-slate-300 dark:hover:bg-slate-700'
+                                                                  }`}
+                                                              >
+                                                                  {day.label}
+                                                              </button>
+                                                          );
+                                                      })}
+                                                  </div>
+                                                  <input
+                                                      type="text"
+                                                      value={schedule.days}
+                                                      onChange={(e) => updateContractualScheduleItem(schedule.id, 'days', e.target.value)}
+                                                      placeholder="Descrição (ex: Seg a Sex)"
+                                                      className={`${STYLES.INPUT_TINY} mt-1 h-7 text-[10px]`}
+                                                  />
+                                              </div>
+                                              <div>
+                                                  <label className={STYLES.LABEL_TINY}>Entrada</label>
+                                                  <input
+                                                      type="time"
+                                                      value={schedule.startTime}
+                                                      onChange={(e) => updateContractualScheduleItem(schedule.id, 'startTime', e.target.value)}
+                                                      className={STYLES.INPUT_TINY}
+                                                  />
+                                              </div>
+                                              <div className="md:col-span-2">
+                                                  <label className={STYLES.LABEL_TINY}>Intervalo (Início/Fim)</label>
+                                                  <div className="flex gap-1">
+                                                      <input
+                                                          type="time"
+                                                          value={schedule.breakStartTime}
+                                                          onChange={(e) => updateContractualScheduleItem(schedule.id, 'breakStartTime', e.target.value)}
+                                                          className={STYLES.INPUT_TINY}
+                                                      />
+                                                      <input
+                                                          type="time"
+                                                          value={schedule.breakEndTime}
+                                                          onChange={(e) => updateContractualScheduleItem(schedule.id, 'breakEndTime', e.target.value)}
+                                                          className={STYLES.INPUT_TINY}
+                                                      />
+                                                  </div>
+                                              </div>
+                                              <div>
+                                                  <label className={STYLES.LABEL_TINY}>Saída</label>
+                                                  <input
+                                                      type="time"
+                                                      value={schedule.endTime}
+                                                      onChange={(e) => updateContractualScheduleItem(schedule.id, 'endTime', e.target.value)}
+                                                      className={STYLES.INPUT_TINY}
+                                                  />
+                                              </div>
+                                          </div>
+                                      </div>
+                                  ))}
                               </div>
                               
-                              {/* Linha 3: Estimativa (Full Width) */}
-                              <div className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-between gap-4">
+                              {/* Estimativa Mensal */}
+                              <div className="bg-indigo-50/50 dark:bg-indigo-900/10 p-4 rounded-xl border border-indigo-100 dark:border-indigo-900/30 flex items-center justify-between gap-4">
                                   <div className="flex flex-col flex-1">
-                                      <span className="text-xs uppercase font-bold text-slate-400 mb-1">Estimativa Mensal (Contratual)</span>
+                                      <span className="text-xs uppercase font-bold text-indigo-600 dark:text-indigo-400 mb-1">Estimativa Mensal (Contratual)</span>
                                       <span className="text-xs text-slate-500">Baseada na escala e horários informados</span>
                                   </div>
                                   
@@ -2122,7 +2336,7 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                               value={data.contractualSchedule?.customMonthlyDays || 22}
                                               onChange={(e) => setData(prev => ({
                                                   ...prev,
-                                                  contractualSchedule: { ...prev.contractualSchedule!, customMonthlyDays: Number(e.target.value) }
+                                                  contractualSchedule: { ...prev.contractualSchedule, customMonthlyDays: Number(e.target.value) }
                                               }))}
                                               className={`${STYLES.INPUT_FIELD} text-right font-bold`}
                                           />
@@ -2131,58 +2345,69 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                   
                                   {(() => {
                                       const type = data.contractualSchedule?.type || 'segunda_sexta';
-                                      const start = data.contractualSchedule?.startTime || '08:00';
-                                      const end = data.contractualSchedule?.endTime || '17:00';
-                                      const breakStart = data.contractualSchedule?.breakStartTime;
-                                      const breakEnd = data.contractualSchedule?.breakEndTime;
+                                      const schedules = data.contractualSchedule?.schedules || [];
                                       const customDays = data.contractualSchedule?.customMonthlyDays || 22;
                                       
-                                      let days = 0;
-                                      let hours = 0;
+                                      let totalMonthlyHours = 0;
+                                      let totalMonthlyDays = 0;
                                       
-                                      const [h1, m1] = start.split(':').map(Number);
-                                      const [h2, m2] = end.split(':').map(Number);
-                                      let dailyHours = (h2 + m2/60) - (h1 + m1/60);
-                                      if (dailyHours < 0) dailyHours += 24;
+                                      schedules.forEach(s => {
+                                          const [h1, m1] = (s.startTime || '08:00').split(':').map(Number);
+                                          const [h2, m2] = (s.endTime || '17:00').split(':').map(Number);
+                                          let dailyHours = (h2 + m2/60) - (h1 + m1/60);
+                                          if (dailyHours < 0) dailyHours += 24;
+                                          
+                                          if (s.breakStartTime && s.breakEndTime) {
+                                              const [bh1, bm1] = s.breakStartTime.split(':').map(Number);
+                                              const [bh2, bm2] = s.breakEndTime.split(':').map(Number);
+                                              let breakDuration = (bh2 + bm2/60) - (bh1 + bm1/60);
+                                              if (breakDuration < 0) breakDuration += 24;
+                                              dailyHours -= breakDuration;
+                                          }
+                                          
+                                          let daysPerWeek = 0;
+                                          if (s.selectedDays && s.selectedDays.length > 0) {
+                                              daysPerWeek = s.selectedDays.length;
+                                          } else {
+                                              const daysLower = s.days.toLowerCase();
+                                              if (daysLower.includes('seg') && daysLower.includes('sex')) daysPerWeek = 5;
+                                              else if (daysLower.includes('seg') && daysLower.includes('sab')) daysPerWeek = 6;
+                                              else {
+                                                  const dayKeywords = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'];
+                                                  dayKeywords.forEach(dk => {
+                                                      if (daysLower.includes(dk)) daysPerWeek++;
+                                                  });
+                                              }
+                                          }
+                                          
+                                          if (daysPerWeek === 0) daysPerWeek = 5; // Fallback
+                                          
+                                          const itemMonthlyDays = daysPerWeek * 4.333;
+                                          totalMonthlyHours += dailyHours * itemMonthlyDays;
+                                          totalMonthlyDays += itemMonthlyDays;
+                                      });
                                       
-                                      // Subtract break if defined
-                                      let hasBreak = false;
-                                      if (breakStart && breakEnd) {
-                                          const [bh1, bm1] = breakStart.split(':').map(Number);
-                                          const [bh2, bm2] = breakEnd.split(':').map(Number);
-                                          let breakDuration = (bh2 + bm2/60) - (bh1 + bm1/60);
-                                          if (breakDuration < 0) breakDuration += 24;
-                                          dailyHours -= breakDuration;
-                                          hasBreak = true;
-                                      }
-                                      
-                                      if (type === 'segunda_sexta') {
-                                          days = 22; // Avg
-                                          hours = dailyHours * days;
-                                      } else if (type === 'segunda_sabado') {
-                                          days = 26; // Avg
-                                          hours = dailyHours * days; 
-                                      } else if (type === '12x36') {
-                                          days = 15;
-                                          hours = dailyHours * 15; 
+                                      if (type === '12x36') {
+                                          totalMonthlyDays = 15;
+                                          totalMonthlyHours = (totalMonthlyHours / totalMonthlyDays) * 15;
                                       } else if (type === '24x48') {
-                                          days = 10;
-                                          hours = dailyHours * 10;
+                                          totalMonthlyDays = 10;
+                                          totalMonthlyHours = (totalMonthlyHours / totalMonthlyDays) * 10;
                                       } else if (type === 'outros') {
-                                          days = customDays;
-                                          hours = dailyHours * days;
+                                          totalMonthlyDays = customDays;
+                                          // Re-estimate hours based on custom days
+                                          const avgDaily = schedules.length > 0 ? (totalMonthlyHours / totalMonthlyDays) : 0;
+                                          totalMonthlyHours = avgDaily * customDays;
                                       }
-                                      
+
                                       return (
                                           <div className="text-right min-w-[120px]">
-                                              <div className="text-lg font-bold text-slate-700 dark:text-slate-300">
-                                                  ~{days} dias / {hours.toFixed(1)}h
+                                              <div className="text-lg font-bold text-indigo-700 dark:text-indigo-300">
+                                                  ~{totalMonthlyDays.toFixed(1)} dias / {totalMonthlyHours.toFixed(1)}h
                                               </div>
-                                              {hasBreak && (
-                                                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium block">
-                                                      (Intervalo descontado)
-                                                  </span>
-                                              )}
+                                              <span className="text-[10px] text-slate-500 font-medium block">
+                                                  (Intervalos descontados)
+                                              </span>
                                           </div>
                                       );
                                   })()}
@@ -2278,6 +2503,36 @@ export default function LaborCalc({ clients = [], contracts = [], savedCalculati
                                           <input type="number" className={STYLES.INPUT_TINY} value={gap.paidSalary || ''} onChange={(e) => {
                                               const newGaps = [...data.wageGap]; newGaps[idx].paidSalary = Number(e.target.value); setData({...data, wageGap: newGaps});
                                           }} />
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                      </div>
+
+                      {/* Seção Salário por Fora */}
+                      <div className={STYLES.CARD_SECTION}>
+                          <div className="flex justify-between items-center mb-4">
+                              <h3 className={`${STYLES.CARD_TITLE} text-orange-600 dark:text-orange-400`}>
+                                  <BanknotesIcon className="h-5 w-5" /> Salário por Fora (Extraoficial)
+                              </h3>
+                              <button onClick={addSalaryOffTheBooks} className={STYLES.BTN_SECONDARY_SM}><PlusIcon className="h-3 w-3" /> Adicionar Período</button>
+                          </div>
+                          {data.salaryOffTheBooks.length === 0 && <p className={STYLES.EMPTY_MSG}>Nenhum valor "por fora" cadastrado.</p>}
+                          {data.salaryOffTheBooks.map((off, idx) => (
+                              <div key={off.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-slate-700 mb-3 relative group">
+                                  <button onClick={() => removeSalaryOffTheBooks(off.id)} className="absolute top-2 right-2 text-slate-400 hover:text-red-500"><TrashIcon className="h-4 w-4" /></button>
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Início</label>
+                                          <input type="date" className={STYLES.INPUT_TINY} value={off.startDate || ''} onChange={(e) => updateSalaryOffTheBooks(off.id, 'startDate', e.target.value)} />
+                                      </div>
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Fim</label>
+                                          <input type="date" className={STYLES.INPUT_TINY} value={off.endDate || ''} onChange={(e) => updateSalaryOffTheBooks(off.id, 'endDate', e.target.value)} />
+                                      </div>
+                                      <div>
+                                          <label className={STYLES.LABEL_TINY}>Valor Mensal (R$)</label>
+                                          <input type="number" className={`${STYLES.INPUT_TINY} font-bold text-orange-600`} value={off.amount || ''} onChange={(e) => updateSalaryOffTheBooks(off.id, 'amount', Number(e.target.value))} />
                                       </div>
                                   </div>
                               </div>
