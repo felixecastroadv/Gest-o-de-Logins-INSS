@@ -577,13 +577,9 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
               icon={<ImageIcon className="w-4 h-4" />}
             />
             <ToolbarButton 
-              onClick={() => editor.chain().focus().insertTable({ rows: tableRows, cols: tableCols, withHeaderRow: true }).run()}
+              onClick={() => setIsTableModalOpen(true)}
               icon={<TableIcon className="w-4 h-4" />}
-              onContextMenu={(e) => {
-                e.preventDefault();
-                setIsTableModalOpen(true);
-              }}
-              title="Clique direito para configurar"
+              title="Configurar Tabela"
             />
             {editor.isActive('table') && (
               <div className="flex items-center gap-1 px-1 border-l border-slate-200 dark:border-slate-800 ml-1">
