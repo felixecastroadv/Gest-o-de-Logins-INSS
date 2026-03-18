@@ -114,9 +114,14 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
     extensions: [
       StarterKit.configure({
         paragraph: false,
-        bulletList: false,
-        orderedList: false,
-        listItem: false,
+        bulletList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
+        orderedList: {
+          keepMarks: true,
+          keepAttributes: false,
+        },
       }),
       CustomParagraph,
       BulletList,
@@ -548,16 +553,6 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
 
             <div className="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1" />
 
-            <ToolbarButton 
-              onClick={() => editor.chain().focus().toggleBulletList().run()}
-              active={editor.isActive('bulletList')}
-              icon={<List className="w-4 h-4" />}
-            />
-            <ToolbarButton 
-              onClick={() => editor.chain().focus().toggleOrderedList().run()}
-              active={editor.isActive('orderedList')}
-              icon={<ListOrdered className="w-4 h-4" />}
-            />
             <ToolbarButton 
               onClick={() => editor.chain().focus().toggleBlockquote().run()}
               active={editor.isActive('blockquote')}
