@@ -6,13 +6,13 @@ import { ClientRecord, RecordModalProps, ScannedDocument } from '../types';
 import { parseDate, addDays, formatDate } from '../utils';
 import ScannerModal from './ScannerModal';
 
-const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, initialData }) => {
+const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, initialData, onOpenPetition }) => {
   const [formData, setFormData] = useState<Partial<ClientRecord>>({
       nationality: 'Brasileira',
       maritalStatus: 'Solteiro(a)',
       profession: ''
   });
-  const [activeTab, setActiveTab] = useState<'info' | 'docs'>('info');
+  const [activeTab, setActiveTab] = useState<'info' | 'docs' | 'petitions'>('info');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   useEffect(() => {
@@ -62,6 +62,11 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
       setFormData({ ...formData, documents: updatedDocs });
   }
 
+  const handleRemovePetition = (petitionId: string) => {
+      const updatedPetitions = (formData.petitions || []).filter(p => p.id !== petitionId);
+      setFormData({ ...formData, petitions: updatedPetitions });
+  }
+
   const generatePDF = (type: 'procuracao' | 'hipossuficiencia' | 'renuncia') => {
       // @ts-ignore
       const doc = new jsPDF();
@@ -86,22 +91,22 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
       const decorColor = [140, 20, 20]; 
 
       // --- Desenhar Linha Decorativa Superior ---
-      doc.setDrawColor(decorColor[0], decorColor[1], decorColor[2]);
+      doc.setDrawColor(255, 255, 255); // Branco (invisível)
       doc.setLineWidth(1.5);
-      doc.line(margin, 15, pageWidth - margin, 15);
+      doc.line(margin, 5, pageWidth - margin, 5); // Aproximado da margem
       
-      doc.setDrawColor(200, 100, 100);
+      doc.setDrawColor(255, 255, 255); // Branco (invisível)
       doc.setLineWidth(0.5);
-      doc.line(margin, 16, pageWidth/3, 16); 
+      doc.line(margin, 6, pageWidth/3, 6); // Aproximado da margem
 
       // --- Desenhar Linha Decorativa Inferior ---
-      doc.setDrawColor(decorColor[0], decorColor[1], decorColor[2]);
+      doc.setDrawColor(255, 255, 255); // Branco (invisível)
       doc.setLineWidth(1.5);
-      doc.line(margin, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+      doc.line(margin, pageHeight - 5, pageWidth - margin, pageHeight - 5); // Aproximado da margem
       
-      doc.setDrawColor(200, 100, 100);
+      doc.setDrawColor(255, 255, 255); // Branco (invisível)
       doc.setLineWidth(2);
-      doc.line(pageWidth - margin - 30, pageHeight - 15, pageWidth - margin, pageHeight - 15);
+      doc.line(pageWidth - margin - 30, pageHeight - 5, pageWidth - margin, pageHeight - 5); // Aproximado da margem
 
       // --- Helper para Justificar Texto TOTAL (Full Justify) ---
       const drawFullyJustifiedBlock = (label: string, text: string, startY: number) => {
@@ -267,8 +272,8 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           // Usando o novo justificador sem label
           const words = text.split(/\s+/);
           const spaceWidth = doc.getTextWidth(" ");
-          let lines = [];
-          let currentLineWords = [];
+          const lines: string[][] = [];
+          let currentLineWords: string[] = [];
           let currentLineWidth = 0;
 
           for (let i = 0; i < words.length; i++) {
@@ -349,8 +354,8 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
           // Mesmo justificador manual da hipossuficiência
           const words = text.split(/\s+/);
           const spaceWidth = doc.getTextWidth(" ");
-          let lines = [];
-          let currentLineWords = [];
+          const lines: string[][] = [];
+          let currentLineWords: string[] = [];
           let currentLineWidth = 0;
 
           for (let i = 0; i < words.length; i++) {
@@ -485,6 +490,12 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
             >
                 Documentos ({formData.documents?.length || 0})
             </button>
+            <button 
+                onClick={() => setActiveTab('petitions')}
+                className={`px-4 py-3 text-sm font-bold border-b-2 transition ${activeTab === 'petitions' ? 'border-primary-600 text-primary-600' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+            >
+                Petições ({formData.petitions?.length || 0})
+            </button>
         </div>
         
         <div className="p-8">
@@ -565,7 +576,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
                     </button>
                 </div>
                 </form>
-            ) : (
+            ) : activeTab === 'docs' ? (
                 <div className="space-y-6">
                     <div className="flex justify-between items-center">
                         <h4 className="font-bold text-slate-700 dark:text-white">Documentos Digitalizados</h4>
@@ -620,6 +631,58 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
                             <div className="text-center py-10 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                                 <DocumentPlusIcon className="h-12 w-12 text-slate-300 mx-auto mb-2" />
                                 <p className="text-slate-500 text-sm">Nenhum documento anexado.</p>
+                            </div>
+                        )}
+                    </div>
+                    
+                    <div className="mt-8 pt-4 border-t border-slate-100 dark:border-slate-800 text-right">
+                         <button
+                            type="button"
+                            onClick={() => handleSubmit({ preventDefault: () => {} } as any)}
+                            className="px-5 py-2.5 text-white font-medium bg-primary-600 hover:bg-primary-700 rounded-xl shadow-lg shadow-primary-500/30 transition flex items-center gap-2 ml-auto"
+                        >
+                            <CheckIcon className="h-5 w-5" />
+                            Salvar Alterações
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                        <h4 className="font-bold text-slate-700 dark:text-white">Petições do Cliente</h4>
+                    </div>
+
+                    <div className="space-y-3">
+                        {formData.petitions && formData.petitions.length > 0 ? (
+                            formData.petitions.map((petition, idx) => (
+                                <div key={idx} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl">
+                                    <div className="flex items-center gap-3">
+                                        <div className="h-10 w-10 bg-indigo-100 text-indigo-600 rounded-lg flex items-center justify-center">
+                                            <DocumentTextIcon className="h-6 w-6" />
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-sm text-slate-800 dark:text-white">{petition.title}</p>
+                                            <p className="text-xs text-slate-500">{petition.lastModified} • {petition.category}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={() => onOpenPetition?.(petition)}
+                                            className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-lg" 
+                                            title="Editar no Editor"
+                                        >
+                                            <PencilSquareIcon className="h-5 w-5" />
+                                        </button>
+                                        <button onClick={() => handleRemovePetition(petition.id)} className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" title="Excluir">
+                                            <TrashIcon className="h-5 w-5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="text-center py-10 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+                                <DocumentPlusIcon className="h-12 w-12 text-slate-300 mx-auto mb-2" />
+                                <p className="text-slate-500 text-sm">Nenhuma petição vinculada.</p>
                             </div>
                         )}
                     </div>
