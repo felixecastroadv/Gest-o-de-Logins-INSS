@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import BulletList from '@tiptap/extension-bullet-list';
+import OrderedList from '@tiptap/extension-ordered-list';
+import ListItem from '@tiptap/extension-list-item';
 import Paragraph from '@tiptap/extension-paragraph';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
@@ -111,8 +114,14 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
     extensions: [
       StarterKit.configure({
         paragraph: false,
+        bulletList: false,
+        orderedList: false,
+        listItem: false,
       }),
       CustomParagraph,
+      BulletList,
+      OrderedList,
+      ListItem,
       Underline,
       TextAlign.configure({
         types: ['heading', 'paragraph'],
