@@ -8,6 +8,40 @@ import Paragraph from '@tiptap/extension-paragraph';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import Image from '@tiptap/extension-image';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+
+const PasteImageExtension = Image.extend({
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: new PluginKey('pasteImage'),
+        props: {
+          handlePaste(view, event, slice) {
+            const items = Array.from(event.clipboardData?.items || []);
+            const image = items.find(item => item.type.indexOf('image') === 0);
+
+            if (image) {
+              event.preventDefault();
+              const file = image.getAsFile();
+              if (file) {
+                const reader = new FileReader();
+                reader.onload = (readerEvent) => {
+                  const node = view.state.schema.nodes.image.create({ src: readerEvent.target?.result });
+                  const transaction = view.state.tr.replaceSelectionWith(node);
+                  view.dispatch(transaction);
+                };
+                reader.readAsDataURL(file);
+              }
+              return true;
+            }
+            return false;
+          },
+        },
+      }),
+    ];
+  },
+});
+
 import { Table } from '@tiptap/extension-table';
 import TableRow from '@tiptap/extension-table-row';
 import TableCell from '@tiptap/extension-table-cell';
@@ -110,6 +144,9 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
     template: 'losangos'
   });
 
+  const [topBottomMargin, setTopBottomMargin] = useState('3cm');
+  const [leftRightMargin, setLeftRightMargin] = useState('2.5cm');
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -131,7 +168,7 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
-      Image,
+      PasteImageExtension,
       Table.configure({
         resizable: true,
         allowTableNodeSelection: true,
@@ -143,11 +180,17 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
     content: initialPetition?.content || '',
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[1122px] w-[794px] p-[3cm_2.5cm] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xl border border-slate-200 dark:border-slate-800 rounded-sm mb-20 [&_blockquote]:ml-[4cm] [&_blockquote]:text-sm [&_blockquote]:border-none [&_blockquote]:italic [&_blockquote]:text-slate-700 dark:[&_blockquote]:text-slate-300 font-serif [&_p]:indent-[2cm] [&_p.no-indent]:indent-0',
-        style: 'font-family: "Times New Roman", Times, serif; line-height: 1.5;',
+        class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[1122px] w-[794px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xl border border-slate-200 dark:border-slate-800 rounded-sm mb-20 [&_blockquote]:ml-[4cm] [&_blockquote]:text-sm [&_blockquote]:border-none [&_blockquote]:italic [&_blockquote]:text-slate-700 dark:[&_blockquote]:text-slate-700 font-serif [&_p]:indent-[2cm] [&_p.no-indent]:indent-0',
+        style: `font-family: "Times New Roman", Times, serif; line-height: 1.5; padding: ${topBottomMargin} ${leftRightMargin};`,
       },
     },
   });
+
+  useEffect(() => {
+    if (editor) {
+      editor.view.dom.style.padding = `${topBottomMargin} ${leftRightMargin}`;
+    }
+  }, [topBottomMargin, leftRightMargin, editor]);
 
   const loadedPetitionIdRef = React.useRef<string | null>(null);
 
@@ -259,6 +302,8 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
           }
 
           if (node.nodeName === 'P') {
+            node.ul = undefined;
+            node.ol = undefined;
             if (inTable) {
               node.alignment = 'left';
               node.leadingIndent = 0;
@@ -708,6 +753,24 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   {/* Left Column */}
                   <div className="space-y-6">
+                    <div className="flex items-center gap-4">
+                      <div className="flex-1">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Margem Sup/Inf</label>
+                        <input 
+                          value={topBottomMargin}
+                          onChange={(e) => setTopBottomMargin(e.target.value)}
+                          className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Margem Esq/Dir</label>
+                        <input 
+                          value={leftRightMargin}
+                          onChange={(e) => setLeftRightMargin(e.target.value)}
+                          className="w-full px-4 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                      </div>
+                    </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Sua logo (opcional)</label>
                       <div className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl p-8 text-center hover:border-indigo-500 transition cursor-pointer group">
