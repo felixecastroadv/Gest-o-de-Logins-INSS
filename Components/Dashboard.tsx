@@ -34,6 +34,7 @@ import CopyButton from './CopyButton';
 import DrMichelFelix from './DrMichelFelix';
 import DraLuanaCastro from './DraLuanaCastro';
 import Agenda from './Agenda';
+import PetitionEditor from './PetitionEditor';
 import { safeSetLocalStorage } from '../utils';
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -48,7 +49,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSettingsSaved,
   onRestoreBackup
 }) => {
-  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda'>('clients');
+  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda' | 'petition_editor'>('clients');
   const [showArchived, setShowArchived] = useState(false);
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
@@ -76,6 +77,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [dbError, setDbError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [activePetition, setActivePetition] = useState<any>(null);
   
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'ascending' | 'descending' } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -566,6 +568,34 @@ const Dashboard: React.FC<DashboardProps> = ({
       saveData('agenda', updated);
   };
 
+  const handleSavePetition = (clientId: string, petition: any) => {
+      const client = records.find(c => c.id === clientId);
+      if (!client) return;
+
+      const existingPetitions = client.petitions || [];
+      const index = existingPetitions.findIndex(p => p.id === petition.id);
+      
+      let updatedPetitions;
+      if (index >= 0) {
+          updatedPetitions = existingPetitions.map(p => p.id === petition.id ? petition : p);
+      } else {
+          updatedPetitions = [petition, ...existingPetitions];
+      }
+
+      const updatedClients = records.map(c => c.id === clientId ? { ...c, petitions: updatedPetitions } : c);
+      saveData('clients', updatedClients);
+      
+      if (!activePetition || activePetition.id === petition.id) {
+          setActivePetition(petition);
+      }
+  };
+
+  const handleOpenPetition = (petition: any) => {
+      setActivePetition(petition);
+      setCurrentView('petition_editor');
+      setIsModalOpen(false);
+  };
+
   const handleDeleteAgendaEvent = (id: string) => {
       if (confirm('Excluir este compromisso?')) {
           saveData('agenda', agendaEvents.filter(e => e.id !== id));
@@ -772,6 +802,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <CalendarIcon className="h-6 w-6 lg:mr-3" />
                    <span className="hidden lg:block font-medium">Agenda</span>
                </button>
+
+               <button 
+                   onClick={() => setCurrentView('petition_editor')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'petition_editor' ? 'bg-blue-600 shadow-lg shadow-blue-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <PencilSquareIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Editor de Petições</span>
+               </button>
            </div>
            
            <div className="p-4 border-t border-slate-800">
@@ -800,6 +838,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                      {currentView === 'clients' ? 'Painel de Clientes' : 
                       currentView === 'contracts' ? 'Gestão de Contratos' :
                       currentView === 'labor_calc' ? 'Cálculos Trabalhistas' :
+                      currentView === 'petition_editor' ? 'Editor de Petições' :
                       currentView === 'dr_michel' ? 'Dr. Michel Felix - IA Jurídica' :
                       currentView === 'dra_luana' ? 'Dra. Luana Castro - IA Trabalhista' :
                       currentView === 'agenda' ? 'Agenda' :
@@ -850,6 +889,16 @@ const Dashboard: React.FC<DashboardProps> = ({
                     onSaveEvent={handleSaveAgendaEvent}
                     onDeleteEvent={handleDeleteAgendaEvent}
                  />
+             ) : currentView === 'petition_editor' ? (
+                  <PetitionEditor 
+                     clients={records}
+                     onBack={() => {
+                         setCurrentView('clients');
+                         setActivePetition(null);
+                     }}
+                     initialPetition={activePetition}
+                     onSavePetition={handleSavePetition}
+                  />
              ) : currentView === 'labor_calc' ? (
                  <LaborCalc 
                     clients={records} 
@@ -1126,6 +1175,7 @@ const Dashboard: React.FC<DashboardProps> = ({
             onClose={() => setIsModalOpen(false)} 
             onSave={handleSaveClient}
             initialData={currentRecord}
+            onOpenPetition={handleOpenPetition}
         />
         
         <ContractModal 
