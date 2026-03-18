@@ -139,11 +139,18 @@ export const calculateTimeForPeriod = (
         loops++;
     }
 
-    const years = Math.floor(totalAdjustedDays / 365.25);
-    const months = Math.floor((totalAdjustedDays % 365.25) / 30.44);
-    const days = Math.floor((totalAdjustedDays % 365.25) % 30.44);
+    const years = Math.floor(totalAdjustedDays / 365);
+    const months = Math.floor((totalAdjustedDays % 365) / 30);
+    const days = Math.floor((totalAdjustedDays % 365) % 30);
     
-    return { years, months, days, totalDays: totalAdjustedDays };
+    let adjYears = years;
+    let adjMonths = months;
+    if (adjMonths >= 12) {
+        adjYears += 1;
+        adjMonths -= 12;
+    }
+    
+    return { years: adjYears, months: adjMonths, days, totalDays: totalAdjustedDays };
 };
 
 export const calculateAge = (birthDateStr: string, targetDateStr: string) => {
@@ -161,10 +168,16 @@ export const calculateAge = (birthDateStr: string, targetDateStr: string) => {
     if (days < 0) {
         months--;
         days += 30; // Approx
+    } else if (days >= 30) {
+        months++;
+        days -= 30;
     }
     if (months < 0) {
         years--;
         months += 12;
+    } else if (months >= 12) {
+        years++;
+        months -= 12;
     }
     
     return { years, months, days };
@@ -506,6 +519,66 @@ export const checkInsuredQuality = (bonds: CNISBond[], der: string): { hasQualit
     return { hasQuality: derDate <= gracePeriodEnd, gracePeriodEnd };
 };
 
+// Helper to check if a benefit bond is intercalated between contributions
+export const isBondIntercalated = (benefit: CNISBond, allBonds: CNISBond[]) => {
+    if (!benefit.isBenefit) return true;
+    if (!benefit.startDate || !benefit.endDate) return false;
+    
+    const bStart = parseDateLocal(benefit.startDate).getTime();
+    const bEnd = parseDateLocal(benefit.endDate).getTime();
+    
+    const contributionBonds = allBonds.filter(b => !b.isBenefit && b.useInCalculation && b.startDate && b.endDate);
+    
+    // Must have a contribution BEFORE (within grace period, approx 12-24 months)
+    const hasContribBefore = contributionBonds.some(c => {
+        const cEnd = parseDateLocal(c.endDate!).getTime();
+        const gap = bStart - cEnd;
+        // 24 months + 1.5 months buffer for payment
+        return cEnd <= bStart && gap <= (365 * 24 * 60 * 60 * 1000 * 2.2);
+    });
+
+    // Must have a contribution AFTER (within grace period)
+    const hasContribAfter = contributionBonds.some(c => {
+        const cStart = parseDateLocal(c.startDate!).getTime();
+        const gap = cStart - bEnd;
+        return cStart >= bEnd && gap <= (365 * 24 * 60 * 60 * 1000 * 2.2);
+    });
+
+    return hasContribBefore && hasContribAfter;
+};
+
+// Helper to calculate carencia (unique contribution months)
+export const calculateCarencia = (bonds: CNISBond[], targetDate: string, allBonds: CNISBond[]) => {
+    const carenciaMonths = new Set<string>();
+    const target = parseDateLocal(targetDate);
+    
+    bonds.forEach(bond => {
+        if (!bond.useInCalculation || !bond.startDate || !bond.endDate) return;
+        
+        const start = parseDateLocal(bond.startDate);
+        const end = parseDateLocal(bond.endDate);
+        
+        // If bond is after target date, skip
+        if (start > target) return;
+        
+        // Cap end date at target date
+        const effectiveEnd = end > target ? target : end;
+        
+        // If it's a benefit, it must be intercalated
+        if (bond.isBenefit && !isBondIntercalated(bond, allBonds)) return;
+        
+        let current = new Date(start.getFullYear(), start.getMonth(), 1);
+        const last = new Date(effectiveEnd.getFullYear(), effectiveEnd.getMonth(), 1);
+        
+        while (current <= last) {
+            carenciaMonths.add(`${current.getFullYear()}-${current.getMonth()}`);
+            current.setMonth(current.getMonth() + 1);
+        }
+    });
+    
+    return carenciaMonths.size;
+};
+
 export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<string, number>, ibgeTable?: IBGELifeExpectancy[]): SimulationResult => {
     if (!data || !data.bonds) {
         return {
@@ -522,50 +595,10 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
     const der = data.der || new Date().toISOString().split('T')[0];
     const timeTotal = calculateTimeForPeriod(data.bonds, der, data.gender);
     const age = calculateAge(data.birthDate, der);
-    const fractionalAge = age.years + (age.months / 12) + (age.days / 365.25);
+    const fractionalAge = age.years + (age.months / 12) + (age.days / 365);
     
     // Calculate Carência (Simplified: count unique months in bonds)
-    const uniqueMonths = new Set<string>();
-    const derDate = parseDateLocal(der);
-    derDate.setDate(1);
-    derDate.setHours(12, 0, 0, 0);
-
-    data.bonds.forEach(b => {
-        if (!b.useInCalculation) return;
-        
-        // Priority: Date Range (since SCs might be missing from AI)
-        if (b.startDate && b.endDate) {
-            let start = parseDateLocal(b.startDate);
-            start.setDate(1);
-            start.setHours(12, 0, 0, 0);
-            
-            let end = parseDateLocal(b.endDate);
-            if (end > parseDateLocal(der)) {
-                end = parseDateLocal(der);
-            }
-            end.setDate(1);
-            end.setHours(12, 0, 0, 0);
-
-            // Limit loop to avoid crash on bad dates
-            let safety = 0;
-            while(start <= end && safety < 1200) { // 100 years
-                const m = String(start.getMonth() + 1).padStart(2, '0');
-                const y = start.getFullYear();
-                uniqueMonths.add(`${m}/${y}`);
-                start.setMonth(start.getMonth() + 1);
-                safety++;
-            }
-        } else if (b.sc.length > 0) {
-            b.sc.forEach(s => {
-                const [m, y] = s.month.split('/');
-                const scDate = new Date(parseInt(y), parseInt(m) - 1, 1, 12, 0, 0, 0);
-                if (scDate <= derDate) {
-                    uniqueMonths.add(s.month);
-                }
-            });
-        }
-    });
-    const totalCarencia = uniqueMonths.size;
+    const totalCarencia = calculateCarencia(data.bonds, der, data.bonds);
 
     const points = (age.years + timeTotal.years) + 
                    ((age.months + timeTotal.months) / 12) + 
@@ -587,32 +620,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
                            ((ageAtReform.days + timeAtReformTotal.days) / 365);
     
     // Calculate Carência at Reform
-    const uniqueMonthsReform = new Set<string>();
-    const reformDateObj = parseDateLocal(reformDate);
-    data.bonds.forEach(b => {
-        if (!b.useInCalculation) return;
-        if (b.sc.length > 0) {
-            b.sc.forEach(s => {
-                const [m, y] = s.month.split('/').map(Number);
-                const d = new Date(y, m - 1, 1);
-                if (d <= reformDateObj) uniqueMonthsReform.add(s.month);
-            });
-        } else if (b.startDate && b.endDate) {
-            let start = parseDateLocal(b.startDate);
-            let end = parseDateLocal(b.endDate);
-            if (end > reformDateObj) end = parseDateLocal(reformDate);
-            
-            let safety = 0;
-            while(start <= end && safety < 1200) {
-                if (start <= reformDateObj) {
-                    uniqueMonthsReform.add(`${start.getMonth()+1}/${start.getFullYear()}`);
-                }
-                start.setMonth(start.getMonth() + 1);
-                safety++;
-            }
-        }
-    });
-    const carenciaAtReform = uniqueMonthsReform.size;
+    const carenciaAtReform = calculateCarencia(data.bonds, reformDate, data.bonds);
 
     // 0.1 Aposentadoria por Tempo de Contribuição (Regra Geral - Pré-Reforma)
     const timeReqPre = data.gender === 'M' ? 35 : 30;
@@ -680,6 +688,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
     let specialTime20Pre = 0;
     let specialTime25Pre = 0;
     
+    const reformDateObj = parseDateLocal(reformDate);
     data.bonds.forEach(b => {
         if (!b.useInCalculation || !b.startDate) return;
         const start = parseDateLocal(b.startDate);
@@ -689,7 +698,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
 
         const diff = end.getTime() - start.getTime();
         const days = diff / (1000 * 60 * 60 * 24);
-        const years = days / 365.25;
+        const years = days / 365;
         
         if (b.activityType === 'special_15') specialTime15Pre += years;
         if (b.activityType === 'special_20') specialTime20Pre += years;
@@ -965,7 +974,7 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
         const end = b.endDate ? parseDateLocal(b.endDate) : new Date();
         const diff = end.getTime() - start.getTime();
         const days = diff / (1000 * 60 * 60 * 24);
-        const years = days / 365.25;
+        const years = days / 365;
         
         if (b.activityType === 'special_15') specialTime15 += years;
         if (b.activityType === 'special_20') specialTime20 += years;
