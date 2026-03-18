@@ -227,7 +227,7 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
           ol: { margin: [0, 12, 0, 12] },
           li: { fontSize: 12, lineHeight: 1.5 },
           table: { margin: [0, 12, 0, 12] },
-          th: { bold: true, fillColor: '#f3f4f6', margin: [0, 0, 0, 0] },
+          th: { bold: true, fillColor: '#ffffff', margin: [0, 0, 0, 0] },
           td: { margin: [0, 0, 0, 0] },
         }
       });
