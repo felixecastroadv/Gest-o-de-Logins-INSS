@@ -167,6 +167,25 @@ const Legislation: React.FC = () => {
     return matchesSearch && matchesCategory;
   });
 
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'Constitucional':
+        return 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400';
+      case 'Civil':
+        return 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400';
+      case 'Trabalhista':
+        return 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400';
+      case 'Previdenciário':
+        return 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400';
+      case 'Instruções Normativas':
+        return 'bg-slate-100 dark:bg-slate-900/30 text-slate-700 dark:text-slate-400';
+      case 'Atividades Especiais':
+        return 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400';
+      default:
+        return 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400';
+    }
+  };
+
   if (selectedLaw) {
     return (
       <div className="flex flex-col h-[calc(100vh-120px)] bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
@@ -183,7 +202,7 @@ const Legislation: React.FC = () => {
               <h2 className="text-lg font-bold text-slate-900 dark:text-white line-clamp-1">
                 {selectedLaw.title}
               </h2>
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${getCategoryColor(selectedLaw.category)}`}>
                 {selectedLaw.category}
               </span>
             </div>
@@ -269,7 +288,7 @@ const Legislation: React.FC = () => {
               className="text-left block p-5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors group"
             >
               <div className="flex justify-between items-start mb-2">
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
+                <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getCategoryColor(law.category)}`}>
                   {law.category}
                 </span>
                 <ArrowTopRightOnSquareIcon className="w-5 h-5 text-slate-400 group-hover:text-primary-500 transition-colors" />
