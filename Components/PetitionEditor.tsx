@@ -7,10 +7,24 @@ import ListItem from '@tiptap/extension-list-item';
 import Paragraph from '@tiptap/extension-paragraph';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
-import Image from '@tiptap/extension-image';
+import { ResizableImage } from 'tiptap-extension-resizable-image';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
-const PasteImageExtension = Image.extend({
+const styles = `
+  .ProseMirror-selectednode {
+    outline: 2px solid #4285f4;
+  }
+  .resizable-image-handle {
+    width: 10px;
+    height: 10px;
+    background: #4285f4;
+    border-radius: 50%;
+    cursor: nwse-resize;
+  }
+`;
+
+const PasteImageExtension = ResizableImage.extend({
+  selectable: true,
   addProseMirrorPlugins() {
     return [
       new Plugin({
@@ -49,7 +63,7 @@ import TableHeader from '@tiptap/extension-table-header';
 import { 
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, Quote, Undo, Redo, Image as ImageIcon, Table as TableIcon, Save, 
-  Trash2, Layout, ChevronLeft, Search, Plus, FileDown, User, X, Settings, Palette, Scale,
+  Trash2, Layout, ChevronLeft, ChevronDown, Search, Plus, FileDown, User, X, Settings, Palette, Scale,
   Phone, Mail, Instagram, Upload, Check, FileText as FileTextIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -131,6 +145,12 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<string | null>(null);
 
+  const [clientSearchQuery, setClientSearchQuery] = useState('');
+  const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
+
+  const sortedClients = [...clients].sort((a, b) => a.name.localeCompare(b.name));
+  const filteredClients = sortedClients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()));
+
   const [config, setConfig] = useState<HeaderFooterConfig>({
     logo: null,
     color: '#FF0000',
@@ -185,6 +205,15 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
       },
     },
   });
+
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.innerHTML = styles;
+    document.head.appendChild(style);
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   useEffect(() => {
     if (editor) {
@@ -304,6 +333,9 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
           if (node.nodeName === 'P') {
             node.ul = undefined;
             node.ol = undefined;
+            node.listType = undefined;
+            node.listStyle = undefined;
+            node.list = undefined;
             if (inTable) {
               node.alignment = 'left';
               node.leadingIndent = 0;
@@ -450,7 +482,11 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
               <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase">
                 <User className="w-3 h-3" /> Cliente
               </div>
-              <button className="text-indigo-600 hover:text-indigo-700">
+              <button 
+                onClick={() => setSelectedClient(null)}
+                className="text-indigo-600 hover:text-indigo-700"
+                title="Alterar cliente"
+              >
                 <PencilSquareIcon className="w-4 h-4" />
               </button>
             </div>
@@ -460,15 +496,54 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
                 <p className="text-xs text-slate-500">#{selectedClient.id.slice(0,4)}</p>
               </div>
             ) : (
-              <select 
-                onChange={(e) => setSelectedClient(clients.find(c => c.id === e.target.value) || null)}
-                className="w-full bg-transparent border-none text-sm font-bold text-indigo-600 focus:ring-0 p-0 cursor-pointer"
-              >
-                <option value="">Selecionar Cliente</option>
-                {clients.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <button 
+                  onClick={() => setIsClientDropdownOpen(!isClientDropdownOpen)}
+                  className="w-full flex items-center justify-between bg-transparent border-none text-sm font-bold text-indigo-600 focus:ring-0 p-0 cursor-pointer"
+                >
+                  Selecionar Cliente
+                  <ChevronDown className="w-4 h-4" />
+                </button>
+                
+                {isClientDropdownOpen && (
+                  <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg z-50 overflow-hidden">
+                    <div className="p-2 border-b border-slate-100 dark:border-slate-700">
+                      <div className="relative">
+                        <Search className="w-4 h-4 absolute left-2 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Buscar cliente..."
+                          value={clientSearchQuery}
+                          onChange={(e) => setClientSearchQuery(e.target.value)}
+                          className="w-full pl-8 pr-2 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {filteredClients.length > 0 ? (
+                        filteredClients.map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => {
+                              setSelectedClient(c);
+                              setIsClientDropdownOpen(false);
+                              setClientSearchQuery('');
+                            }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-200 transition"
+                          >
+                            {c.name}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-4 text-center text-sm text-slate-500">
+                          Nenhum cliente encontrado
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -621,7 +696,7 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
             <ToolbarButton 
               onClick={() => {
                 const url = window.prompt('URL da imagem:');
-                if (url) editor.chain().focus().setImage({ src: url }).run();
+                if (url) editor.chain().focus().insertContent({ type: 'resizableImage', attrs: { src: url } }).run();
               }}
               icon={<ImageIcon className="w-4 h-4" />}
             />
