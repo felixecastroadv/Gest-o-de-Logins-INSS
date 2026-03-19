@@ -8,7 +8,7 @@ import {
   CheckCircleIcon, ExclamationTriangleIcon,
   CalendarDaysIcon, CurrencyDollarIcon, CloudArrowUpIcon,
   MagnifyingGlassIcon, Cog6ToothIcon, TableCellsIcon,
-  ChartBarIcon, FolderOpenIcon, PencilSquareIcon
+  ChartBarIcon, FolderOpenIcon, PencilSquareIcon, CheckIcon, XCircleIcon
 } from '@heroicons/react/24/outline';
 import { ClientRecord } from './types';
 import { formatCurrency, safeSetLocalStorage } from './utils';
@@ -116,6 +116,13 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
 }) => {
     const [data, setData] = useState<SocialSecurityData>(INITIAL_SS_DATA);
     const [expandedBonds, setExpandedBonds] = useState<string[]>([]);
+    const containerRef = React.useRef<HTMLDivElement>(null);
+    const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+
+    const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 3000);
+    };
     
     // Batch Edit State
     const [batchEditBondId, setBatchEditBondId] = useState<string | null>(null);
@@ -126,7 +133,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
 
     const handleBatchEdit = () => {
         if (!batchEditBondId || !batchStart || !batchEnd || !batchValue) {
-            alert("Preencha todos os campos para aplicar a edição em lote.");
+            showToast("Preencha todos os campos para aplicar a edição em lote.", "error");
             return;
         }
 
@@ -134,7 +141,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
         const [m2, y2] = batchEnd.split('/').map(Number);
         
         if (isNaN(m1) || isNaN(y1) || isNaN(m2) || isNaN(y2)) {
-            alert("Datas inválidas. Use o formato MM/AAAA.");
+            showToast("Datas inválidas. Use o formato MM/AAAA.", "error");
             return;
         }
 
@@ -142,7 +149,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
         const end = new Date(y2, m2 - 1, 1);
         
         if (start > end) {
-            alert("Data final deve ser maior ou igual à data inicial.");
+            showToast("Data final deve ser maior ou igual à data inicial.", "error");
             return;
         }
 
@@ -719,7 +726,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error("AI API Error:", response.status, errorText);
-                alert(`Erro na IA (Debug): Status ${response.status}\nDetalhes: ${errorText}`);
+                showToast(`Erro na IA: Status ${response.status}`, "error");
                 return null;
             }
 
@@ -728,7 +735,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                 aiData = await response.json();
             } catch (e) {
                 console.error("Failed to parse AI JSON:", e);
-                alert("Erro ao processar resposta da IA (JSON inválido). O servidor pode ter retornado um erro não tratado.");
+                showToast("Erro ao processar resposta da IA (JSON inválido).", "error");
                 return null;
             }
             
@@ -801,7 +808,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
         if (!file) return;
 
         if (file.type !== 'application/pdf') {
-            alert('Por favor, selecione um arquivo PDF.');
+            showToast('Por favor, selecione um arquivo PDF.', "error");
             return;
         }
 
@@ -835,15 +842,15 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                     bonds: aiResult.bonds || [],
                     cnisContent: fullText
                 }));
-                alert("Análise concluída! (Dados processados 100% via IA)");
+                showToast("Análise concluída! (Dados processados 100% via IA)");
             } else {
                 console.error("AI Analysis failed and local fallback is disabled.");
-                alert("A análise da IA falhou. Por favor, tente novamente ou verifique o arquivo.");
+                showToast("A análise da IA falhou. Por favor, tente novamente ou verifique o arquivo.", "error");
             }
 
         } catch (error) {
             console.error('Erro ao ler PDF:', error);
-            alert('Erro ao processar o arquivo PDF. Verifique se o arquivo é válido.');
+            showToast('Erro ao processar o arquivo PDF. Verifique se o arquivo é válido.', "error");
         } finally {
             setIsProcessing(false);
         }
@@ -1129,10 +1136,10 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                 const saved = localStorage.getItem('social_security_calculations');
                 const calculations = saved ? JSON.parse(saved) : [];
                 safeSetLocalStorage('social_security_calculations', JSON.stringify([newCalc, ...calculations]));
-                alert("Novo cálculo salvo com sucesso no banco de dados!");
+                showToast("Novo cálculo salvo com sucesso!");
             } catch (e) {
                 console.error("Error saving", e);
-                alert("Erro ao salvar cálculo.");
+                showToast("Erro ao salvar cálculo.", "error");
             }
         }
     };
@@ -1142,14 +1149,14 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
             const saved = savedCalculations || (localStorage.getItem('social_security_calculations') ? JSON.parse(localStorage.getItem('social_security_calculations')!) : []);
             
             if (saved.length === 0) {
-                alert("Nenhum cálculo salvo encontrado para atualizar. Use 'Salvar Novo Cálculo'.");
+                showToast("Nenhum cálculo salvo encontrado para atualizar. Use 'Salvar Novo Cálculo'.", "error");
                 return;
             }
             
             const clientCalcs = saved.filter((c: any) => c.clientName === data.clientName);
             
             if (clientCalcs.length === 0) {
-                alert("Nenhum cálculo salvo encontrado para este cliente. Use 'Salvar Novo Cálculo'.");
+                showToast("Nenhum cálculo salvo encontrado para este cliente. Use 'Salvar Novo Cálculo'.", "error");
                 return;
             }
             
@@ -1170,17 +1177,25 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
             } else {
                 safeSetLocalStorage('social_security_calculations', JSON.stringify(updatedList));
             }
-            alert("Alterações salvas com sucesso no banco de dados!");
+            showToast("Alterações salvas com sucesso!");
             
         } catch (e) {
             console.error("Error updating", e);
-            alert("Erro ao salvar alterações.");
+            showToast("Erro ao salvar alterações.", "error");
         }
     };
 
     const handleLoadCalculation = (loadedData: SocialSecurityData) => {
-        setData(loadedData);
-        alert("Cálculo carregado com sucesso!");
+        console.log("Loading calculation for:", loadedData.clientName);
+        // Ensure we create a new object to trigger re-render and deep copy
+        setData({ ...loadedData });
+        setExpandedBonds([]); // Reset expanded bonds for clarity
+        
+        // Scroll to top of the container
+        if (containerRef.current) {
+            containerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        showToast("Cálculo carregado com sucesso!");
     };
 
     const handleSalaryChange = (bondId: string, month: string, newValue: string) => {
@@ -1448,9 +1463,9 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                 ...newData,
                 bonds: [...prev.bonds, ...bonds]
             }));
-            // alert(`${bonds.length} vínculos importados com sucesso!`);
+            // showToast(`${bonds.length} vínculos importados com sucesso!`);
         } else {
-            alert("Não foi possível identificar vínculos. Verifique se o PDF é um CNIS válido.");
+            showToast("Não foi possível identificar vínculos. Verifique se o PDF é um CNIS válido.", "error");
         }
     };
 
@@ -1501,13 +1516,14 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
     };
 
     const handleRemoveAll = () => {
-        if (confirm('Tem certeza que deseja remover todos os períodos?')) {
+        if (window.confirm('Tem certeza que deseja remover todos os períodos?')) {
             setData(prev => ({ ...prev, bonds: [] }));
+            showToast("Todos os períodos foram removidos.");
         }
     };
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto">
+        <div ref={containerRef} className="flex flex-col h-full bg-slate-50 dark:bg-slate-950 overflow-y-auto">
             {/* Header */}
             <div className="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 p-4 flex justify-between items-center sticky top-0 z-10">
                 <div>
@@ -2081,7 +2097,7 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                                                                                                 onClick={() => {
                                                                                                     // Generate months between start and end date
                                                                                                     if (!bond.startDate || !bond.endDate) {
-                                                                                                        alert("Defina as datas de Início e Fim do vínculo primeiro.");
+                                                                                                        showToast("Defina as datas de Início e Fim do vínculo primeiro.", "error");
                                                                                                         return;
                                                                                                     }
                                                                                                     
@@ -2215,6 +2231,22 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                 savedCalculations={savedCalculations}
                 onUpdateCalculations={onUpdateCalculations}
             />
+
+            {/* Toast Notification */}
+            {toast && (
+                <div className={`fixed bottom-4 right-4 z-[100] px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-bounce-in ${
+                    toast.type === 'success' 
+                        ? 'bg-emerald-600 text-white' 
+                        : 'bg-red-600 text-white'
+                }`}>
+                    {toast.type === 'success' ? (
+                        <CheckIcon className="h-5 w-5" />
+                    ) : (
+                        <XCircleIcon className="h-5 w-5" />
+                    )}
+                    <span className="font-medium">{toast.message}</span>
+                </div>
+            )}
         </div>
     );
 };
