@@ -20,7 +20,7 @@ export interface BenefitResult {
         finalRMI: number;
         isFloorApplied: boolean;
     };
-    ruleType: 'Pre-Reform' | 'Transition' | 'Post-Reform' | 'Transition_50' | 'Transition_100' | 'Disability' | 'Death' | 'Pre-Reform-8696' | 'Pre-Reform-Age' | 'Pre-Reform-Special' | 'Pre-Reform-Disability' | 'Pre-Reform-Teacher' | 'Pre-Reform-Death';
+    ruleType: 'Pre-Reform' | 'Transition' | 'Post-Reform' | 'Transition_50' | 'Transition_100' | 'Disability' | 'TemporaryDisability' | 'Death' | 'Pre-Reform-8696' | 'Pre-Reform-Age' | 'Pre-Reform-Special' | 'Pre-Reform-Disability' | 'Pre-Reform-Teacher' | 'Pre-Reform-Death';
     category: 'aposentadorias' | 'auxilios' | 'dependentes';
 }
 
