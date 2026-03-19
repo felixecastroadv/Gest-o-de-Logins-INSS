@@ -34,13 +34,12 @@ function applyXeroxFilter(canvas: HTMLCanvasElement) {
     // Grayscale using luminance formula
     const gray = 0.299 * r + 0.587 * g + 0.114 * b;
     
-    // Thresholding
-    const value = gray > threshold ? 255 : 0;
+    // thresholding removed to preserve fine details for Vision AI
+    const value = gray; // Keep original grayscale intensity
     
     data[i] = value;     // R
     data[i + 1] = value; // G
     data[i + 2] = value; // B
-    // data[i+3] is alpha, leave it as is or set to 255
   }
 
   ctx.putImageData(imageData, 0, 0);
@@ -103,21 +102,28 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
           .map((item: any) => item.str)
           .join(' ');
         
-        if (pageText.trim()) {
+        // CRITICAL: If it's a critical page (1-5), we IGNORE the digital text layer
+        // to prevent "poisoning" the AI with incorrect hidden text data.
+        // We want the AI to use ONLY its eyes (Vision) for these pages.
+        const isCriticalPage = i <= 5;
+        
+        if (pageText.trim() && !isCriticalPage) {
           fullText += `--- Página ${i} ---\n${pageText}\n\n`;
+        } else if (isCriticalPage) {
+          fullText += `--- Página ${i} (Leitura Visual Obrigatória) ---\n[Conteúdo enviado via imagem para auditoria pericial]\n\n`;
         }
         
         // 2. Extract Image (OCR for handwritten/scanned docs)
-        // Only do this if the page has very little digital text AND we are under the safety limit
+        // FORCE image extraction for the first 5 pages (most critical for TRCT/CNIS)
         const isLowTextDensity = pageText.trim().length < 100; 
 
-        if (isLowTextDensity && i <= MAX_PAGES_FOR_OCR) {
+        if ((isLowTextDensity || isCriticalPage) && i <= MAX_PAGES_FOR_OCR) {
             try {
-                // SCALE: 1.5 for better OCR accuracy, but Xerox filter will keep it light
-                const viewport = page.getViewport({ scale: 1.5 }); 
+                // SCALE: 3.0 for ultra-high-definition Vision AI reading
+                const viewport = page.getViewport({ scale: 3.0 }); 
                 
-                // Safety check for abnormally large pages
-                if (viewport.width * viewport.height > 8000000) {
+                // Safety check for abnormally large pages (increased limit for 3.0 scale)
+                if (viewport.width * viewport.height > 25000000) {
                    fullText += `[AVISO: Imagem da página ${i} muito pesada, leitura visual ignorada para evitar travamento]\n`;
                    continue;
                 }
@@ -144,12 +150,11 @@ export async function extractTextFromPDF(file: File): Promise<PDFContent> {
                   
                   await Promise.race([renderTask, renderTimeout]);
                   
-                  // APPLY XEROX FILTER (High Contrast B&W)
+                  // APPLY SOFT GRAYSCALE FILTER (Preserves details better than B&W)
                   applyXeroxFilter(canvas);
                   
-                  // COMPRESSION: PNG is better for B&W text, but JPEG is usually smaller
-                  // We'll use JPEG with low quality but high contrast (Xerox filter already did the work)
-                  const base64 = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+                  // COMPRESSION: Higher quality for Vision AI
+                  const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
                   images.push(base64);
                   
                   // AGGRESSIVE MEMORY CLEANUP
