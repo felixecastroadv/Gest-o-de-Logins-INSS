@@ -4,9 +4,10 @@ import {
   ArrowPathRoundedSquareIcon, CloudIcon, BellIcon, Cog6ToothIcon, SunIcon, MoonIcon,
   ArchiveBoxIcon, MagnifyingGlassIcon, PlusIcon, StarIcon, ArrowUturnLeftIcon, 
   PencilSquareIcon, TrashIcon, ExclamationTriangleIcon, ChevronUpIcon, ChevronDownIcon, 
-  ChevronLeftIcon, ChevronRightIcon, CalendarIcon, CheckIcon
+  ChevronLeftIcon, ChevronRightIcon, CalendarIcon, CheckIcon, BookOpenIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
+import Legislation from './Legislation';
 import { DashboardProps, ClientRecord, ContractRecord, NotificationItem, AgendaEvent } from '../types';
 import { INITIAL_DATA, INITIAL_CONTRACTS_LIST } from '../data';
 import LaborCalc, { CalculationRecord } from '../LaborCalc';
@@ -49,7 +50,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSettingsSaved,
   onRestoreBackup
 }) => {
-  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda' | 'petition_editor'>('clients');
+  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda' | 'petition_editor' | 'legislation'>('clients');
   const [showArchived, setShowArchived] = useState(false);
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
@@ -93,34 +94,37 @@ const Dashboard: React.FC<DashboardProps> = ({
         // 1. Initialize with Local Data (Immediate UI response)
         const localClients = localStorage.getItem('inss_records');
         let fetchedClients = localClients ? JSON.parse(localClients) : INITIAL_DATA;
-        setRecords(fetchedClients);
+        setRecords(Array.isArray(fetchedClients) ? fetchedClients : INITIAL_DATA);
 
         const localContracts = localStorage.getItem('inss_contracts');
         let fetchedContracts = localContracts ? JSON.parse(localContracts) : INITIAL_CONTRACTS_LIST;
-        setContracts(fetchedContracts);
+        setContracts(Array.isArray(fetchedContracts) ? fetchedContracts : INITIAL_CONTRACTS_LIST);
 
         const localCalculations = localStorage.getItem('inss_calculations');
         let fetchedCalculations = localCalculations ? JSON.parse(localCalculations) : [];
-        setSavedCalculations(fetchedCalculations);
+        setSavedCalculations(Array.isArray(fetchedCalculations) ? fetchedCalculations : []);
 
         const localResolved = localStorage.getItem('inss_resolved_alerts');
-        if (localResolved) setResolvedAlerts(JSON.parse(localResolved));
+        if (localResolved) {
+            const parsed = JSON.parse(localResolved);
+            setResolvedAlerts(Array.isArray(parsed) ? parsed : []);
+        }
 
         const localSocialCalculations = localStorage.getItem('social_security_calculations');
         let fetchedSocialCalculations = localSocialCalculations ? JSON.parse(localSocialCalculations) : [];
-        setSavedSocialCalculations(fetchedSocialCalculations);
+        setSavedSocialCalculations(Array.isArray(fetchedSocialCalculations) ? fetchedSocialCalculations : []);
 
         const localMichel = localStorage.getItem('dr_michel_sessions');
         let fetchedDrMichelSessions = localMichel ? JSON.parse(localMichel) : [];
-        setDrMichelSessions(fetchedDrMichelSessions);
+        setDrMichelSessions(Array.isArray(fetchedDrMichelSessions) ? fetchedDrMichelSessions : []);
 
         const localLuana = localStorage.getItem('dra_luana_sessions');
         let fetchedDraLuanaSessions = localLuana ? JSON.parse(localLuana) : [];
-        setDraLuanaSessions(fetchedDraLuanaSessions);
+        setDraLuanaSessions(Array.isArray(fetchedDraLuanaSessions) ? fetchedDraLuanaSessions : []);
 
         const localAgenda = localStorage.getItem('agenda_events');
         let fetchedAgendaEvents = localAgenda ? JSON.parse(localAgenda) : [];
-        setAgendaEvents(fetchedAgendaEvents);
+        setAgendaEvents(Array.isArray(fetchedAgendaEvents) ? fetchedAgendaEvents : []);
 
         if (supabase) {
             // Cloud Fetch with Timeout Resilience
@@ -156,27 +160,27 @@ const Dashboard: React.FC<DashboardProps> = ({
             ]).then(([cData, conData, labData, socData, agendaData, resData]) => {
                 let partialSync = false;
 
-                if (cData) {
+                if (cData && Array.isArray(cData)) {
                     setRecords(cData);
                     safeSetLocalStorage('inss_records', JSON.stringify(cData));
                 } else partialSync = true;
 
-                if (conData) {
+                if (conData && Array.isArray(conData)) {
                     setContracts(conData);
                     safeSetLocalStorage('inss_contracts', JSON.stringify(conData));
                 } else partialSync = true;
 
-                if (labData && labData.length > 0) {
+                if (labData && Array.isArray(labData) && labData.length > 0) {
                     setSavedCalculations(labData);
                     safeSetLocalStorage('inss_calculations', JSON.stringify(labData));
                 }
                 
-                if (socData && socData.length > 0) {
+                if (socData && Array.isArray(socData) && socData.length > 0) {
                     setSavedSocialCalculations(socData);
                     safeSetLocalStorage('social_security_calculations', JSON.stringify(socData));
                 }
 
-                if (agendaData) {
+                if (agendaData && Array.isArray(agendaData)) {
                     setAgendaEvents(agendaData);
                     safeSetLocalStorage('agenda_events', JSON.stringify(agendaData));
                 }
@@ -218,14 +222,20 @@ const Dashboard: React.FC<DashboardProps> = ({
                 (payload: any) => {
                      if (payload.new && payload.new.data) {
                          if (payload.new.id === 1) {
-                             setRecords(payload.new.data);
-                             safeSetLocalStorage('inss_records', JSON.stringify(payload.new.data));
+                             if (Array.isArray(payload.new.data)) {
+                                 setRecords(payload.new.data);
+                                 safeSetLocalStorage('inss_records', JSON.stringify(payload.new.data));
+                             }
                          } else if (payload.new.id === 2) {
-                             setContracts(payload.new.data);
-                             safeSetLocalStorage('inss_contracts', JSON.stringify(payload.new.data));
+                             if (Array.isArray(payload.new.data)) {
+                                 setContracts(payload.new.data);
+                                 safeSetLocalStorage('inss_contracts', JSON.stringify(payload.new.data));
+                             }
                          } else if (payload.new.id === 8) {
-                             setResolvedAlerts(payload.new.data);
-                             safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(payload.new.data));
+                             if (Array.isArray(payload.new.data)) {
+                                 setResolvedAlerts(payload.new.data);
+                                 safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(payload.new.data));
+                             }
                          }
                      }
                 }
@@ -810,6 +820,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <PencilSquareIcon className="h-6 w-6 lg:mr-3" />
                    <span className="hidden lg:block font-medium">Editor de Petições</span>
                </button>
+
+               <button 
+                   onClick={() => setCurrentView('legislation')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'legislation' ? 'bg-teal-600 shadow-lg shadow-teal-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <BookOpenIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Legislação</span>
+               </button>
            </div>
            
            <div className="p-4 border-t border-slate-800">
@@ -882,7 +900,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                     initialSessions={draLuanaSessions} 
                     onSaveSessions={handleSaveDraLuanaSessions} 
                   />
-             ) : currentView === 'agenda' ? (
+             ) : currentView === 'legislation' ? (
+                <Legislation />
+            ) : currentView === 'agenda' ? (
                  <Agenda 
                     events={agendaEvents}
                     clients={records}
