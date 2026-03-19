@@ -190,7 +190,7 @@ import { IBGELifeExpectancy, getLifeExpectancyFromTable } from './src/services/i
 
 export const calculateRMI = (
     bonds: CNISBond[], 
-    ruleType: 'Pre-Reform' | 'Post-Reform' | 'Transition_50' | 'Transition_100' | 'Disability' | 'Death' | 'Pre-Reform-8696' | 'Pre-Reform-Age' | 'Pre-Reform-Special' | 'Pre-Reform-Disability' | 'Pre-Reform-Teacher' | 'Pre-Reform-Death',
+    ruleType: 'Pre-Reform' | 'Post-Reform' | 'Transition_50' | 'Transition_100' | 'Disability' | 'TemporaryDisability' | 'Death' | 'Pre-Reform-8696' | 'Pre-Reform-Age' | 'Pre-Reform-Special' | 'Pre-Reform-Disability' | 'Pre-Reform-Teacher' | 'Pre-Reform-Death',
     gender: 'M' | 'F',
     totalYears: number,
     inpcIndices?: Map<string, number>,
@@ -406,7 +406,10 @@ export const calculateRMI = (
                 base += (totalYears - threshold) * 0.02;
             }
             coef = base;
-            calculationFormula += ` x Coeficiente Incapacidade (${(coef * 100).toFixed(0)}%)`;
+            calculationFormula += ` x Coeficiente Incapacidade Permanente (${(coef * 100).toFixed(0)}%)`;
+        } else if (ruleType === 'TemporaryDisability') {
+            coef = 0.91;
+            calculationFormula += ` x Coeficiente Incapacidade Temporária (91%)`;
         } else if (ruleType === 'Death') {
             coef = 0.60; // Base 50% + 10%
             calculationFormula += ` x Cota Pensão (60%)`;
@@ -1150,21 +1153,15 @@ export const analyzeBenefits = (data: SocialSecurityData, inpcIndices?: Map<stri
         benefits.push({
             benefitName: "Auxílio por Incapacidade Temporária",
             isEligible: true,
-            ruleType: 'Post-Reform',
+            ruleType: 'TemporaryDisability',
             category: 'auxilios',
-            ...(() => {
-                const r = calculateRMI(data.bonds, 'Post-Reform', data.gender, timeTotal.years, inpcIndices, der, fractionalAge, data.customMinWage, undefined, data.isTeacher, ibgeTable);
-                return {
-                    rmi: r.rmi * 0.91,
-                    rmiDetails: r.rmiDetails ? { ...r.rmiDetails, finalRMI: r.rmi * 0.91, calculationFormula: r.rmiDetails.calculationFormula + ' x 0.91 (Auxílio)' } : undefined
-                };
-            })()
+            ...calculateRMI(data.bonds, 'TemporaryDisability', data.gender, timeTotal.years, inpcIndices, der, fractionalAge, data.customMinWage, undefined, data.isTeacher, ibgeTable)
         });
     } else {
         benefits.push({
             benefitName: "Auxílio por Incapacidade Temporária",
             isEligible: false,
-            ruleType: 'Post-Reform',
+            ruleType: 'TemporaryDisability',
             category: 'auxilios',
             missingDetails: !hasQuality 
                 ? "Segurado sem qualidade (período de graça expirado)." 
