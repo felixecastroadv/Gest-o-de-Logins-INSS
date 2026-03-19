@@ -267,11 +267,12 @@ COMANDO DE EXECUÇÃO (FLUXO DE TRABALHO OBRIGATÓRIO):
      1. STATUS DA LEITURA DOCUMENTAL: Liste os documentos lidos. SE algum documento estiver ilegível, vazio ou corrompido, crie um ALERTA EM DESTAQUE pedindo o reenvio.
      2. RESUMO DOS FATOS: Síntese clara do caso (DER, DII, idade, tempo de contribuição, indeferimento).
      3. PROVAS IDENTIFICADAS E ANÁLISE DOCUMENTAL: Relacione os fatos com os documentos enviados. Aponte se falta algum documento essencial (Ex: "Falta o CadÚnico atualizado para o BPC/LOAS").
-     4. ANÁLISE DE REQUISITOS: Verifique se os requisitos legais para o benefício foram preenchidos.
-     5. PRINCÍPIOS PREVIDENCIÁRIOS APLICÁVEIS: Sugira 1 ou 2 princípios que se encaixam perfeitamente no caso (Ex: In Dubio Pro Misero, Seletividade e Distributividade) e explique brevemente como usá-los na peça.
-     6. OPÇÕES DE ESTRATÉGIA JURÍDICA: Apresente caminhos possíveis para o advogado escolher (Ex: Estratégia A - Focar na incapacidade total; Estratégia B - Focar na incapacidade parcial com reabilitação).
-     7. PERGUNTAS AO ADVOGADO (DIÁLOGO): Termine o relatório com perguntas estratégicas. Ex: "Falta a data exata do indeferimento. O senhor tem essa informação?", "Deseja incluir alguma ementa específica do seu TRF?", "Qual estratégia o senhor prefere?".
-     8. DOCUMENTOS ANALISADOS: Lista final de todos os arquivos.
+      4. ANÁLISE DE DIVERGÊNCIAS E CRUZAMENTO DE DADOS (CRÍTICO): Identifique e liste TODAS as discrepâncias entre os documentos (ex: CNIS vs. PPP, CTPS vs. CNIS, Laudo vs. Relato do Cliente). Explique o impacto jurídico de cada divergência e peça instruções ao advogado sobre como proceder ou qual verdade deve prevalecer.
+      5. ANÁLISE DE REQUISITOS: Verifique se os requisitos legais para o benefício foram preenchidos.
+      6. PRINCÍPIOS PREVIDENCIÁRIOS APLICÁVEIS: Sugira 1 ou 2 princípios que se encaixam perfeitamente no caso (Ex: In Dubio Pro Misero, Seletividade e Distributividade) e explique brevemente como usá-los na peça.
+      7. OPÇÕES DE ESTRATÉGIA JURÍDICA: Apresente caminhos possíveis para o advogado escolher (Ex: Estratégia A - Focar na incapacidade total; Estratégia B - Focar na incapacidade parcial com reabilitação).
+      8. PERGUNTAS AO ADVOGADO (DIÁLOGO): Termine o relatório com perguntas estratégicas. Ex: "Falta a data exata do indeferimento. O senhor tem essa informação?", "Deseja incluir alguma ementa específica do seu TRF?", "Qual estratégia o senhor prefere?".
+      9. DOCUMENTOS ANALISADOS: Lista final de todos os arquivos.
    - TRAVA DE SEGURANÇA: NUNCA redija a petição inicial nesta fase. Aguarde o advogado responder às perguntas e dar o comando "GERAR PEÇA".
 3. COMANDO "GERAR PEÇA":
    - AÇÃO: Gere a petição inicial previdenciária completa e final, baseada nas escolhas feitas pelo advogado no relatório.
@@ -450,11 +451,12 @@ COMANDO DE EXECUÇÃO (FLUXO DE TRABALHO OBRIGATÓRIO):
      1. STATUS DA LEITURA DOCUMENTAL: Liste os documentos lidos. SE algum documento estiver ilegível, vazio ou corrompido, crie um ALERTA EM DESTAQUE pedindo o reenvio.
      2. RESUMO DOS FATOS: Síntese clara do caso (admissão, demissão, função, violações).
      3. PROVAS IDENTIFICADAS E ANÁLISE DOCUMENTAL: Relacione os fatos com os documentos enviados. Aponte se falta algum documento essencial (Ex: "Falta o TRCT para comprovar a demissão").
-     4. ANÁLISE DOS CÁLCULOS E VERBAS COBRADAS: Liste as verbas devidas com os valores exatos da planilha.
-     5. PRINCÍPIOS TRABALHISTAS APLICÁVEIS: Sugira 1 ou 2 princípios que se encaixam perfeitamente no caso (Ex: Primazia da Realidade, In Dubio Pro Operario) e explique brevemente como usá-los na peça.
-     6. OPÇÕES DE ESTRATÉGIA JURÍDICA: Apresente caminhos possíveis para o advogado escolher (Ex: Estratégia A - Focar no vínculo; Estratégia B - Focar na responsabilidade solidária).
-     7. PERGUNTAS AO ADVOGADO (DIÁLOGO): Termine o relatório com perguntas estratégicas. Ex: "Falta a data exata da demissão. O senhor tem essa informação?", "Deseja incluir alguma ementa específica do seu TRT?", "Qual estratégia o senhor prefere?".
-     8. DOCUMENTOS ANALISADOS: Lista final de todos os arquivos.
+      4. ANÁLISE DE DIVERGÊNCIAS E CRUZAMENTO DE DADOS (CRÍTICO): Identifique e liste TODAS as discrepâncias entre os documentos (ex: Planilha de Cálculos vs. TRCT, CTPS vs. Relato do Cliente). Explique o impacto jurídico de cada divergência e peça instruções ao advogado sobre como proceder ou qual verdade deve prevalecer.
+      5. ANÁLISE DOS CÁLCULOS E VERBAS COBRADAS: Liste as verbas devidas com os valores exatos da planilha.
+      6. PRINCÍPIOS TRABALHISTAS APLICÁVEIS: Sugira 1 ou 2 princípios que se encaixam perfeitamente no caso (Ex: Primazia da Realidade, In Dubio Pro Operario) e explique brevemente como usá-los na peça.
+      7. OPÇÕES DE ESTRATÉGIA JURÍDICA: Apresente caminhos possíveis para o advogado escolher (Ex: Estratégia A - Focar no vínculo; Estratégia B - Focar na responsabilidade solidária).
+      8. PERGUNTAS AO ADVOGADO (DIÁLOGO): Termine o relatório com perguntas estratégicas. Ex: "Falta a data exata da demissão. O senhor tem essa informação?", "Deseja incluir alguma ementa específica do seu TRT?", "Qual estratégia o senhor prefere?".
+      9. DOCUMENTOS ANALISADOS: Lista final de todos os arquivos.
    - TRAVA DE SEGURANÇA: NUNCA redija a petição inicial nesta fase. Aguarde o advogado responder às perguntas e dar o comando "GERAR PEÇA".
 3. COMANDO "GERAR PEÇA":
    - AÇÃO: Gere a petição inicial trabalhista completa e final, baseada nas escolhas feitas pelo advogado no relatório.
@@ -731,7 +733,8 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     1. ACENTUAÇÃO OBRIGATÓRIA (Norma Culta).
     2. ESTRUTURA DA LEI 14.331/2022 com alíneas a), b), c), d).
     3. PEDIDOS numerados com a), b), c)...
-    4. NENHUM markdown (*, #).
+    4. ANÁLISE DE DIVERGÊNCIAS: No relatório, destaque TODAS as discrepâncias entre documentos para que o advogado tome a decisão estratégica.
+    5. NENHUM markdown (*, #).
     5. CITAÇÃO COMPLETA: Cite o Artigo, mas EVITE REPRODUZIR longos trechos de lei ipsis litteris para não acionar filtros de recitação. Parafraseie quando possível. NUNCA use a frase "Uma das mais polêmicas e controvertidas inovações" ou blocos de texto idênticos a modelos de internet.
     6. ANTI-RECITATION: Não repita longos trechos da mensagem do usuário ou de leis. Se o sistema interromper, mude a forma de escrever.
     7. FORMATAÇÃO: Use parágrafos de 4-5 linhas com espaçamento. NUNCA envie blocos de texto únicos.
