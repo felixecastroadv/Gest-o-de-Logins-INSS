@@ -134,7 +134,7 @@ interface HeaderFooterConfig {
 const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initialPetition, onSavePetition }) => {
   const [title, setTitle] = useState(initialPetition?.title || 'NOVA PETIÇÃO SEM TÍTULO');
   const [selectedClient, setSelectedClient] = useState<ClientRecord | null>(
-    initialPetition ? clients.find(c => c.petitions?.some(p => p.id === initialPetition.id)) || null : null
+    initialPetition ? (clients || []).find(c => c.petitions?.some(p => p.id === initialPetition.id)) || null : null
   );
   const [category, setCategory] = useState(initialPetition?.category || 'Petição inicial');
   const [type, setType] = useState<'model' | 'concrete'>(initialPetition?.type || 'concrete');
@@ -148,8 +148,8 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
   const [clientSearchQuery, setClientSearchQuery] = useState('');
   const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
 
-  const sortedClients = [...clients].sort((a, b) => a.name.localeCompare(b.name));
-  const filteredClients = sortedClients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()));
+  const sortedClients = [...(clients || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  const filteredClients = sortedClients.filter(c => (c.name || '').toLowerCase().includes(clientSearchQuery.toLowerCase()));
 
   const [config, setConfig] = useState<HeaderFooterConfig>({
     logo: null,
@@ -231,7 +231,7 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
           setTitle(initialPetition.title);
           setCategory(initialPetition.category);
           setType(initialPetition.type);
-          const client = clients.find(c => c.petitions?.some(p => p.id === initialPetition.id));
+          const client = (clients || []).find(c => c.petitions?.some(p => p.id === initialPetition.id));
           if (client) setSelectedClient(client);
           loadedPetitionIdRef.current = initialPetition.id;
         }
