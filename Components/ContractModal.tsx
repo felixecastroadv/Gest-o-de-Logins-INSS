@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect } from 'react';
-import { BriefcaseIcon, XMarkIcon, PlusIcon, TrashIcon, BanknotesIcon, CheckIcon } from '@heroicons/react/24/outline';
+import React, { useState, useEffect, useRef } from 'react';
+import { BriefcaseIcon, XMarkIcon, PlusIcon, TrashIcon, BanknotesIcon, CheckIcon, ChevronDownIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { ContractRecord, ContractModalProps, PaymentEntry } from '../types';
 import { formatCurrency } from '../utils';
 
@@ -11,6 +11,23 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
     const [newPaymentAmount, setNewPaymentAmount] = useState('');
     const [newPaymentDate, setNewPaymentDate] = useState(new Date().toISOString().split('T')[0]);
     const [newPaymentDueDate, setNewPaymentDueDate] = useState(new Date().toISOString().split('T')[0]);
+
+    const [clientSearchQuery, setClientSearchQuery] = useState('');
+    const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    const sortedClients = [...clients].sort((a, b) => a.name.localeCompare(b.name));
+    const filteredClients = sortedClients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()));
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+                setIsClientDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
 
     useEffect(() => {
         if (initialData) {
@@ -119,10 +136,71 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
 
                      <div className="md:col-span-2">
                         <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1.5">Selecionar Cliente Existente</label>
-                        <select name="clientId" value={formData.clientId || ''} onChange={handleChange} className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white">
-                            <option value="">Novo Cliente</option>
-                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
+                        <div className="relative" ref={dropdownRef}>
+                            <button
+                                type="button"
+                                onClick={() => setIsClientDropdownOpen(!isClientDropdownOpen)}
+                                className="w-full flex items-center justify-between px-4 py-2.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-primary-500 outline-none dark:text-white text-left"
+                            >
+                                <span className="truncate">
+                                    {formData.clientId 
+                                        ? clients.find(c => c.id === formData.clientId)?.name 
+                                        : 'Novo Cliente'}
+                                </span>
+                                <ChevronDownIcon className="w-5 h-5 text-slate-400" />
+                            </button>
+
+                            {isClientDropdownOpen && (
+                                <div className="absolute top-full left-0 mt-2 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                                    <div className="p-2 border-b border-slate-100 dark:border-slate-700">
+                                        <div className="relative">
+                                            <MagnifyingGlassIcon className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar cliente..."
+                                                value={clientSearchQuery}
+                                                onChange={(e) => setClientSearchQuery(e.target.value)}
+                                                className="w-full pl-9 pr-3 py-2 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 dark:text-white"
+                                                autoFocus
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="max-h-60 overflow-y-auto">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFormData({ ...formData, clientId: undefined, firstName: '', lastName: '', cpf: '' });
+                                                setIsClientDropdownOpen(false);
+                                                setClientSearchQuery('');
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-200 transition font-medium"
+                                        >
+                                            Novo Cliente
+                                        </button>
+                                        {filteredClients.length > 0 ? (
+                                            filteredClients.map(c => (
+                                                <button
+                                                    key={c.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setFormData({ ...formData, clientId: c.id, firstName: c.name, lastName: '', cpf: c.cpf });
+                                                        setIsClientDropdownOpen(false);
+                                                        setClientSearchQuery('');
+                                                    }}
+                                                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-700/50 text-slate-700 dark:text-slate-200 transition border-t border-slate-50 dark:border-slate-800"
+                                                >
+                                                    {c.name}
+                                                </button>
+                                            ))
+                                        ) : (
+                                            <div className="px-4 py-4 text-center text-sm text-slate-500">
+                                                Nenhum cliente encontrado
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                      </div>
 
                      <div>
