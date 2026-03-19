@@ -46,6 +46,8 @@ interface DrMichelFelixProps {
   onSaveSessions?: (sessions: ChatSession[]) => void;
 }
 
+const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
 const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSessions }) => {
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions || []);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -257,7 +259,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
 
   const createNewSession = () => {
     const newSession: ChatSession = {
-      id: Date.now().toString(),
+      id: generateId(),
       title: 'Nova Conversa',
       date: new Date().toLocaleDateString('pt-BR'),
       messages: []
@@ -316,7 +318,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
     let sessionId = currentSessionId;
     if (!sessionId) {
       const newSession: ChatSession = {
-        id: Date.now().toString(),
+        id: generateId(),
         title: messageText.slice(0, 30) + '...',
         date: new Date().toLocaleDateString('pt-BR'),
         messages: []
@@ -327,7 +329,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
     }
 
     const userMsg: Message = {
-      id: Date.now().toString(),
+      id: generateId(),
       role: 'user',
       content: messageText,
       timestamp: new Date().toISOString()
@@ -443,7 +445,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
       clearTimeout(timeoutId);
 
       const assistantMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: generateId(),
         role: 'assistant',
         content: fullText || "Desculpe, não consegui gerar uma resposta.",
         timestamp: new Date().toISOString()
@@ -455,7 +457,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
     } catch (error: any) {
       if (error.name === 'AbortError') {
         const assistantMsg: Message = {
-          id: (Date.now() + 1).toString(),
+          id: generateId(),
           role: 'assistant',
           content: '[Aviso: Tempo limite de 5 minutos atingido antes de receber dados. Tente novamente.]',
           timestamp: new Date().toISOString()
@@ -466,7 +468,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
       } else {
         console.error(error);
         const errorMsg: Message = {
-          id: (Date.now() + 1).toString(),
+          id: generateId(),
           role: 'assistant',
           content: `⚠️ ERRO: ${error.message}`,
           timestamp: new Date().toISOString()
@@ -491,7 +493,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
       
       if (!activeSessionId) {
         const newSession: ChatSession = {
-          id: Date.now().toString(),
+          id: generateId(),
           title: 'Nova Conversa',
           messages: [],
           date: new Date().toLocaleDateString('pt-BR')
@@ -507,7 +509,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
 
       // Inform user we are reading the files
       const readingMsg: Message = {
-        id: Date.now().toString(),
+        id: generateId(),
         role: 'assistant',
         content: `Estou lendo ${fileArray.length} arquivo(s). Por favor, aguarde um momento...`,
         timestamp: new Date().toISOString()
