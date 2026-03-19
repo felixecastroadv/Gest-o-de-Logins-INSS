@@ -70,7 +70,7 @@ const INITIAL_LAWS: Law[] = [
     id: 'fgts',
     title: 'Lei do FGTS (Lei nº 8.036/1990)',
     description: 'Dispõe sobre o Fundo de Garantia do Tempo de Serviço, e dá outras providências.',
-    link: 'https://www.planalto.gov.br/ccivil_03/leis/l8036.htm',
+    link: 'https://www.planalto.gov.br/ccivil_03/leis/l8036consol.htm',
     category: 'Trabalhista'
   },
   {
@@ -121,6 +121,34 @@ const INITIAL_LAWS: Law[] = [
     description: 'Estabelece rotinas para agilizar e uniformizar o reconhecimento de direitos dos segurados e beneficiários da Previdência Social.',
     link: 'https://www.in.gov.br/materia/-/asset_publisher/Kujrw0TZC2Mb/content/id/32120879/do1-2015-01-22-instrucao-normativa-n-77-de-21-de-janeiro-de-2015-32120750',
     category: 'Instruções Normativas'
+  },
+  {
+    id: 'anexo-iv-3048',
+    title: 'Anexo IV - Decreto nº 3.048/1999',
+    description: 'Classificação dos Agentes Nocivos para fins de Aposentadoria Especial.',
+    link: 'https://www.planalto.gov.br/ccivil_03/decreto/d3048.htm#anexoiv',
+    category: 'Atividades Especiais'
+  },
+  {
+    id: 'decreto-53831',
+    title: 'Quadro Anexo - Decreto nº 53.831/1964',
+    description: 'Quadro das ocupações consideradas penosas, insalubres ou perigosas.',
+    link: 'https://www.planalto.gov.br/ccivil_03/decreto/d53831.htm#quadro',
+    category: 'Atividades Especiais'
+  },
+  {
+    id: 'decreto-83080',
+    title: 'Anexos I e II - Decreto nº 83.080/1979',
+    description: 'Anexos com a classificação das atividades profissionais segundo os agentes nocivos.',
+    link: 'https://www.planalto.gov.br/ccivil_03/decreto/1970-1979/d83080.htm#anexoi',
+    category: 'Atividades Especiais'
+  },
+  {
+    id: 'decreto-2172',
+    title: 'Anexo IV - Decreto nº 2.172/1997',
+    description: 'Regulamento dos Benefícios da Previdência Social (vigente entre 1997 e 1999).',
+    link: 'https://www.planalto.gov.br/ccivil_03/decreto/D2172.htm#anexoiv',
+    category: 'Atividades Especiais'
   }
 ];
 
