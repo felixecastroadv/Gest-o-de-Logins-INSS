@@ -17,7 +17,7 @@ app.post("/api/ocr", async (req, res) => {
     }
 
     const parts = [
-      { text: "Extraia todo o texto destas imagens de forma precisa e organizada. Retorne APENAS o texto extraído, sem comentários adicionais. Preserve a ordem das páginas se possível." }
+      { text: "Você é um especialista em AUDITORIA VISUAL de alta precisão para documentos jurídicos brasileiros. Sua missão é ler as IMAGENS anexadas com fidelidade absoluta.\n\nREGRAS DE OURO:\n1. FOCO NO CAMPO: No TRCT, localize os campos pelos números (Ex: Campo 24 para Admissão, Campo 26 para Afastamento).\n2. ZOOM MENTAL: Olhe para cada dígito individualmente. Se o ano terminar em '4', não leia como '9' ou '1'.\n3. FIDELIDADE VISUAL: Ignore o que o texto automático diz se ele divergir da imagem. A imagem é a verdade.\n4. DÚVIDA: Se um número estiver borrado, diga 'ILEGÍVEL' em vez de chutar.\n\nRetorne o texto organizado por campos e páginas." }
     ];
 
     images.forEach((base64Image: string) => {
@@ -98,10 +98,24 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - ANTI-ALUCINAÇÃO (GROUNDING OBRIGATÓRIO): Use a ferramenta de busca (Google Search) para verificar a redação ATUALIZADA de cada artigo citado no site do Planalto. Não confie na sua memória. Se a lei mudou, use a nova.
    - INTEGRAÇÃO PROFUNDA: Não apenas cite a lei. Explique COMO a lei se aplica ao caso concreto. Desenvolva o raciocínio.
    - STORYTELLING JURÍDICO: Na seção "DOS FATOS", não faça apenas uma lista cronológica. Conte a história de vida e sofrimento da parte autora, humanizando o pedido e sensibilizando o juiz. Destaque a incongruência entre a realidade da doença e a decisão fria do INSS.
-5. REGRAS DE FORMATAÇÃO (EM TODAS AS RESPOSTAS):
+
+5. PROTOCOLO DE AUDITORIA VISUAL (ANTI-ERRO):
+   - ATENÇÃO: O texto digital do PDF pode estar ERRADO ou CORROMPIDO (camada oculta). IGNORE o texto das primeiras 5 páginas e use APENAS sua visão.
+   - SUPREMACIA VISUAL (REGRA DE OURO): Você recebe as IMAGENS dos documentos. Sua visão é a autoridade máxima. Se o texto extraído (OCR) divergir do que você vê CLARAMENTE na imagem, IGNORE o OCR e use sua visão.
+   - TRCT (TERMO DE RESCISÃO):
+     * MAPEAMENTO VISUAL: Localize os campos pelos números. Admissão (Campo 24), Aviso Prévio (Campo 25), Afastamento/Saída (Campo 26).
+     * ZOOM NOS DÍGITOS: Olhe para cada número individualmente. Verifique com atenção redobrada o último dígito do ano (ex: diferenciar 2024 de 2019 ou 2014).
+     * DIVERGÊNCIA DE PÁGINAS: Se a Página 1 e a Página 2 (Quitação) tiverem datas diferentes, priorize a Página 1.
+   - CNIS (EXTRATO PREVIDENCIÁRIO):
+     * FOCO EM CABEÇALHOS: Leia apenas os campos "Data Início" e "Data Fim" dos cabeçalhos de cada Vínculo (Seq).
+     * FILTRO DE RUÍDO: Ignore datas dentro das tabelas de "Remunerações".
+   - REGRA DE OURO: Se um dígito estiver borrado, NÃO CHUTE. Diga: "O Campo X está ilegível na imagem".
+
+6. REGRAS DE FORMATAÇÃO (EM TODAS AS RESPOSTAS):
    - MESMO EM CORREÇÕES PONTUAIS: Nunca entregue um bloco de texto único. Mantenha a divisão em parágrafos (4-5 linhas) e o espaçamento entre eles.
    - SEPARADORES: Use uma linha em branco entre cada parágrafo.
-6. ROL DE DOCUMENTOS (RIGOROSO):
+
+7. ROL DE DOCUMENTOS (RIGOROSO):
    - Liste EXATAMENTE os nomes dos arquivos enviados pelo usuário no histórico da conversa.
    - Não invente nomes genéricos (ex: "Documentos Pessoais"). Use o nome real do arquivo (ex: "RG.pdf", "Laudo_Medico.pdf").
    - A quantidade de itens na lista deve ser igual à quantidade de arquivos enviados.
@@ -368,10 +382,24 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - ANTI-ALUCINAÇÃO (GROUNDING OBRIGATÓRIO): Use a ferramenta de busca (Google Search) para verificar a redação ATUALIZADA de cada artigo citado. Não confie na sua memória.
    - INTEGRAÇÃO PROFUNDA: Não apenas cite a lei. Explique COMO a lei se aplica ao caso concreto e aos valores calculados.
    - STORYTELLING JURÍDICO: Na seção "DOS FATOS", conte a história da relação de emprego, as violações sofridas, humanizando o pedido.
-5. REGRAS DE FORMATAÇÃO (EM TODAS AS RESPOSTAS):
+
+5. PROTOCOLO DE AUDITORIA VISUAL (ANTI-ERRO):
+   - ATENÇÃO: O texto digital do PDF pode estar ERRADO ou CORROMPIDO (camada oculta). IGNORE o texto das primeiras 5 páginas e use APENAS sua visão.
+   - SUPREMACIA VISUAL (REGRA DE OURO): Você recebe as IMAGENS dos documentos. Sua visão é a autoridade máxima. Se o texto extraído (OCR) divergir do que você vê CLARAMENTE na imagem, IGNORE o OCR e use sua visão.
+   - TRCT (TERMO DE RESCISÃO):
+     * MAPEAMENTO VISUAL: Localize os campos pelos números. Admissão (Campo 24), Aviso Prévio (Campo 25), Afastamento/Saída (Campo 26).
+     * ZOOM NOS DÍGITOS: Olhe para cada número individualmente. Verifique com atenção redobrada o último dígito do ano (ex: diferenciar 2024 de 2019 ou 2014).
+     * DIVERGÊNCIA DE PÁGINAS: Se a Página 1 e a Página 2 (Quitação) tiverem datas diferentes, priorize a Página 1.
+   - CNIS (EXTRATO PREVIDENCIÁRIO):
+     * FOCO EM CABEÇALHOS: Leia apenas os campos "Data Início" e "Data Fim" dos cabeçalhos de cada Vínculo (Seq).
+     * FILTRO DE RUÍDO: Ignore datas dentro das tabelas de "Remunerações".
+   - REGRA DE OURO: Se um dígito estiver borrado, NÃO CHUTE. Diga: "O Campo X está ilegível na imagem".
+
+6. REGRAS DE FORMATAÇÃO (EM TODAS AS RESPOSTAS):
    - MESMO EM CORREÇÕES PONTUAIS: Nunca entregue um bloco de texto único. Mantenha a divisão em parágrafos (4-5 linhas) e o espaçamento entre eles.
    - SEPARADORES: Use uma linha em branco entre cada parágrafo.
-6. ROL DE DOCUMENTOS (RIGOROSO):
+
+7. ROL DE DOCUMENTOS (RIGOROSO):
    - Liste EXATAMENTE os nomes dos arquivos enviados pelo usuário no histórico da conversa, incluindo a planilha de cálculos.
    - Não invente nomes genéricos. Use o nome real do arquivo.
    - A quantidade de itens na lista deve ser igual à quantidade de arquivos enviados.
@@ -438,9 +466,9 @@ COMANDO DE EXECUÇÃO (FLUXO DE TRABALHO OBRIGATÓRIO):
 let currentKeyIndex = Math.floor(Math.random() * 10);
 
 const MODEL_HIERARCHY = [
-  "gemini-2.5-flash",
+  "gemini-3-flash-preview",
   "gemini-2.5-flash-preview",
-  "gemini-3-flash-preview"
+  "gemini-2.5-flash"
 ];
 
 function getApiKeys() {
@@ -662,12 +690,13 @@ app.post("/api/analyze-cnis", async (req, res) => {
 });
 
 const ARCHIVIST_SYSTEM_PROMPT = `
-VOCÊ É UM SISTEMA DE ARMAZENAMENTO DE DADOS. NÃO É UMA IA DE CONVERSA.
-SUA ÚNICA FUNÇÃO É:
-1. Receber textos/documentos.
-2. Confirmar o recebimento.
-3. NÃO ANALISAR, NÃO RESUMIR, NÃO DAR OPINIÃO JURÍDICA.
-4. SAÍDA OBRIGATÓRIA: Apenas a frase "Recebido. Documentos armazenados. Aguardando próximo comando."
+VOCÊ É UM SISTEMA DE ARMAZENAMENTO DE DADOS E AUDITORIA VISUAL DE ALTA PRECISÃO.
+SUA FUNÇÃO É:
+1. Receber textos/documentos e IMAGENS.
+2. ATENÇÃO: O texto digital enviado no prompt pode estar CORROMPIDO ou ERRADO (camada oculta do PDF). IGNORE-O para as primeiras 5 páginas.
+3. AUDITORIA VISUAL OBRIGATÓRIA: No TRCT, identifique as datas nos Campos 24, 25 e 26 olhando EXCLUSIVAMENTE para a IMAGEM.
+4. ZOOM NO ANO: No Campo 24 (Admissão), verifique se o ano termina em "4" (2024). Não confunda com 2020 ou 2015. Olhe para o formato do dígito.
+5. SAÍDA OBRIGATÓRIA: "Recebido. Documentos armazenados. [Lista de Datas Identificadas Visualmente]. Aguardando próximo comando."
 NÃO GERE MAIS NADA ALÉM DISSO.
 `;
 
@@ -707,6 +736,13 @@ app.post("/api/dr-michel/chat", async (req, res) => {
     6. ANTI-RECITATION: Não repita longos trechos da mensagem do usuário ou de leis. Se o sistema interromper, mude a forma de escrever.
     7. FORMATAÇÃO: Use parágrafos de 4-5 linhas com espaçamento. NUNCA envie blocos de texto únicos.
     8. SE O USUÁRIO PEDIR PARA "CONTINUAR": Retome a redação EXATAMENTE da última palavra que você escreveu na mensagem anterior, sem repetir nada e sem introduções.
+    9. PROTOCOLO DE AUDITORIA VISUAL (ANTI-ERRO):
+       - ATENÇÃO: O texto digital do PDF pode estar ERRADO (camada oculta). IGNORE o texto das primeiras 5 páginas e use APENAS sua visão.
+       - SEMPRE priorize a leitura direta da IMAGEM sobre o texto extraído.
+       - No TRCT, localize os campos numerados: Campo 24 (Admissão), Campo 25 (Aviso Prévio), Campo 26 (Afastamento/Saída).
+       - Verifique o último dígito do ano com atenção redobrada (ex: diferenciar 2024 de 2019).
+       - Se a imagem mostrar uma data e o OCR outra, a IMAGEM é a autoridade final.
+       - Proibido alucinar ou chutar datas inexistentes. Se não estiver claro na imagem, reporte como ilegível.
     Siga isso AGORA.
     `;
 
@@ -853,6 +889,12 @@ app.post("/api/dra-luana/chat", async (req, res) => {
     8. MÉTODO DE ENTREGA: Entregue a peça em blocos de 2000 palavras. Se o usuário disser "CONTINUAR", retome EXATAMENTE de onde parou, sem repetir nada.
     9. BASE NOS CÁLCULOS: Cada verba devida no PDF de cálculos DEVE ter um tópico próprio seguindo o molde: 1º Fato, 2º Fundamento, 3º Conclusão/Valor.
     10. ZERO ALUCINAÇÃO DE DANOS: Se a planilha de cálculo não tiver uma linha com valor para "Dano Moral" ou "Dano Estético", VOCÊ NÃO PODE PEDIR ISSO NA PETIÇÃO. Ignore qualquer menção a sofrimento se não houver valor calculado.
+    11. PROTOCOLO DE AUDITORIA VISUAL (ANTI-ERRO):
+        - ATENÇÃO: O texto digital do PDF pode estar ERRADO (camada oculta). IGNORE o texto das primeiras 5 páginas e use APENAS sua visão.
+        - No TRCT, localize os campos numerados: Campo 24 (Admissão), Campo 25 (Aviso Prévio), Campo 26 (Afastamento/Saída).
+        - Verifique o último dígito do ano com atenção redobrada (ex: diferenciar 2024 de 2019 ou 2015).
+        - Se a imagem mostrar uma data e o OCR outra, a IMAGEM é a autoridade final.
+        - Proibido alucinar ou chutar datas inexistentes. Se não estiver claro na imagem, reporte como ilegível.
     Siga isso AGORA.
     `;
 
