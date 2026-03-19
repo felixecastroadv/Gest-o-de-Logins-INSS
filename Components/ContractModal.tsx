@@ -16,8 +16,8 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
     const [isClientDropdownOpen, setIsClientDropdownOpen] = useState(false);
     const dropdownRef = useRef<HTMLDivElement>(null);
 
-    const sortedClients = [...clients].sort((a, b) => a.name.localeCompare(b.name));
-    const filteredClients = sortedClients.filter(c => c.name.toLowerCase().includes(clientSearchQuery.toLowerCase()));
+    const sortedClients = [...(clients || [])].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const filteredClients = sortedClients.filter(c => (c.name || '').toLowerCase().includes(clientSearchQuery.toLowerCase()));
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -52,7 +52,7 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         if (e.target.name === 'clientId') {
-            const client = clients.find(c => c.id === e.target.value);
+            const client = (clients || []).find(c => c.id === e.target.value);
             if (client) {
                 setFormData({ ...formData, clientId: client.id, firstName: client.name, lastName: '', cpf: client.cpf });
             } else {
@@ -144,7 +144,7 @@ const ContractModal: React.FC<ContractModalProps> = ({ isOpen, onClose, onSave, 
                             >
                                 <span className="truncate">
                                     {formData.clientId 
-                                        ? clients.find(c => c.id === formData.clientId)?.name 
+                                        ? (clients || []).find(c => c.id === formData.clientId)?.name 
                                         : 'Novo Cliente'}
                                 </span>
                                 <ChevronDownIcon className="w-5 h-5 text-slate-400" />
