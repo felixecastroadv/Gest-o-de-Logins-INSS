@@ -8,6 +8,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import Legislation from './Legislation';
+import Jurisprudence from './Jurisprudence';
 import { DashboardProps, ClientRecord, ContractRecord, NotificationItem, AgendaEvent } from '../types';
 import { INITIAL_DATA, INITIAL_CONTRACTS_LIST } from '../data';
 import LaborCalc, { CalculationRecord } from '../LaborCalc';
@@ -50,7 +51,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSettingsSaved,
   onRestoreBackup
 }) => {
-  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda' | 'petition_editor' | 'legislation'>('clients');
+  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda' | 'petition_editor' | 'legislation' | 'jurisprudence'>('clients');
   const [showArchived, setShowArchived] = useState(false);
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
@@ -828,6 +829,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <BookOpenIcon className="h-6 w-6 lg:mr-3" />
                    <span className="hidden lg:block font-medium">Legislação</span>
                </button>
+
+               <button 
+                   onClick={() => setCurrentView('jurisprudence')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'jurisprudence' ? 'bg-cyan-600 shadow-lg shadow-cyan-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <ScaleIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Jurisprudência</span>
+               </button>
            </div>
            
            <div className="p-4 border-t border-slate-800">
@@ -1096,6 +1105,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                         <PaginationControls />
                     </div>
                  </>
+             ) : currentView === 'jurisprudence' ? (
+                 <Jurisprudence />
              ) : (
                  <>
                     <FinancialStats contracts={contracts} />
