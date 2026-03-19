@@ -4,7 +4,8 @@ import {
   ArrowPathRoundedSquareIcon, CloudIcon, BellIcon, Cog6ToothIcon, SunIcon, MoonIcon,
   ArchiveBoxIcon, MagnifyingGlassIcon, PlusIcon, StarIcon, ArrowUturnLeftIcon, 
   PencilSquareIcon, TrashIcon, ExclamationTriangleIcon, ChevronUpIcon, ChevronDownIcon, 
-  ChevronLeftIcon, ChevronRightIcon, CalendarIcon, CheckIcon, BookOpenIcon
+  ChevronLeftIcon, ChevronRightIcon, CalendarIcon, CheckIcon, BookOpenIcon,
+  GlobeAltIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import Legislation from './Legislation';
@@ -37,6 +38,7 @@ import DrMichelFelix from './DrMichelFelix';
 import DraLuanaCastro from './DraLuanaCastro';
 import Agenda from './Agenda';
 import PetitionEditor from './PetitionEditor';
+import MeuINSS from './MeuINSS';
 import { safeSetLocalStorage } from '../utils';
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -51,7 +53,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSettingsSaved,
   onRestoreBackup
 }) => {
-  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda' | 'petition_editor' | 'legislation' | 'jurisprudence'>('clients');
+  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda' | 'petition_editor' | 'legislation' | 'jurisprudence' | 'meu_inss'>('clients');
   const [showArchived, setShowArchived] = useState(false);
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
@@ -837,6 +839,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <ScaleIcon className="h-6 w-6 lg:mr-3" />
                    <span className="hidden lg:block font-medium">Jurisprudência</span>
                </button>
+
+               <button 
+                   onClick={() => setCurrentView('meu_inss')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'meu_inss' ? 'bg-amber-600 shadow-lg shadow-amber-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <GlobeAltIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Meu INSS</span>
+               </button>
            </div>
            
            <div className="p-4 border-t border-slate-800">
@@ -1107,6 +1117,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                  </>
              ) : currentView === 'jurisprudence' ? (
                  <Jurisprudence />
+             ) : currentView === 'meu_inss' ? (
+                 <MeuINSS />
              ) : (
                  <>
                     <FinancialStats contracts={contracts} />
