@@ -15,6 +15,9 @@ const styles = `
   .ProseMirror-selectednode {
     outline: 2px solid #4285f4;
   }
+  .ProseMirror p:has(img) {
+    text-indent: 0 !important;
+  }
 `;
 
 const PasteImageExtension = ResizableImage.extend({
