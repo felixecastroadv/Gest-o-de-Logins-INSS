@@ -11,6 +11,19 @@ export default function KnowledgeBase() {
   const [isSuccess, setIsSuccess] = useState(false);
   const [existingDocs, setExistingDocs] = useState<string[]>([]);
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const suggestedLaws = [
+    "Lei de Benefícios da Previdência Social (Lei nº 8.213/1991)",
+    "Lei Orgânica da Seguridade Social (Lei nº 8.212/1991)",
+    "Lei Orgânica da Assistência Social - LOAS (Lei nº 8.742/1993)",
+    "Lei do FGTS (Lei nº 8.036/1990)",
+    "Lei do Seguro-Desemprego (Lei nº 7.998/1990)",
+    "Lei do Trabalho Doméstico (LC nº 150/2015)",
+    "Reforma Trabalhista (Lei nº 13.467/2017)",
+    "Reforma da Previdência (EC nº 103/2019)",
+    "Regulamento da Previdência Social (Decreto nº 3.048/1999)"
+  ];
 
   useEffect(() => {
     fetchDocs();
@@ -26,6 +39,16 @@ export default function KnowledgeBase() {
     } finally {
       setIsLoadingDocs(false);
     }
+  };
+
+  const filteredDocs = existingDocs.filter(doc => 
+    doc.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const handleSelectSuggested = (law: string) => {
+    setTitle(law);
+    // Scroll to top of form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (docTitle: string) => {
@@ -233,42 +256,72 @@ export default function KnowledgeBase() {
         </div>
       </div>
 
-      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col h-full">
         <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
           <BookOpen className="text-indigo-500" size={20} />
           Documentos na Base
         </h3>
+
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Pesquisar documentos..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full p-2 text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-slate-100"
+          />
+        </div>
         
-        {isLoadingDocs ? (
-          <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-            <Loader2 size={24} className="animate-spin mb-2" />
-            <p className="text-sm">Carregando...</p>
-          </div>
-        ) : existingDocs.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
-            <p className="text-sm">Nenhum documento cadastrado.</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {existingDocs.map((docTitle) => (
-              <div 
-                key={docTitle}
-                className="group flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-lg hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
-              >
-                <span className="text-sm text-slate-700 dark:text-slate-300 font-medium truncate pr-2" title={docTitle}>
-                  {docTitle}
-                </span>
-                <button
-                  onClick={() => handleDelete(docTitle)}
-                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
-                  title="Excluir documento"
+        <div className="flex-1 overflow-y-auto pr-1 max-h-[400px] custom-scrollbar">
+          {isLoadingDocs ? (
+            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+              <Loader2 size={24} className="animate-spin mb-2" />
+              <p className="text-sm">Carregando...</p>
+            </div>
+          ) : filteredDocs.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <p className="text-sm">{searchTerm ? 'Nenhum resultado encontrado.' : 'Nenhum documento cadastrado.'}</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredDocs.map((docTitle) => (
+                <div 
+                  key={docTitle}
+                  className="group flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-lg hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
                 >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+                  <span className="text-sm text-slate-700 dark:text-slate-300 font-medium truncate pr-2" title={docTitle}>
+                    {docTitle}
+                  </span>
+                  <button
+                    onClick={() => handleDelete(docTitle)}
+                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                    title="Excluir documento"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 pt-6 border-t border-slate-100 dark:border-slate-800">
+          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Leis Sugeridas para Adicionar</h4>
+          <div className="space-y-2">
+            {suggestedLaws.filter(law => !existingDocs.includes(law)).slice(0, 5).map(law => (
+              <button
+                key={law}
+                onClick={() => handleSelectSuggested(law)}
+                className="w-full text-left p-2 text-xs bg-indigo-50/50 dark:bg-indigo-900/10 text-indigo-600 dark:text-indigo-400 rounded border border-indigo-100 dark:border-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-900/20 transition-colors truncate"
+              >
+                + {law}
+              </button>
             ))}
+            {suggestedLaws.filter(law => !existingDocs.includes(law)).length === 0 && (
+              <p className="text-xs text-slate-400 italic">Todas as leis sugeridas já estão na base.</p>
+            )}
           </div>
-        )}
+        </div>
       </div>
     </div>
   );
