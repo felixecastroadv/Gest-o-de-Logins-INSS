@@ -175,14 +175,19 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
       TableHeader,
       TableCell,
     ],
-    content: initialPetition?.content || '',
     editorProps: {
       attributes: {
-        class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[1122px] w-[794px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xl border border-slate-200 dark:border-slate-800 rounded-sm mb-20 [&_blockquote]:ml-[4cm] [&_blockquote]:text-sm [&_blockquote]:border-none [&_blockquote]:italic [&_blockquote]:text-slate-700 dark:[&_blockquote]:text-slate-700 font-serif [&_p]:indent-[2cm] [&_p.no-indent]:indent-0',
+        class: 'prose prose-sm sm:prose lg:prose-lg xl:prose-2xl mx-auto focus:outline-none min-h-[1122px] w-[794px] bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-2xl border border-slate-200 dark:border-slate-800 rounded-sm mb-20 [&_blockquote]:ml-[4cm] [&_blockquote]:text-sm [&_blockquote]:border-none [&_blockquote]:italic [&_blockquote]:text-slate-700 dark:[&_blockquote]:text-slate-700 font-serif [&_p]:indent-[2cm] [&_p.no-indent]:indent-0 whitespace-pre-wrap',
         style: `font-family: "Times New Roman", Times, serif; line-height: 1.5; padding: ${topBottomMargin} ${leftRightMargin};`,
       },
     },
   });
+
+  useEffect(() => {
+    if (editor && initialPetition?.content) {
+      editor.commands.setContent(initialPetition.content);
+    }
+  }, [editor, initialPetition]);
 
   useEffect(() => {
     const style = document.createElement('style');
