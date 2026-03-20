@@ -9,6 +9,11 @@ interface Law {
   category: string;
 }
 
+interface LegislationProps {
+  customLaws: Law[];
+  onSaveCustomLaws: (laws: Law[]) => void;
+}
+
 const INITIAL_LAWS: Law[] = [
   {
     id: 'cf88',
@@ -159,32 +164,15 @@ const INITIAL_LAWS: Law[] = [
   }
 ];
 
-const Legislation: React.FC = () => {
+const Legislation: React.FC<LegislationProps> = ({ customLaws, onSaveCustomLaws }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [selectedLaw, setSelectedLaw] = useState<Law | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
 
-  // Custom laws state
-  const [customLaws, setCustomLaws] = useState<Law[]>(() => {
-    const saved = localStorage.getItem('customLaws');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return [];
-      }
-    }
-    return [];
-  });
-
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newLaw, setNewLaw] = useState({ title: '', description: '', link: '', category: 'Outros' });
-
-  useEffect(() => {
-    localStorage.setItem('customLaws', JSON.stringify(customLaws));
-  }, [customLaws]);
 
   const allLaws = [...INITIAL_LAWS, ...customLaws];
   const categories = ['Todas', ...Array.from(new Set(allLaws.map(law => law.category)))];
@@ -208,7 +196,7 @@ const Legislation: React.FC = () => {
       category: newLaw.category || 'Outros'
     };
 
-    setCustomLaws([...customLaws, lawToAdd]);
+    onSaveCustomLaws([...customLaws, lawToAdd]);
     setIsModalOpen(false);
     setNewLaw({ title: '', description: '', link: '', category: 'Outros' });
   };
@@ -216,7 +204,7 @@ const Legislation: React.FC = () => {
   const handleDeleteCustomLaw = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (window.confirm('Tem certeza que deseja remover esta lei personalizada?')) {
-      setCustomLaws(customLaws.filter(law => law.id !== id));
+      onSaveCustomLaws(customLaws.filter(law => law.id !== id));
     }
   };
 
@@ -229,6 +217,7 @@ const Legislation: React.FC = () => {
       case 'Trabalhista':
         return 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400';
       case 'Previdenciário':
+      case 'Previdenciária':
         return 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400';
       case 'Instruções Normativas':
         return 'bg-slate-100 dark:bg-slate-900/30 text-slate-700 dark:text-slate-400';
