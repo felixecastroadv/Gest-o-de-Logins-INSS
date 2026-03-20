@@ -972,11 +972,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                  <DrMichelFelix 
                     initialSessions={drMichelSessions} 
                     onSaveSessions={handleSaveDrMichelSessions} 
+                    onOpenPetition={handleOpenPetition}
                   />
              ) : currentView === 'dra_luana' ? (
                  <DraLuanaCastro 
                     initialSessions={draLuanaSessions} 
                     onSaveSessions={handleSaveDraLuanaSessions} 
+                    onOpenPetition={handleOpenPetition}
                   />
              ) : currentView === 'legislation' ? (
                   <Legislation customLaws={customLaws} onSaveCustomLaws={handleSaveCustomLaws} />
