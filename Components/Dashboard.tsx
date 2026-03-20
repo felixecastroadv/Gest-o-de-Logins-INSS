@@ -644,6 +644,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         isReferral: true,
         referrerName,
         referrerPercentage,
+        totalFee,
     };
     
     const updatedClients = records.map(r => r.id === clientId ? updatedClient : r);
@@ -1092,6 +1093,13 @@ const Dashboard: React.FC<DashboardProps> = ({
                                         <th className="px-4 py-3.5 text-center w-14 font-bold text-slate-600 dark:text-slate-400">★</th>
                                         <ThSortable label="Nome" columnKey="name" />
                                         <ThSortable label="CPF" columnKey="cpf" />
+                                        {clientFilter === 'referral' && (
+                                            <>
+                                                <ThSortable label="Indicador" columnKey="referrerName" />
+                                                <ThSortable label="Honorários" columnKey="totalFee" />
+                                                <ThSortable label="%" columnKey="referrerPercentage" />
+                                            </>
+                                        )}
                                         <th className="px-4 py-3.5 font-bold text-slate-700 dark:text-slate-300">Senha</th>
                                         <ThSortable label="Tipo" columnKey="type" />
                                         <ThSortable label="DER" columnKey="der" />
@@ -1107,7 +1115,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                                     {paginatedList.length === 0 ? (
                                         <tr>
-                                            <td colSpan={13} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
+                                            <td colSpan={clientFilter === 'referral' ? 16 : 13} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
                                                 Nenhum cliente encontrado {clientFilter === 'archived' ? 'nos arquivos' : ''}.
                                             </td>
                                         </tr>
@@ -1139,6 +1147,15 @@ const Dashboard: React.FC<DashboardProps> = ({
                                                         <CopyButton text={record.cpf} />
                                                     </div>
                                                 </td>
+                                                {clientFilter === 'referral' && (
+                                                    <>
+                                                        <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{record.referrerName || '-'}</td>
+                                                        <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
+                                                            {record.totalFee ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(record.totalFee) : '-'}
+                                                        </td>
+                                                        <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{record.referrerPercentage ? `${record.referrerPercentage}%` : '-'}</td>
+                                                    </>
+                                                )}
                                                 <td className="px-4 py-3">
                                                     <div className="flex items-center gap-2">
                                                         <span className="font-mono text-xs bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded">{record.password}</span>
