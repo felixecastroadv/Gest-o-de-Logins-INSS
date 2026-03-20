@@ -64,7 +64,7 @@ import {
   Bold, Italic, Underline as UnderlineIcon, Strikethrough, AlignLeft, AlignCenter, AlignRight, AlignJustify,
   List, ListOrdered, Quote, Undo, Redo, Image as ImageIcon, Table as TableIcon, Save, 
   Trash2, Layout, ChevronLeft, ChevronDown, Search, Plus, FileDown, User, X, Settings, Palette, Scale,
-  Phone, Mail, Instagram, Upload, Check, FileText as FileTextIcon, Printer
+  Phone, Mail, Instagram, Upload, Check, FileText as FileTextIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -562,12 +562,6 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
               <FileDown className="w-4 h-4 text-red-500" /> Baixar PDF Direto (KB)
             </button>
             <button 
-              onClick={() => window.print()}
-              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-bold transition"
-            >
-              <Printer className="w-4 h-4 text-indigo-500" /> Imprimir
-            </button>
-            <button 
               onClick={() => setIsHeaderFooterModalOpen(true)}
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-bold transition"
             >
@@ -582,9 +576,6 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
               className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-sm font-bold transition"
             >
               <Trash2 className="w-4 h-4 text-orange-500" /> Limpar Editor
-            </button>
-            <button className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-red-600 rounded-lg text-sm font-bold transition">
-              <Trash2 className="w-4 h-4" /> Deletar
             </button>
           </div>
 
