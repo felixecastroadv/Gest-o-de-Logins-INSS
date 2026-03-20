@@ -19,6 +19,15 @@ export interface AgendaEvent {
   resolvedAt?: string;
 }
 
+export interface Petition {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+  type: 'model' | 'concrete';
+  lastModified: string;
+}
+
 export interface ClientRecord {
   id: string;
   name: string;
@@ -47,7 +56,12 @@ export interface ClientRecord {
   isDailyAttention?: boolean;
   isUrgentAttention?: boolean;
   isArchived?: boolean;
+  isReferral?: boolean;
+  referrerName?: string;
+  referrerPercentage?: number;
+  totalFee?: number;
   documents?: ScannedDocument[];
+  petitions?: Petition[];
 }
 
 export enum UserRole {
@@ -123,6 +137,7 @@ export interface RecordModalProps {
   onSave: (record: ClientRecord) => void;
   initialData?: ClientRecord | null;
   onOpenScanner?: () => void;
+  onOpenPetition?: (petition: Petition) => void;
 }
 
 export interface MonthlyDetailsModalProps {
