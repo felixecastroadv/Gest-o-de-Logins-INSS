@@ -44,11 +44,12 @@ interface ChatSession {
 interface DrMichelFelixProps {
   initialSessions?: ChatSession[];
   onSaveSessions?: (sessions: ChatSession[]) => void;
+  onOpenPetition?: (petition: { title: string; content: string }) => void;
 }
 
 const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSessions }) => {
+const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSessions, onOpenPetition }) => {
   const [sessions, setSessions] = useState<ChatSession[]>(initialSessions || []);
   const [isLoaded, setIsLoaded] = useState(false);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
@@ -640,6 +641,21 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
     }
   };
 
+  const handleOpenInEditor = (content: string) => {
+    if (onOpenPetition) {
+      // Convert newlines to paragraphs to ensure formatting is preserved in the editor
+      const formattedContent = content
+        .split('\n')
+        .map(line => line.trim() ? `<p>${line}</p>` : '<p>&nbsp;</p>')
+        .join('');
+
+      onOpenPetition({
+        title: `Petição Dr. Michel - ${new Date().toLocaleDateString('pt-BR')}`,
+        content: formattedContent
+      });
+    }
+  };
+
   const filteredSessions = sessions.filter(s => 
     s.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -838,13 +854,24 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
                           {copiedId === msg.id ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4 text-slate-400" />}
                         </button>
                       )}
-                      {msg.role === 'assistant' && (msg.content || '').includes('PETIÇÃO') && (
-                        <button 
-                          onClick={() => generateDocx(msg.content || '')}
-                          className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors shadow-sm"
-                        >
-                          <Download className="w-4 h-4" /> Baixar em Word (.docx)
-                        </button>
+                      {msg.role === 'assistant' && (
+                        /petição|reclamação|excelentíssimo|ao juízo|inicial|contestação|recurso|vossa excelência/i.test(msg.content || '') || 
+                        (msg.content || '').length > 1000
+                      ) && (
+                        <div className="flex flex-wrap gap-2 ml-2">
+                          <button 
+                            onClick={() => generateDocx(msg.content || '')}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-[10px] font-bold text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors shadow-sm"
+                          >
+                            <Download className="w-3.5 h-3.5" /> Baixar Word
+                          </button>
+                          <button 
+                            onClick={() => handleOpenInEditor(msg.content || '')}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-colors shadow-sm"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" /> Abrir no Editor
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
