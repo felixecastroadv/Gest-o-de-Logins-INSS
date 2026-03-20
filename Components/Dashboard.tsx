@@ -27,6 +27,7 @@ import { supabaseService } from '../services/supabaseService';
 import { isUrgentDate, formatCurrency } from '../utils';
 import { parseISO, differenceInDays, startOfDay } from 'date-fns';
 import StatsCards from './StatsCards';
+import ReferralModal from './ReferralModal';
 import FinancialStats from './FinancialStats';
 import RecordModal from './RecordModal';
 import ContractModal from './ContractModal';
@@ -39,6 +40,7 @@ import DraLuanaCastro from './DraLuanaCastro';
 import Agenda from './Agenda';
 import PetitionEditor from './PetitionEditor';
 import MeuINSS from './MeuINSS';
+import KnowledgeBase from './KnowledgeBase';
 import { safeSetLocalStorage } from '../utils';
 
 const Dashboard: React.FC<DashboardProps> = ({ 
@@ -53,8 +55,8 @@ const Dashboard: React.FC<DashboardProps> = ({
   onSettingsSaved,
   onRestoreBackup
 }) => {
-  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda' | 'petition_editor' | 'legislation' | 'jurisprudence' | 'meu_inss'>('clients');
-  const [showArchived, setShowArchived] = useState(false);
+  const [currentView, setCurrentView] = useState<'clients' | 'contracts' | 'labor_calc' | 'social_calc' | 'dr_michel' | 'dra_luana' | 'agenda' | 'petition_editor' | 'legislation' | 'jurisprudence' | 'meu_inss' | 'knowledge_base'>('clients');
+  const [clientFilter, setClientFilter] = useState<'active' | 'archived' | 'referral'>('active');
 
   const [records, setRecords] = useState<ClientRecord[]>([]);
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
@@ -74,6 +76,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [isContractModalOpen, setIsContractModalOpen] = useState(false);
   const [currentContract, setCurrentContract] = useState<ContractRecord | null>(null);
   
+  const [isReferralModalOpen, setIsReferralModalOpen] = useState(false);
   const [isAgendaModalOpen, setIsAgendaModalOpen] = useState(false);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -264,7 +267,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, itemsPerPage, currentView, showArchived]);
+  }, [searchTerm, itemsPerPage, currentView, clientFilter]);
 
   // Compute Alerts
   const activeAlerts = useMemo(() => {
@@ -603,6 +606,21 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
   };
 
+  const handleSaveReferral = async (clientId: string, referrerName: string, referrerPercentage: number, totalFee: number) => {
+    const client = records.find(r => r.id === clientId);
+    if (!client) return;
+    
+    const updatedClient = {
+        ...client,
+        isReferral: true,
+        referrerName,
+        referrerPercentage,
+    };
+    
+    const updatedClients = records.map(r => r.id === clientId ? updatedClient : r);
+    saveData('clients', updatedClients);
+  };
+
   const handleOpenPetition = (petition: any) => {
       setActivePetition(petition);
       setCurrentView('petition_editor');
@@ -631,7 +649,7 @@ const Dashboard: React.FC<DashboardProps> = ({
           return records.filter(r => 
             ((r.name && r.name.toLowerCase().includes(lowerSearch)) ||
             (r.cpf && r.cpf.includes(lowerSearch))) &&
-            (showArchived ? r.isArchived : !r.isArchived)
+            (clientFilter === 'archived' ? r.isArchived : clientFilter === 'referral' ? r.isReferral : !r.isArchived && !r.isReferral)
           ).sort((a, b) => {
               // Priority: Red (Urgent) > Yellow (Daily) > None
               const aScore = (a.isUrgentAttention ? 2 : 0) + (a.isDailyAttention ? 1 : 0);
@@ -847,6 +865,14 @@ const Dashboard: React.FC<DashboardProps> = ({
                    <GlobeAltIcon className="h-6 w-6 lg:mr-3" />
                    <span className="hidden lg:block font-medium">Meu INSS</span>
                </button>
+
+               <button 
+                   onClick={() => setCurrentView('knowledge_base')}
+                   className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'knowledge_base' ? 'bg-indigo-600 shadow-lg shadow-indigo-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
+               >
+                   <BookOpenIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium">Base de Conhecimento</span>
+               </button>
            </div>
            
            <div className="p-4 border-t border-slate-800">
@@ -879,6 +905,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                       currentView === 'dr_michel' ? 'Dr. Michel Felix - IA Jurídica' :
                       currentView === 'dra_luana' ? 'Dra. Luana Castro - IA Trabalhista' :
                       currentView === 'agenda' ? 'Agenda' :
+                      currentView === 'knowledge_base' ? 'Base de Conhecimento' :
                       'Cálculos Previdenciários'}
                  </h2>
                  {isSyncing ? (
@@ -971,15 +998,22 @@ const Dashboard: React.FC<DashboardProps> = ({
                          {/* Toggle Tabs */}
                          <div className="flex bg-slate-200 dark:bg-slate-800 p-1 rounded-xl w-fit">
                             <button 
-                                onClick={() => setShowArchived(false)} 
-                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${!showArchived ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                onClick={() => setClientFilter('active')} 
+                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${clientFilter === 'active' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                             >
                                 <UserGroupIcon className="h-4 w-4" />
                                 Ativos
                             </button>
                             <button 
-                                onClick={() => setShowArchived(true)} 
-                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${showArchived ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                                onClick={() => setClientFilter('referral')} 
+                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${clientFilter === 'referral' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                            >
+                                <StarIcon className="h-4 w-4" />
+                                Indicações
+                            </button>
+                            <button 
+                                onClick={() => setClientFilter('archived')} 
+                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition flex items-center gap-2 ${clientFilter === 'archived' ? 'bg-white dark:bg-slate-700 shadow-sm text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                             >
                                 <ArchiveBoxIcon className="h-4 w-4" />
                                 Arquivados
@@ -993,19 +1027,28 @@ const Dashboard: React.FC<DashboardProps> = ({
                                 </div>
                                 <input
                                 type="text"
-                                placeholder={showArchived ? "Buscar em arquivados..." : "Buscar cliente por nome ou CPF..."}
+                                placeholder={clientFilter === 'archived' ? "Buscar em arquivados..." : "Buscar cliente por nome ou CPF..."}
                                 className="pl-11 pr-4 py-3 w-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white rounded-xl focus:ring-2 focus:ring-primary-500 outline-none shadow-sm transition-all"
                                 value={searchTerm}
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 />
                             </div>
-                            {!showArchived && (
+                            {clientFilter === 'active' && (
                                 <button
                                     onClick={() => { setCurrentRecord(null); setIsModalOpen(true); }}
                                     className="bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-primary-500/25 flex items-center gap-2"
                                 >
                                     <PlusIcon className="h-5 w-5" />
                                     Novo Processo
+                                </button>
+                            )}
+                            {clientFilter === 'referral' && (
+                                <button
+                                    onClick={() => setIsReferralModalOpen(true)}
+                                    className="bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-primary-500/25 flex items-center gap-2"
+                                >
+                                    <PlusIcon className="h-5 w-5" />
+                                    Nova Indicação
                                 </button>
                             )}
                         </div>
@@ -1036,7 +1079,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                     {paginatedList.length === 0 ? (
                                         <tr>
                                             <td colSpan={13} className="px-4 py-8 text-center text-slate-500 dark:text-slate-400">
-                                                Nenhum cliente encontrado {showArchived ? 'nos arquivos' : ''}.
+                                                Nenhum cliente encontrado {clientFilter === 'archived' ? 'nos arquivos' : ''}.
                                             </td>
                                         </tr>
                                     ) : paginatedList.map((record: any) => {
@@ -1085,7 +1128,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                                                 {renderDateCell(record.securityMandateDate, record.id, '_mand')}
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex justify-end gap-1">
-                                                        {!showArchived ? (
+                                                        {clientFilter !== 'archived' ? (
                                                             <button 
                                                                 onClick={() => handleToggleArchive(record.id)} 
                                                                 className="p-1.5 text-slate-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded"
@@ -1119,6 +1162,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                  <Jurisprudence />
              ) : currentView === 'meu_inss' ? (
                  <MeuINSS />
+             ) : currentView === 'knowledge_base' ? (
+                 <KnowledgeBase />
              ) : (
                  <>
                     <FinancialStats contracts={contracts} />
@@ -1241,6 +1286,12 @@ const Dashboard: React.FC<DashboardProps> = ({
             onClose={() => setIsNotificationsOpen(false)}
             notifications={activeAlerts}
             onResolve={handleResolveAlert}
+        />
+        <ReferralModal 
+            isOpen={isReferralModalOpen} 
+            onClose={() => setIsReferralModalOpen(false)} 
+            onSave={handleSaveReferral} 
+            clients={records.filter(r => !r.isReferral)} 
         />
         <AgendaModal 
             isOpen={isAgendaModalOpen}
