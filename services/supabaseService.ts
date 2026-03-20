@@ -284,5 +284,24 @@ export const supabaseService = {
       console.error('Error deleting legal document from Supabase:', error);
       throw error;
     }
+  },
+
+  async getLegalDocumentTitles(): Promise<string[]> {
+    if (!supabase) return [];
+    
+    // Select unique titles from metadata
+    const { data, error } = await supabase
+      .from('legal_documents')
+      .select('metadata->title')
+      .order('metadata->title', { ascending: true });
+      
+    if (error) {
+      console.error('Error fetching legal document titles from Supabase:', error);
+      return [];
+    }
+    
+    // Filter unique titles manually since Supabase select distinct on jsonb field is tricky
+    const titles = (data || []).map(item => String(item.title));
+    return [...new Set(titles)].filter(Boolean);
   }
 };
