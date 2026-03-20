@@ -5,7 +5,7 @@ import {
   ArchiveBoxIcon, MagnifyingGlassIcon, PlusIcon, StarIcon, ArrowUturnLeftIcon, 
   PencilSquareIcon, TrashIcon, ExclamationTriangleIcon, ChevronUpIcon, ChevronDownIcon, 
   ChevronLeftIcon, ChevronRightIcon, CalendarIcon, CheckIcon, BookOpenIcon,
-  GlobeAltIcon
+  GlobeAltIcon, AcademicCapIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import Legislation from './Legislation';
@@ -66,6 +66,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [draLuanaSessions, setDraLuanaSessions] = useState<any[]>([]);
   const [agendaEvents, setAgendaEvents] = useState<AgendaEvent[]>([]);
   const [resolvedAlerts, setResolvedAlerts] = useState<string[]>([]);
+  const [customLaws, setCustomLaws] = useState<any[]>([]);
   
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -132,6 +133,10 @@ const Dashboard: React.FC<DashboardProps> = ({
         let fetchedAgendaEvents = localAgenda ? JSON.parse(localAgenda) : [];
         setAgendaEvents(Array.isArray(fetchedAgendaEvents) ? fetchedAgendaEvents : []);
 
+        const localLaws = localStorage.getItem('custom_laws');
+        let fetchedLaws = localLaws ? JSON.parse(localLaws) : [];
+        setCustomLaws(Array.isArray(fetchedLaws) ? fetchedLaws : []);
+
         if (supabase) {
             // Cloud Fetch with Timeout Resilience
             const fetchWithTimeout = async (id: number) => {
@@ -162,8 +167,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                 supabaseService.getLaborCalculations().catch(() => null),
                 supabaseService.getCalculations().catch(() => null),
                 fetchWithTimeout(7),
-                fetchWithTimeout(8)
-            ]).then(([cData, conData, labData, socData, agendaData, resData]) => {
+                fetchWithTimeout(8),
+                fetchWithTimeout(9)
+            ]).then(([cData, conData, labData, socData, agendaData, resData, lawsData]) => {
                 let partialSync = false;
 
                 if (cData && Array.isArray(cData)) {
@@ -194,6 +200,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                 if (resData) {
                     setResolvedAlerts(resData);
                     safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(resData));
+                }
+
+                if (lawsData && Array.isArray(lawsData)) {
+                    setCustomLaws(lawsData);
+                    safeSetLocalStorage('custom_laws', JSON.stringify(lawsData));
                 }
 
                 if (partialSync) {
@@ -242,6 +253,11 @@ const Dashboard: React.FC<DashboardProps> = ({
                                  setResolvedAlerts(payload.new.data);
                                  safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(payload.new.data));
                              }
+                         } else if (payload.new.id === 9) {
+                             if (Array.isArray(payload.new.data)) {
+                                 setCustomLaws(payload.new.data);
+                                 safeSetLocalStorage('custom_laws', JSON.stringify(payload.new.data));
+                             }
                          }
                      }
                 }
@@ -268,6 +284,19 @@ const Dashboard: React.FC<DashboardProps> = ({
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, itemsPerPage, currentView, clientFilter]);
+
+  const handleSaveCustomLaws = (newLaws: any[]) => {
+    setCustomLaws(newLaws);
+    safeSetLocalStorage('custom_laws', JSON.stringify(newLaws));
+    if (isCloudConfigured) {
+        const supabase = initSupabase();
+        if (supabase) {
+            supabase.from('clients').upsert({ id: 9, data: newLaws }).then(({ error }) => {
+                if (error) console.error("Error syncing laws:", error);
+            });
+        }
+    }
+  };
 
   // Compute Alerts
   const activeAlerts = useMemo(() => {
@@ -870,8 +899,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                    onClick={() => setCurrentView('knowledge_base')}
                    className={`w-full flex items-center p-3 rounded-xl transition-all duration-200 group ${currentView === 'knowledge_base' ? 'bg-indigo-600 shadow-lg shadow-indigo-500/30' : 'hover:bg-slate-800 text-slate-400 hover:text-white'}`}
                >
-                   <BookOpenIcon className="h-6 w-6 lg:mr-3" />
-                   <span className="hidden lg:block font-medium">Base de Conhecimento</span>
+                   <AcademicCapIcon className="h-6 w-6 lg:mr-3" />
+                   <span className="hidden lg:block font-medium whitespace-nowrap">Base de Conhecimento</span>
                </button>
            </div>
            
@@ -947,8 +976,8 @@ const Dashboard: React.FC<DashboardProps> = ({
                     onSaveSessions={handleSaveDraLuanaSessions} 
                   />
              ) : currentView === 'legislation' ? (
-                <Legislation />
-            ) : currentView === 'agenda' ? (
+                  <Legislation customLaws={customLaws} onSaveCustomLaws={handleSaveCustomLaws} />
+             ) : currentView === 'agenda' ? (
                  <Agenda 
                     events={agendaEvents}
                     clients={records}
