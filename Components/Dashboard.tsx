@@ -378,33 +378,30 @@ const Dashboard: React.FC<DashboardProps> = ({
               safeSetLocalStorage('inss_records', JSON.stringify(newData));
               if (supabase) {
                   // Background sync for large payloads
-                  supabase.from('clients').upsert({ id: 1, data: newData }).then(({ error }) => {
-                      if (error) {
-                          console.error("Sync error (clients):", error);
-                          setSaveError("Erro de sincronização (Clientes).");
-                      }
-                      setIsSyncing(false);
-                  });
+                  const { error } = await supabase.from('clients').upsert({ id: 1, data: newData });
+                  if (error) {
+                      console.error("Sync error (clients):", error);
+                      setSaveError("Erro de sincronização (Clientes).");
+                  }
+                  setIsSyncing(false);
                   return;
               }
           } else if (type === 'contracts') {
               setContracts(newData);
               safeSetLocalStorage('inss_contracts', JSON.stringify(newData));
               if (supabase) {
-                  supabase.from('clients').upsert({ id: 2, data: newData }).then(({ error }) => {
-                      if (error) console.error("Sync error (contracts):", error);
-                      setIsSyncing(false);
-                  });
+                  const { error } = await supabase.from('clients').upsert({ id: 2, data: newData });
+                  if (error) console.error("Sync error (contracts):", error);
+                  setIsSyncing(false);
                   return;
               }
           } else if (type === 'calculations') {
               setSavedCalculations(newData);
               safeSetLocalStorage('inss_calculations', JSON.stringify(newData));
               if (supabase) {
-                  supabase.from('clients').upsert({ id: 3, data: newData }).then(({ error }) => {
-                      if (error) console.error("Sync error (calculations):", error);
-                      setIsSyncing(false);
-                  });
+                  const { error } = await supabase.from('clients').upsert({ id: 3, data: newData });
+                  if (error) console.error("Sync error (calculations):", error);
+                  setIsSyncing(false);
                   return;
               }
           } else if (type === 'social_calculations') {
@@ -635,21 +632,26 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
   };
 
-  const handleSaveReferral = async (clientId: string, referrerName: string, referrerPercentage: number, totalFee: number) => {
-    const client = records.find(r => r.id === clientId);
-    if (!client) return;
-    
-    const updatedClient = {
-        ...client,
-        isReferral: true,
-        referrerName,
-        referrerPercentage,
-        totalFee,
+    const handleSaveReferral = async (clientId: string, referrerName: string, referrerPercentage: number, totalFee: number) => {
+        const client = records.find(r => r.id === clientId);
+        if (!client) return;
+        
+        const updatedClient = {
+            ...client,
+            isReferral: true,
+            referrerName,
+            referrerPercentage,
+            totalFee,
+        };
+        
+        const updatedClients = records.map(r => r.id === clientId ? updatedClient : r);
+        
+        // Update state immediately for UI responsiveness
+        setRecords(updatedClients);
+        
+        // Persist to storage
+        await saveData('clients', updatedClients);
     };
-    
-    const updatedClients = records.map(r => r.id === clientId ? updatedClient : r);
-    saveData('clients', updatedClients);
-  };
 
   const handleOpenPetition = (petition: any) => {
       setActivePetition(petition);
