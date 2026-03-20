@@ -8,51 +8,26 @@ import Paragraph from '@tiptap/extension-paragraph';
 import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import { ResizableImage } from 'tiptap-extension-resizable-image';
+import 'tiptap-extension-resizable-image/styles.css';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 
 const styles = `
   .ProseMirror-selectednode {
     outline: 2px solid #4285f4;
   }
-  .resizable-image-handle {
-    width: 10px;
-    height: 10px;
-    background: #4285f4;
-    border-radius: 50%;
-    cursor: nwse-resize;
-  }
 `;
 
 const PasteImageExtension = ResizableImage.extend({
   selectable: true,
-  addProseMirrorPlugins() {
-    return [
-      new Plugin({
-        key: new PluginKey('pasteImage'),
-        props: {
-          handlePaste(view, event, slice) {
-            const items = Array.from(event.clipboardData?.items || []);
-            const image = items.find(item => item.type.indexOf('image') === 0);
-
-            if (image) {
-              event.preventDefault();
-              const file = image.getAsFile();
-              if (file) {
-                const reader = new FileReader();
-                reader.onload = (readerEvent) => {
-                  const node = view.state.schema.nodes.image.create({ src: readerEvent.target?.result });
-                  const transaction = view.state.tr.replaceSelectionWith(node);
-                  view.dispatch(transaction);
-                };
-                reader.readAsDataURL(file);
-              }
-              return true;
-            }
-            return false;
-          },
-        },
-      }),
-    ];
+}).configure({
+  onUpload: (file: File) => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (readerEvent) => {
+        resolve({ src: readerEvent.target?.result as string });
+      };
+      reader.readAsDataURL(file);
+    });
   },
 });
 
@@ -703,7 +678,7 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
             <ToolbarButton 
               onClick={() => {
                 const url = window.prompt('URL da imagem:');
-                if (url) editor.chain().focus().insertContent({ type: 'resizableImage', attrs: { src: url } }).run();
+                if (url) editor.chain().focus().insertContent({ type: 'image', attrs: { src: url } }).run();
               }}
               icon={<ImageIcon className="w-4 h-4" />}
             />
