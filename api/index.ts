@@ -669,7 +669,109 @@ async function callGeminiStream(params: any, retries = 30, modelIndex = 0, failu
   }
 }
 
+async function callGeminiEmbed(text: string, retries = 30): Promise<number[]> {
+  const keys = getApiKeys();
+  if (keys.length === 0) throw new Error("Nenhuma chave de API encontrada. Configure API_KEY_1, API_KEY_2, etc. na Vercel.");
+
+  const apiKey = keys[currentKeyIndex % keys.length];
+  const ai = new GoogleGenAI({ apiKey });
+
+  try {
+    const result = await ai.models.embedContent({
+      model: 'gemini-embedding-2-preview',
+      contents: [text],
+      config: {
+        outputDimensionality: 768
+      }
+    });
+    return result.embeddings?.[0]?.values || [];
+  } catch (error: any) {
+    const errorMessage = error.message || String(error);
+    console.error(`Erro ao gerar embedding com a chave ${currentKeyIndex}:`, errorMessage);
+    
+    // Rotate key
+    currentKeyIndex = (currentKeyIndex + 1) % keys.length;
+    
+    if (retries > 0) {
+      // If we hit a 429, we should wait longer. Let's extract retryDelay if present, or default to 5 seconds.
+      let delay = 2000;
+      if (errorMessage.includes("429") || errorMessage.includes("Quota exceeded") || errorMessage.includes("RESOURCE_EXHAUSTED")) {
+         delay = 10000; // Wait 10 seconds on quota errors before trying the next key
+         const match = errorMessage.match(/retry in (\d+\.?\d*)s/);
+         if (match && match[1]) {
+             delay = Math.min(parseFloat(match[1]) * 1000 + 1000, 65000); // Max 65s wait
+         }
+      }
+
+      console.log(`Aguardando ${delay}ms antes de tentar novamente com a próxima chave... (${retries} tentativas restantes)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return callGeminiEmbed(text, retries - 1);
+    }
+    throw error;
+  }
+}
+
 // API Routes
+app.post("/api/rag/process", async (req, res) => {
+  try {
+    const { text, metadata } = req.body;
+    if (!text) return res.status(400).json({ error: "Text is required" });
+
+    // Simple chunking strategy: split by paragraphs, then combine up to ~1000 characters
+    const paragraphs = text.split(/\n\s*\n/);
+    const chunks: string[] = [];
+    let currentChunk = "";
+
+    for (const p of paragraphs) {
+      if (currentChunk.length + p.length > 1000 && currentChunk.length > 0) {
+        chunks.push(currentChunk.trim());
+        currentChunk = "";
+      }
+      currentChunk += p + "\n\n";
+    }
+    if (currentChunk.trim().length > 0) {
+      chunks.push(currentChunk.trim());
+    }
+
+    const processedChunks = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      if (!chunk.trim()) continue;
+      
+      // Delay to avoid hitting rate limits too fast (100 requests per minute = ~1.6 requests per second)
+      // Let's add a 1-second delay between chunks, or 500ms if we have multiple keys.
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 600)); // 600ms delay
+      }
+
+      const embedding = await callGeminiEmbed(chunk);
+      processedChunks.push({
+        content: chunk,
+        metadata: metadata || {},
+        embedding
+      });
+    }
+
+    res.json({ chunks: processedChunks });
+  } catch (error: any) {
+    console.error("Error processing RAG:", error);
+    res.status(500).json({ error: error.message || "Failed to process text for RAG" });
+  }
+});
+
+app.post("/api/rag/embed", async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ error: "Text is required" });
+
+    const embedding = await callGeminiEmbed(text);
+    res.json({ embedding });
+  } catch (error: any) {
+    console.error("Error generating embedding:", error);
+    res.status(500).json({ error: error.message || "Failed to generate embedding" });
+  }
+});
+
 app.post("/api/analyze-cnis", async (req, res) => {
   try {
     const { cnisContent } = req.body;
@@ -704,7 +806,7 @@ NÃO GERE MAIS NADA ALÉM DISSO.
 
 app.post("/api/dr-michel/chat", async (req, res) => {
   try {
-    const { message, history, images } = req.body;
+    const { message, history, images, ragContext } = req.body;
     
     // DETECÇÃO DE INTENÇÃO (TROCA DE CÉREBRO)
     const isStorageRequest = message.includes("INSTRUÇÃO OBRIGATÓRIA: Apenas armazene") || 
@@ -754,7 +856,18 @@ app.post("/api/dr-michel/chat", async (req, res) => {
       parts: [{ text: h.content }]
     }));
 
-    const currentMessageParts: any[] = [{ text: message + "\n\n" + REINFORCEMENT_PROMPT }];
+    let finalMessage = message + "\n\n" + REINFORCEMENT_PROMPT;
+    if (ragContext) {
+      finalMessage += `\n\n[INFORMAÇÃO DA BASE DE CONHECIMENTO (RAG)]
+ATENÇÃO MÁXIMA: A legislação/jurisprudência abaixo foi extraída da nossa base de dados oficial. 
+Você DEVE basear sua resposta ESTRITAMENTE no texto abaixo. Se a lei abaixo disser algo diferente do seu conhecimento prévio, a lei abaixo PREVALECE (ex: se a lei diz que tem fator previdenciário, você deve dizer que tem).
+NUNCA afirme algo que contradiga o texto abaixo.
+ATENÇÃO: Se o texto recuperado indicar que um artigo ou parágrafo foi REVOGADO (ex: "Revogado pela Lei...", "Revogado pela Emenda..."), você DEVE IGNORAR o conteúdo revogado e NÃO utilizá-lo na sua resposta.
+Leis/jurisprudências recuperadas:
+${ragContext}`;
+    }
+
+    const currentMessageParts: any[] = [{ text: finalMessage }];
 
     // Add images if present
     if (images && Array.isArray(images)) {
@@ -773,9 +886,9 @@ app.post("/api/dr-michel/chat", async (req, res) => {
       { role: 'user', parts: currentMessageParts }
     ];
 
-    // Configuração de Tools (Google Search Grounding)
+    // Configuração de Tools (Google Search Grounding + URL Context)
     // Apenas para o Dr. Michel (não para o Arquivista)
-    const tools = isStorageRequest ? [] : [{ googleSearch: {} }];
+    const tools = isStorageRequest ? [] : [{ googleSearch: {} }, { urlContext: {} }];
 
     const responseStream = await callGeminiStream({
       model: "gemini-3-flash-preview",
@@ -841,7 +954,7 @@ app.post("/api/dr-michel/chat", async (req, res) => {
 
 app.post("/api/dra-luana/chat", async (req, res) => {
   try {
-    const { message, history, images, minWage = '1621.00' } = req.body;
+    const { message, history, images, minWage = '1621.00', ragContext } = req.body;
     
     // DETECÇÃO DE INTENÇÃO (TROCA DE CÉREBRO)
     const isStorageRequest = message.includes("INSTRUÇÃO OBRIGATÓRIA: Apenas armazene") || 
@@ -906,7 +1019,18 @@ app.post("/api/dra-luana/chat", async (req, res) => {
       parts: [{ text: h.content }]
     }));
 
-    const currentMessageParts: any[] = [{ text: message + "\n\n" + REINFORCEMENT_PROMPT }];
+    let finalMessage = message + "\n\n" + REINFORCEMENT_PROMPT;
+    if (ragContext) {
+      finalMessage += `\n\n[INFORMAÇÃO DA BASE DE CONHECIMENTO (RAG)]
+ATENÇÃO MÁXIMA: A legislação/jurisprudência abaixo foi extraída da nossa base de dados oficial. 
+Você DEVE basear sua resposta ESTRITAMENTE no texto abaixo. Se a lei abaixo disser algo diferente do seu conhecimento prévio, a lei abaixo PREVALECE (ex: se a lei diz que tem fator previdenciário, você deve dizer que tem).
+NUNCA afirme algo que contradiga o texto abaixo.
+ATENÇÃO: Se o texto recuperado indicar que um artigo ou parágrafo foi REVOGADO (ex: "Revogado pela Lei...", "Revogado pela Emenda..."), você DEVE IGNORAR o conteúdo revogado e NÃO utilizá-lo na sua resposta.
+Leis/jurisprudências recuperadas:
+${ragContext}`;
+    }
+
+    const currentMessageParts: any[] = [{ text: finalMessage }];
 
     // Add images if present
     if (images && Array.isArray(images)) {
@@ -925,8 +1049,8 @@ app.post("/api/dra-luana/chat", async (req, res) => {
       { role: 'user', parts: currentMessageParts }
     ];
 
-    // Configuração de Tools (Google Search Grounding)
-    const tools = isStorageRequest ? [] : [{ googleSearch: {} }];
+    // Configuração de Tools (Google Search Grounding + URL Context)
+    const tools = isStorageRequest ? [] : [{ googleSearch: {} }, { urlContext: {} }];
 
     const responseStream = await callGeminiStream({
       model: "gemini-3-flash-preview",
