@@ -540,7 +540,65 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSave, init
                     );
                 })}
                 
-                <div className="md:col-span-6 mt-2">
+                <div className="md:col-span-6 mt-2 space-y-4">
+                    <label className="flex items-center gap-3 cursor-pointer p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition group">
+                        <input 
+                            type="checkbox" 
+                            checked={formData.isReferral || false}
+                            onChange={(e) => setFormData({...formData, isReferral: e.target.checked})}
+                            className="w-5 h-5 text-primary-600 rounded focus:ring-primary-500 border-slate-300 dark:border-slate-600"
+                        />
+                        <div>
+                            <span className="block text-sm font-semibold text-slate-700 dark:text-slate-200 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition">
+                                Cliente Indicado
+                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                                Marque se este cliente foi indicado por alguém.
+                            </span>
+                        </div>
+                    </label>
+
+                    {formData.isReferral && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 border border-slate-200 dark:border-slate-700 rounded-xl bg-slate-50 dark:bg-slate-800/50">
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
+                                    Nome do Indicador
+                                </label>
+                                <input
+                                    type="text"
+                                    name="referrerName"
+                                    value={formData.referrerName || ''}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 outline-none transition text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
+                                    Porcentagem (%)
+                                </label>
+                                <input
+                                    type="number"
+                                    name="referrerPercentage"
+                                    value={formData.referrerPercentage || ''}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 outline-none transition text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1.5">
+                                    Total Honorários (R$)
+                                </label>
+                                <input
+                                    type="number"
+                                    name="totalFee"
+                                    value={formData.totalFee || ''}
+                                    onChange={handleChange}
+                                    className="w-full px-4 py-2.5 bg-white dark:bg-slate-800 text-slate-900 dark:text-white border border-slate-300 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 outline-none transition text-sm"
+                                />
+                            </div>
+                        </div>
+                    )}
+                    
                     <label className="flex items-center gap-3 cursor-pointer p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition group">
                         <input 
                             type="checkbox" 
