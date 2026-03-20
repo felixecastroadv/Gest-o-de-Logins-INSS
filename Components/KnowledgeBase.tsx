@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabaseService } from '../services/supabaseService';
-import { CheckCircle2, Plus } from 'lucide-react';
+import { CheckCircle2, Plus, Trash2, BookOpen, Loader2 } from 'lucide-react';
 
 export default function KnowledgeBase() {
   const [title, setTitle] = useState('');
@@ -9,6 +9,36 @@ export default function KnowledgeBase() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
   const [isSuccess, setIsSuccess] = useState(false);
+  const [existingDocs, setExistingDocs] = useState<string[]>([]);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(true);
+
+  useEffect(() => {
+    fetchDocs();
+  }, []);
+
+  const fetchDocs = async () => {
+    setIsLoadingDocs(true);
+    try {
+      const docs = await supabaseService.getLegalDocumentTitles();
+      setExistingDocs(docs);
+    } catch (error) {
+      console.error('Error fetching docs:', error);
+    } finally {
+      setIsLoadingDocs(false);
+    }
+  };
+
+  const handleDelete = async (docTitle: string) => {
+    if (!confirm(`Tem certeza que deseja excluir "${docTitle}" da base de conhecimento?`)) return;
+    
+    try {
+      await supabaseService.deleteLegalDocumentByTitle(docTitle);
+      setExistingDocs(prev => prev.filter(t => t !== docTitle));
+    } catch (error) {
+      console.error('Error deleting doc:', error);
+      alert('Erro ao excluir documento.');
+    }
+  };
 
   const handleProcess = async () => {
     if (!title.trim() || !content.trim()) {
@@ -104,6 +134,7 @@ export default function KnowledgeBase() {
       setContent('');
       setSourceUrl('');
       setIsSuccess(true);
+      fetchDocs(); // Refresh list
     } catch (error: any) {
       console.error('Erro no RAG:', error);
       setMessage({ text: error.message || 'Erro ao processar documento.', type: 'error' });
@@ -114,12 +145,12 @@ export default function KnowledgeBase() {
 
   if (isSuccess) {
     return (
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center">
-        <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-8 text-center">
+        <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-4">
           <CheckCircle2 size={32} />
         </div>
-        <h2 className="text-2xl font-bold text-slate-800 mb-2">Documento Salvo com Sucesso!</h2>
-        <p className="text-slate-600 mb-8 max-w-md mx-auto">
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-2">Documento Salvo com Sucesso!</h2>
+        <p className="text-slate-600 dark:text-slate-400 mb-8 max-w-md mx-auto">
           A legislação/jurisprudência foi processada e adicionada à base de conhecimento. A IA já pode utilizar essas informações em suas respostas.
         </p>
         <button
@@ -137,67 +168,107 @@ export default function KnowledgeBase() {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-      <h2 className="text-xl font-semibold text-slate-800 mb-4">Base de Conhecimento (Treinar IA)</h2>
-      <p className="text-slate-600 mb-6 text-sm">
-        Adicione leis, jurisprudências ou documentos padrão aqui. A IA usará essas informações para responder com mais precisão e embasamento jurídico.
-      </p>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-4">Base de Conhecimento (Treinar IA)</h2>
+        <p className="text-slate-600 dark:text-slate-400 mb-6 text-sm">
+          Adicione leis, jurisprudências ou documentos padrão aqui. A IA usará essas informações para responder com mais precisão e embasamento jurídico.
+        </p>
 
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Título do Documento *</label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Ex: Lei 8.213/91 - Planos de Benefícios da Previdência Social"
-            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-          />
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Título do Documento *</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Ex: Lei 8.213/91 - Planos de Benefícios da Previdência Social"
+              className="w-full p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">URL da Fonte (Opcional)</label>
+            <input
+              type="text"
+              value={sourceUrl}
+              onChange={(e) => setSourceUrl(e.target.value)}
+              placeholder="Ex: http://www.planalto.gov.br/ccivil_03/leis/l8213cons.htm"
+              className="w-full p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 dark:text-slate-100"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Conteúdo do Documento *</label>
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Cole o texto da lei ou jurisprudência aqui..."
+              rows={10}
+              className="w-full p-2 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm text-slate-900 dark:text-slate-100"
+            />
+          </div>
+
+          {message.text && (
+            <div className={`p-3 rounded-lg text-sm ${
+              message.type === 'error' ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-800' :
+              message.type === 'success' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800' :
+              'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800'
+            }`}>
+              {message.text}
+            </div>
+          )}
+
+          <div className="flex justify-end">
+            <button
+              onClick={handleProcess}
+              disabled={isProcessing}
+              className={`px-4 py-2 rounded-lg font-medium text-white transition-colors ${
+                isProcessing ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'
+              }`}
+            >
+              {isProcessing ? 'Processando...' : 'Processar e Salvar'}
+            </button>
+          </div>
         </div>
+      </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">URL da Fonte (Opcional)</label>
-          <input
-            type="text"
-            value={sourceUrl}
-            onChange={(e) => setSourceUrl(e.target.value)}
-            placeholder="Ex: http://www.planalto.gov.br/ccivil_03/leis/l8213cons.htm"
-            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Conteúdo do Documento *</label>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Cole o texto da lei ou jurisprudência aqui..."
-            rows={10}
-            className="w-full p-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono text-sm"
-          />
-        </div>
-
-        {message.text && (
-          <div className={`p-3 rounded-lg text-sm ${
-            message.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' :
-            message.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-            'bg-blue-50 text-blue-700 border border-blue-200'
-          }`}>
-            {message.text}
+      <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+        <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+          <BookOpen className="text-indigo-500" size={20} />
+          Documentos na Base
+        </h3>
+        
+        {isLoadingDocs ? (
+          <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+            <Loader2 size={24} className="animate-spin mb-2" />
+            <p className="text-sm">Carregando...</p>
+          </div>
+        ) : existingDocs.length === 0 ? (
+          <div className="text-center py-12 text-slate-400">
+            <p className="text-sm">Nenhum documento cadastrado.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {existingDocs.map((docTitle) => (
+              <div 
+                key={docTitle}
+                className="group flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-lg hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors"
+              >
+                <span className="text-sm text-slate-700 dark:text-slate-300 font-medium truncate pr-2" title={docTitle}>
+                  {docTitle}
+                </span>
+                <button
+                  onClick={() => handleDelete(docTitle)}
+                  className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                  title="Excluir documento"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
           </div>
         )}
-
-        <div className="flex justify-end">
-          <button
-            onClick={handleProcess}
-            disabled={isProcessing}
-            className={`px-4 py-2 rounded-lg font-medium text-white transition-colors ${
-              isProcessing ? 'bg-indigo-400 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'
-            }`}
-          >
-            {isProcessing ? 'Processando...' : 'Processar e Salvar'}
-          </button>
-        </div>
       </div>
     </div>
   );
