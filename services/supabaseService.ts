@@ -290,18 +290,23 @@ export const supabaseService = {
     if (!supabase) return [];
     
     // Select unique titles from metadata
+    // We fetch more rows to ensure we get all unique titles even if there are many chunks
     const { data, error } = await supabase
       .from('legal_documents')
-      .select('metadata->title')
-      .order('metadata->title', { ascending: true });
+      .select('metadata')
+      .limit(10000);
       
     if (error) {
       console.error('Error fetching legal document titles from Supabase:', error);
       return [];
     }
     
-    // Filter unique titles manually since Supabase select distinct on jsonb field is tricky
-    const titles = (data || []).map(item => String(item.title));
-    return [...new Set(titles)].filter(Boolean);
+    // Filter unique titles manually
+    const titles = (data || []).map(item => {
+      const metadata = item.metadata as any;
+      return metadata?.title ? String(metadata.title) : null;
+    }).filter(Boolean) as string[];
+    
+    return [...new Set(titles)].sort();
   }
 };
