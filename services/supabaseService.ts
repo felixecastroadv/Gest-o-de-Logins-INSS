@@ -237,5 +237,52 @@ export const supabaseService = {
       console.error('Error saving PDF cache to Supabase:', error);
       // We don't throw here to not block the user if cache fails
     }
+  },
+
+  // RAG (Retrieval-Augmented Generation)
+  async saveLegalDocuments(chunks: { content: string, metadata: any, embedding: number[] }[]) {
+    if (!supabase) return null;
+    
+    const { data, error } = await supabase
+      .from('legal_documents')
+      .insert(chunks);
+      
+    if (error) {
+      console.error('Error saving legal documents to Supabase:', error);
+      throw error;
+    }
+    return data;
+  },
+
+  async searchLegalDocuments(embedding: number[], matchThreshold = 0.7, matchCount = 5) {
+    if (!supabase) return [];
+    
+    const { data, error } = await supabase
+      .rpc('match_legal_documents', {
+        query_embedding: embedding,
+        match_threshold: matchThreshold,
+        match_count: matchCount
+      });
+      
+    if (error) {
+      console.error('Error searching legal documents in Supabase:', error);
+      return [];
+    }
+    return data || [];
+  },
+
+  async deleteLegalDocumentByTitle(title: string) {
+    if (!supabase) return null;
+    
+    // We use the JSON operator ->> to query inside the metadata JSONB column
+    const { error } = await supabase
+      .from('legal_documents')
+      .delete()
+      .eq('metadata->>title', title);
+      
+    if (error) {
+      console.error('Error deleting legal document from Supabase:', error);
+      throw error;
+    }
   }
 };
