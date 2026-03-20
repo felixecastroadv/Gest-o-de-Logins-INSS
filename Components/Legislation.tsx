@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { MagnifyingGlassIcon, BookOpenIcon, ArrowTopRightOnSquareIcon, ArrowLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
+import React, { useState, useEffect } from 'react';
+import { MagnifyingGlassIcon, BookOpenIcon, ArrowTopRightOnSquareIcon, ArrowLeftIcon, ArrowPathIcon, PlusIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface Law {
   id: string;
@@ -149,6 +149,13 @@ const INITIAL_LAWS: Law[] = [
     description: 'Regulamento dos Benefícios da Previdência Social (vigente entre 1997 e 1999).',
     link: 'https://www.planalto.gov.br/ccivil_03/decreto/D2172.htm#anexoiv',
     category: 'Atividades Especiais'
+  },
+  {
+    id: 'temas-stj',
+    title: 'Temas Repetitivos do STJ',
+    description: 'Teses jurídicas firmadas pelo Superior Tribunal de Justiça sob o rito dos repetitivos.',
+    link: 'https://processo.stj.jus.br/repetitivos/temas_repetitivos/',
+    category: 'Temas e Teses'
   }
 ];
 
@@ -158,14 +165,60 @@ const Legislation: React.FC = () => {
   const [selectedLaw, setSelectedLaw] = useState<Law | null>(null);
   const [iframeKey, setIframeKey] = useState(0);
 
-  const categories = ['Todas', ...Array.from(new Set(INITIAL_LAWS.map(law => law.category)))];
+  // Custom laws state
+  const [customLaws, setCustomLaws] = useState<Law[]>(() => {
+    const saved = localStorage.getItem('customLaws');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  });
 
-  const filteredLaws = INITIAL_LAWS.filter(law => {
+  // Modal state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [newLaw, setNewLaw] = useState({ title: '', description: '', link: '', category: 'Outros' });
+
+  useEffect(() => {
+    localStorage.setItem('customLaws', JSON.stringify(customLaws));
+  }, [customLaws]);
+
+  const allLaws = [...INITIAL_LAWS, ...customLaws];
+  const categories = ['Todas', ...Array.from(new Set(allLaws.map(law => law.category)))];
+
+  const filteredLaws = allLaws.filter(law => {
     const matchesSearch = law.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           law.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'Todas' || law.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const handleAddLaw = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newLaw.title || !newLaw.link) return;
+
+    const lawToAdd: Law = {
+      id: `custom-${Date.now()}`,
+      title: newLaw.title,
+      description: newLaw.description,
+      link: newLaw.link,
+      category: newLaw.category || 'Outros'
+    };
+
+    setCustomLaws([...customLaws, lawToAdd]);
+    setIsModalOpen(false);
+    setNewLaw({ title: '', description: '', link: '', category: 'Outros' });
+  };
+
+  const handleDeleteCustomLaw = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (window.confirm('Tem certeza que deseja remover esta lei personalizada?')) {
+      setCustomLaws(customLaws.filter(law => law.id !== id));
+    }
+  };
 
   const getCategoryColor = (category: string) => {
     switch (category) {
@@ -181,6 +234,8 @@ const Legislation: React.FC = () => {
         return 'bg-slate-100 dark:bg-slate-900/30 text-slate-700 dark:text-slate-400';
       case 'Atividades Especiais':
         return 'bg-rose-100 dark:bg-rose-900/30 text-rose-700 dark:text-rose-400';
+      case 'Temas e Teses':
+        return 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400';
       default:
         return 'bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400';
     }
@@ -254,6 +309,13 @@ const Legislation: React.FC = () => {
               Acesse rapidamente as principais leis, códigos e instruções normativas.
             </p>
           </div>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-medium transition-colors whitespace-nowrap"
+          >
+            <PlusIcon className="w-5 h-5" />
+            Adicionar Lei
+          </button>
         </div>
 
         <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -291,7 +353,18 @@ const Legislation: React.FC = () => {
                 <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getCategoryColor(law.category)}`}>
                   {law.category}
                 </span>
-                <ArrowTopRightOnSquareIcon className="w-5 h-5 text-slate-400 group-hover:text-primary-500 transition-colors" />
+                <div className="flex items-center gap-2">
+                  {law.id.startsWith('custom-') && (
+                    <button
+                      onClick={(e) => handleDeleteCustomLaw(e, law.id)}
+                      className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                      title="Remover lei"
+                    >
+                      <XMarkIcon className="w-5 h-5" />
+                    </button>
+                  )}
+                  <ArrowTopRightOnSquareIcon className="w-5 h-5 text-slate-400 group-hover:text-primary-500 transition-colors" />
+                </div>
               </div>
               <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2 line-clamp-2">
                 {law.title}
@@ -308,6 +381,89 @@ const Legislation: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Modal Adicionar Lei */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">Adicionar Nova Lei</h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleAddLaw} className="p-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Título da Lei *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newLaw.title}
+                  onChange={e => setNewLaw({ ...newLaw, title: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder="Ex: Lei do Inquilinato"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Link (URL) *
+                </label>
+                <input
+                  type="url"
+                  required
+                  value={newLaw.link}
+                  onChange={e => setNewLaw({ ...newLaw, link: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder="https://..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Categoria
+                </label>
+                <input
+                  type="text"
+                  value={newLaw.category}
+                  onChange={e => setNewLaw({ ...newLaw, category: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
+                  placeholder="Ex: Civil, Penal, Outros"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                  Descrição
+                </label>
+                <textarea
+                  value={newLaw.description}
+                  onChange={e => setNewLaw({ ...newLaw, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none resize-none h-24"
+                  placeholder="Breve descrição sobre a lei..."
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg font-medium transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg font-medium transition-colors"
+                >
+                  Adicionar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
