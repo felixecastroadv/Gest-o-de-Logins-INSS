@@ -359,6 +359,33 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
         abortController.abort();
       }, 300000); // 300 seconds
 
+      // 1. Get embedding for the user's message (include recent history for context)
+      let ragContext = '';
+      try {
+        const currentSession = sessions.find(s => s.id === sessionId);
+        const recentHistory = currentSession?.messages.slice(-2) || [];
+        const contextText = recentHistory.map(m => m.content).join('\n') + '\n' + messageText;
+
+        const embedResponse = await fetch('/api/rag/embed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: contextText }),
+          signal: abortController.signal
+        });
+        if (embedResponse.ok) {
+          const { embedding } = await embedResponse.json();
+          if (embedding && embedding.length > 0) {
+            // 2. Query Supabase (lower threshold to 0.5 and increase count to 10 for better recall)
+            const results = await supabaseService.searchLegalDocuments(embedding, 0.5, 10);
+            if (results && results.length > 0) {
+              ragContext = results.map((r: any) => r.content).join('\n\n---\n\n');
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("RAG search failed, continuing without context:", err);
+      }
+
       const response = await fetch('/api/dra-luana/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -366,7 +393,8 @@ const DraLuanaCastro: React.FC<DraLuanaCastroProps> = ({ initialSessions, onSave
           message: messageText,
           history: sessions.find(s => s.id === sessionId)?.messages || [],
           images: images || [],
-          minWage: localStorage.getItem('app_min_wage') || '1621.00'
+          minWage: localStorage.getItem('app_min_wage') || '1621.00',
+          ragContext
         }),
         signal: abortController.signal
       });
