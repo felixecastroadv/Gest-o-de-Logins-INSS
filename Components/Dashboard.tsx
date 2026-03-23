@@ -627,7 +627,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       const updatedClients = records.map(c => c.id === clientId ? { ...c, petitions: updatedPetitions } : c);
       saveData('clients', updatedClients);
       
-      if (!activePetition || activePetition.id === petition.id) {
+      if (!activePetition || activePetition.id === petition.id || !activePetition.id) {
           setActivePetition(petition);
       }
   };
