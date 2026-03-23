@@ -144,6 +144,7 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
 
   const [topBottomMargin, setTopBottomMargin] = useState('3cm');
   const [leftRightMargin, setLeftRightMargin] = useState('2.5cm');
+  const [contentChanged, setContentChanged] = useState(0);
 
   const editor = useEditor({
     extensions: [
@@ -181,13 +182,10 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
         style: `font-family: "Times New Roman", Times, serif; line-height: 1.5; padding: ${topBottomMargin} ${leftRightMargin};`,
       },
     },
-  });
-
-  useEffect(() => {
-    if (editor && initialPetition?.content) {
-      editor.commands.setContent(initialPetition.content);
+    onUpdate: () => {
+      setContentChanged(c => c + 1);
     }
-  }, [editor, initialPetition]);
+  });
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -231,14 +229,14 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
     }
   }, [initialPetition, editor, clients]);
 
-  const handleSave = async () => {
+  const handleSave = async (isAutoSave: boolean = false) => {
     if (!editor) return;
     if (!selectedClient && type === 'concrete') {
-      alert('Por favor, selecione um cliente para salvar esta petição.');
+      if (!isAutoSave) alert('Por favor, selecione um cliente para salvar esta petição.');
       return;
     }
 
-    setIsSaving(true);
+    if (!isAutoSave) setIsSaving(true);
     
     const newId = initialPetition?.id || Math.random().toString(36).substr(2, 9);
     loadedPetitionIdRef.current = newId;
@@ -257,8 +255,18 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
     }
 
     setLastSaved(new Date().toLocaleTimeString());
-    setTimeout(() => setIsSaving(false), 1000);
+    if (!isAutoSave) setTimeout(() => setIsSaving(false), 1000);
   };
+
+  useEffect(() => {
+    if (!editor || !selectedClient || contentChanged === 0) return;
+
+    const timeoutId = setTimeout(() => {
+      handleSave(true);
+    }, 5000);
+
+    return () => clearTimeout(timeoutId);
+  }, [contentChanged, title, category, type, selectedClient]);
 
   const generatePDF = async () => {
     if (!editor) return;
@@ -533,7 +541,7 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
           {/* Action Buttons */}
           <div className="flex flex-col gap-2">
             <button 
-              onClick={handleSave}
+              onClick={() => handleSave(false)}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-bold transition shadow-md shadow-emerald-500/20"
             >
               <Save className="w-4 h-4" /> {isSaving ? 'Salvando...' : 'Salvar'}
