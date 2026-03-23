@@ -25,7 +25,12 @@ const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
     }, [contracts, currentYear]);
 
     const stats = useMemo(() => {
-        const totalPortfolio = contracts.reduce((acc, c) => acc + (Number(c.totalFee) || 0), 0);
+        const totalPortfolio = contracts.reduce((acc, c) => {
+            if (c.status === 'Concluído') {
+                return acc + (Number(c.totalFee) || 0);
+            }
+            return acc;
+        }, 0);
         
         let yearlyIncome = 0;
         let michelIncome = 0;
@@ -38,12 +43,14 @@ const FinancialStats = ({ contracts }: { contracts: ContractRecord[] }) => {
             const responsible = c.lawyer;
 
             // Portfolio Split (Potencial Total)
-            if (responsible === 'Michel') {
-                michelPortfolio += contractTotal * 0.6;
-                luanaPortfolio += contractTotal * 0.4;
-            } else if (responsible === 'Luana') {
-                luanaPortfolio += contractTotal * 0.6;
-                michelPortfolio += contractTotal * 0.4;
+            if (c.status === 'Concluído') {
+                if (responsible === 'Michel') {
+                    michelPortfolio += contractTotal * 0.6;
+                    luanaPortfolio += contractTotal * 0.4;
+                } else if (responsible === 'Luana') {
+                    luanaPortfolio += contractTotal * 0.6;
+                    michelPortfolio += contractTotal * 0.4;
+                }
             }
 
             // Yearly Cash Flow (Baseado nos pagamentos realizados)
