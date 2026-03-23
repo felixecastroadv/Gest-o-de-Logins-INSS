@@ -615,11 +615,15 @@ const Dashboard: React.FC<DashboardProps> = ({
       if (!client) return;
 
       const existingPetitions = client.petitions || [];
-      const index = existingPetitions.findIndex(p => p.id === petition.id);
+      const index = existingPetitions.findIndex(p => 
+          p.id === petition.id || 
+          (!p.id && !activePetition?.id && p.title === activePetition?.title && p.content === activePetition?.content)
+      );
       
       let updatedPetitions;
       if (index >= 0) {
-          updatedPetitions = existingPetitions.map(p => p.id === petition.id ? petition : p);
+          updatedPetitions = [...existingPetitions];
+          updatedPetitions[index] = petition;
       } else {
           updatedPetitions = [petition, ...existingPetitions];
       }
