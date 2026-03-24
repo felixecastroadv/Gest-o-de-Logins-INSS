@@ -34,8 +34,8 @@ const UpcomingEventsWidget: React.FC<UpcomingEventsWidgetProps> = ({ events, onG
       if (isOverdueA && !isOverdueB) return -1;
       if (!isOverdueA && isOverdueB) return 1;
       
-      if (a.date !== b.date) return a.date.localeCompare(b.date);
-      return a.time.localeCompare(b.time);
+      if (a.date !== b.date) return (a.date || '').localeCompare(b.date || '');
+      return (a.time || '').localeCompare(b.time || '');
     })
     .slice(0, 8); // Show more since we might have overdue ones
 
