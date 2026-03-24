@@ -30,7 +30,7 @@ const AgendaModal: React.FC<AgendaModalProps> = ({ isOpen, onClose, events, onUp
       if (isOverdueA && !isOverdueB) return -1;
       if (!isOverdueA && isOverdueB) return 1;
       
-      return a.date.localeCompare(b.date) || a.time.localeCompare(b.time);
+      return (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || '');
     });
 
   const totalPages = Math.ceil(upcomingEvents.length / itemsPerPage);
