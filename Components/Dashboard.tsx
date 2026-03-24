@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import * as LZString from 'lz-string';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ScaleIcon, UserGroupIcon, BriefcaseIcon, CalculatorIcon, ArrowRightOnRectangleIcon, 
   ArrowPathRoundedSquareIcon, CloudIcon, BellIcon, Cog6ToothIcon, SunIcon, MoonIcon,
@@ -70,7 +69,6 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [customLaws, setCustomLaws] = useState<any[]>([]);
   
   const [searchTerm, setSearchTerm] = useState('');
-  const syncTimeouts = useRef<{ [key: string]: ReturnType<typeof setTimeout> | null }>({});
   
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -84,7 +82,6 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const isSyncingRef = useRef(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -156,23 +153,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         }
                         throw error;
                     }
-                    
-                    let result = data?.data;
-                    if (result && typeof result === 'object' && result.isCompressed) {
-                        try {
-                            let decompressed = LZString.decompressFromBase64(result.data);
-                            if (!decompressed) {
-                                decompressed = LZString.decompressFromUTF16(result.data);
-                            }
-                            if (decompressed) {
-                                result = JSON.parse(decompressed);
-                            }
-                        } catch (e) {
-                            console.error(`Error decompressing data for ID ${id}:`, e);
-                        }
-                    }
-                    
-                    return result;
+                    return data?.data;
                 } catch (err) {
                     console.error(`Fetch error for ID ${id}:`, err);
                     return null;
@@ -257,40 +238,25 @@ const Dashboard: React.FC<DashboardProps> = ({
                 },
                 (payload: any) => {
                      if (payload.new && payload.new.data) {
-                         let newData = payload.new.data;
-                         if (newData && typeof newData === 'object' && newData.isCompressed) {
-                             try {
-                                 let decompressed = LZString.decompressFromBase64(newData.data);
-                                 if (!decompressed) {
-                                     decompressed = LZString.decompressFromUTF16(newData.data);
-                                 }
-                                 if (decompressed) {
-                                     newData = JSON.parse(decompressed);
-                                 }
-                             } catch (e) {
-                                 console.error("Error decompressing real-time data:", e);
-                             }
-                         }
-
                          if (payload.new.id === 1) {
-                             if (Array.isArray(newData)) {
-                                 setRecords(newData);
-                                 safeSetLocalStorage('inss_records', JSON.stringify(newData));
+                             if (Array.isArray(payload.new.data)) {
+                                 setRecords(payload.new.data);
+                                 safeSetLocalStorage('inss_records', JSON.stringify(payload.new.data));
                              }
                          } else if (payload.new.id === 2) {
-                             if (Array.isArray(newData)) {
-                                 setContracts(newData);
-                                 safeSetLocalStorage('inss_contracts', JSON.stringify(newData));
+                             if (Array.isArray(payload.new.data)) {
+                                 setContracts(payload.new.data);
+                                 safeSetLocalStorage('inss_contracts', JSON.stringify(payload.new.data));
                              }
                          } else if (payload.new.id === 8) {
-                             if (Array.isArray(newData)) {
-                                 setResolvedAlerts(newData);
-                                 safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(newData));
+                             if (Array.isArray(payload.new.data)) {
+                                 setResolvedAlerts(payload.new.data);
+                                 safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(payload.new.data));
                              }
                          } else if (payload.new.id === 9) {
-                             if (Array.isArray(newData)) {
-                                 setCustomLaws(newData);
-                                 safeSetLocalStorage('custom_laws', JSON.stringify(newData));
+                             if (Array.isArray(payload.new.data)) {
+                                 setCustomLaws(payload.new.data);
+                                 safeSetLocalStorage('custom_laws', JSON.stringify(payload.new.data));
                              }
                          }
                      }
@@ -319,20 +285,17 @@ const Dashboard: React.FC<DashboardProps> = ({
     setCurrentPage(1);
   }, [searchTerm, itemsPerPage, currentView, clientFilter]);
 
-  useEffect(() => {
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      const hasPendingSyncs = Object.values(syncTimeouts.current).some(timeout => timeout !== null);
-      if (hasPendingSyncs || isSyncingRef.current) {
-        e.preventDefault();
-        e.returnValue = 'Você tem alterações não salvas. Tem certeza que deseja sair?';
-      }
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, []);
-
   const handleSaveCustomLaws = (newLaws: any[]) => {
-    saveData('laws', newLaws, true);
+    setCustomLaws(newLaws);
+    safeSetLocalStorage('custom_laws', JSON.stringify(newLaws));
+    if (isCloudConfigured) {
+        const supabase = initSupabase();
+        if (supabase) {
+            supabase.from('clients').upsert({ id: 9, data: newLaws }).then(({ error }) => {
+                if (error) console.error("Error syncing laws:", error);
+            });
+        }
+    }
   };
 
   // Compute Alerts
@@ -400,104 +363,115 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleResolveAlert = (id: string) => {
       const updated = [...resolvedAlerts, id];
-      saveData('resolved_alerts', updated, true);
+      saveData('resolved_alerts', updated);
   };
 
   // Save Logic (Generic)
-  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana' | 'agenda' | 'resolved_alerts' | 'laws', newData: any[], forceSync: boolean = false) => {
-      // 1. Immediate local updates
-      const jsonString = JSON.stringify(newData);
-      if (type === 'clients') {
-          setRecords(newData);
-          safeSetLocalStorage('inss_records', jsonString);
-      } else if (type === 'contracts') {
-          setContracts(newData);
-          safeSetLocalStorage('inss_contracts', jsonString);
-      } else if (type === 'calculations') {
-          setSavedCalculations(newData);
-          safeSetLocalStorage('inss_calculations', jsonString);
-      } else if (type === 'social_calculations') {
-          setSavedSocialCalculations(newData);
-          safeSetLocalStorage('social_security_calculations', jsonString);
-      } else if (type === 'dr_michel') {
-          setDrMichelSessions(newData);
-          safeSetLocalStorage('dr_michel_sessions', jsonString);
-      } else if (type === 'dra_luana') {
-          setDraLuanaSessions(newData);
-          safeSetLocalStorage('dra_luana_sessions', jsonString);
-      } else if (type === 'agenda') {
-          setAgendaEvents(newData);
-          safeSetLocalStorage('agenda_events', jsonString);
-      } else if (type === 'resolved_alerts') {
-          setResolvedAlerts(newData);
-          safeSetLocalStorage('inss_resolved_alerts', jsonString);
-      } else if (type === 'laws') {
-          setCustomLaws(newData);
-          safeSetLocalStorage('custom_laws', jsonString);
-      }
-
-      const supabase = initSupabase();
-      if (!supabase) return;
-
-      // 2. Cloud Sync
-      if (syncTimeouts.current[type]) {
-          clearTimeout(syncTimeouts.current[type]);
-      }
-
+  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana' | 'agenda' | 'resolved_alerts', newData: any[]) => {
+      setIsSyncing(true);
       setSaveError(null);
+      const supabase = initSupabase();
 
-      const syncOperation = async () => {
-          setIsSyncing(true);
-          isSyncingRef.current = true;
-          try {
-              let payloadToSave: any = newData;
-              if (jsonString.length > 100000) {
-                  const compressed = LZString.compressToBase64(jsonString);
-                  payloadToSave = { isCompressed: true, data: compressed };
+      try {
+          if (type === 'clients') {
+              setRecords(newData);
+              safeSetLocalStorage('inss_records', JSON.stringify(newData));
+              if (supabase) {
+                  // Background sync for large payloads
+                  const { error } = await supabase.from('clients').upsert({ id: 1, data: newData });
+                  if (error) {
+                      console.error("Sync error (clients):", error);
+                      setSaveError("Erro de sincronização (Clientes).");
+                  }
+                  setIsSyncing(false);
+                  return;
               }
-
-              let id = 1;
-              if (type === 'contracts') id = 2;
-              else if (type === 'calculations') id = 3;
-              else if (type === 'social_calculations') id = 4;
-              else if (type === 'dr_michel') id = 5;
-              else if (type === 'dra_luana') id = 6;
-              else if (type === 'agenda') id = 7;
-              else if (type === 'resolved_alerts') id = 8;
-              else if (type === 'laws') id = 9;
-
-              const { error } = await supabase.from('clients').upsert({ id, data: payloadToSave });
-              
-              if (error) {
-                  console.error(`Sync error (${type}):`, error);
-                  setSaveError(`Erro de sincronização (${type}).`);
+          } else if (type === 'contracts') {
+              setContracts(newData);
+              safeSetLocalStorage('inss_contracts', JSON.stringify(newData));
+              if (supabase) {
+                  const { error } = await supabase.from('clients').upsert({ id: 2, data: newData });
+                  if (error) console.error("Sync error (contracts):", error);
+                  setIsSyncing(false);
+                  return;
               }
-          } catch (err: any) {
-              console.error(`Sync error (${type}):`, err);
-              setSaveError("Erro: " + (err.message || "Falha na conexão"));
-          } finally {
-              setIsSyncing(false);
-              isSyncingRef.current = false;
-              syncTimeouts.current[type] = null;
+          } else if (type === 'calculations') {
+              setSavedCalculations(newData);
+              safeSetLocalStorage('inss_calculations', JSON.stringify(newData));
+              if (supabase) {
+                  const { error } = await supabase.from('clients').upsert({ id: 3, data: newData });
+                  if (error) console.error("Sync error (calculations):", error);
+                  setIsSyncing(false);
+                  return;
+              }
+          } else if (type === 'social_calculations') {
+              setSavedSocialCalculations(newData);
+              safeSetLocalStorage('social_security_calculations', JSON.stringify(newData));
+              if (supabase) {
+                  supabase.from('clients').upsert({ id: 4, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (social):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
+              }
+          } else if (type === 'dr_michel') {
+              setDrMichelSessions(newData);
+              safeSetLocalStorage('dr_michel_sessions', JSON.stringify(newData));
+              if (supabase) {
+                  supabase.from('clients').upsert({ id: 5, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (Michel):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
+              }
+          } else if (type === 'dra_luana') {
+              setDraLuanaSessions(newData);
+              safeSetLocalStorage('dra_luana_sessions', JSON.stringify(newData));
+              if (supabase) {
+                  supabase.from('clients').upsert({ id: 6, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (Luana):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
+              }
+          } else if (type === 'agenda') {
+              setAgendaEvents(newData);
+              safeSetLocalStorage('agenda_events', JSON.stringify(newData));
+              if (supabase) {
+                  supabase.from('clients').upsert({ id: 7, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (Agenda):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
+              }
+          } else if (type === 'resolved_alerts') {
+              setResolvedAlerts(newData);
+              safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(newData));
+              if (supabase) {
+                  supabase.from('clients').upsert({ id: 8, data: newData }).then(({ error }) => {
+                      if (error) console.error("Sync error (Resolved Alerts):", error);
+                      setIsSyncing(false);
+                  });
+                  return;
+              }
           }
-      };
-
-      if (forceSync) {
-          await syncOperation();
-      } else {
-          syncTimeouts.current[type] = setTimeout(syncOperation, 5000); // 5 seconds debounce for cloud sync
+          setIsSyncing(false);
+      } catch (err: any) {
+          console.error("Erro ao salvar:", err);
+          setSaveError("Erro: " + (err.message || "Falha na conexão"));
+          setIsSyncing(false);
       }
   };
 
   // Handlers for Clients
   const handleClientCreate = (data: ClientRecord) => {
     const newRecord = { ...data, id: Math.random().toString(36).substr(2, 9) };
-    saveData('clients', [newRecord, ...records], true);
+    saveData('clients', [newRecord, ...records]);
     setIsModalOpen(false);
   };
   const handleClientUpdate = (data: ClientRecord) => {
     const updated = records.map(r => r.id === data.id ? data : r);
-    saveData('clients', updated, true);
+    saveData('clients', updated);
     setIsModalOpen(false);
   };
 
@@ -511,7 +485,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleClientDelete = (id: string) => {
     if (confirm('Excluir cliente permanentemente?')) {
-        saveData('clients', records.filter(r => r.id !== id), true);
+        saveData('clients', records.filter(r => r.id !== id));
     }
   };
   const handleToggleArchive = (id: string) => {
@@ -522,7 +496,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       
       if (confirm(`Deseja realmente ${action} este cliente?`)) {
           const updated = records.map(r => r.id === id ? { ...r, isArchived: newValue } : r);
-          saveData('clients', updated, true);
+          saveData('clients', updated);
       }
   }
 
@@ -541,18 +515,18 @@ const Dashboard: React.FC<DashboardProps> = ({
           }
           return r;
       });
-      saveData('clients', updated, true);
+      saveData('clients', updated);
   }
 
   // Handlers for Contracts
   const handleContractCreate = (data: ContractRecord) => {
       const newRec = { ...data, id: Math.random().toString(36).substr(2, 9) };
-      saveData('contracts', [newRec, ...contracts], true);
+      saveData('contracts', [newRec, ...contracts]);
       setIsContractModalOpen(false);
   }
   const handleContractUpdate = (data: ContractRecord) => {
       const updated = contracts.map(c => c.id === data.id ? data : c);
-      saveData('contracts', updated, true);
+      saveData('contracts', updated);
       setIsContractModalOpen(false);
   }
 
@@ -566,13 +540,11 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleContractDelete = (id: string) => {
       if (confirm('Excluir contrato e histórico financeiro?')) {
-          saveData('contracts', contracts.filter(c => c.id !== id), true);
+          saveData('contracts', contracts.filter(c => c.id !== id));
       }
   }
 
   const handleSaveCalculation = async (calc: CalculationRecord) => {
-      setIsSyncing(true);
-      isSyncingRef.current = true;
       try {
           await supabaseService.saveLaborCalculation(calc);
           const updated = await supabaseService.getLaborCalculations();
@@ -580,9 +552,6 @@ const Dashboard: React.FC<DashboardProps> = ({
           safeSetLocalStorage('inss_calculations', JSON.stringify(updated));
       } catch (error) {
           console.error("Error saving labor calculation:", error);
-      } finally {
-          setIsSyncing(false);
-          isSyncingRef.current = false;
       }
   };
 
@@ -607,8 +576,6 @@ const Dashboard: React.FC<DashboardProps> = ({
           data: data
       };
       
-      setIsSyncing(true);
-      isSyncingRef.current = true;
       try {
           await supabaseService.saveCalculation(newCalc);
           const updated = [newCalc, ...savedSocialCalculations];
@@ -618,9 +585,6 @@ const Dashboard: React.FC<DashboardProps> = ({
       } catch (error) {
           console.error("Error saving social calculation:", error);
           alert('Erro ao salvar cálculo no banco de dados.');
-      } finally {
-          setIsSyncing(false);
-          isSyncingRef.current = false;
       }
   };
 
@@ -643,10 +607,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       } else {
           updated = [...agendaEvents, event];
       }
-      saveData('agenda', updated, true);
+      saveData('agenda', updated);
   };
 
-  const handleSavePetition = (clientId: string, petition: any, isAutoSave: boolean = false) => {
+  const handleSavePetition = (clientId: string, petition: any) => {
       const client = records.find(c => c.id === clientId);
       if (!client) return;
 
@@ -665,7 +629,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
 
       const updatedClients = records.map(c => c.id === clientId ? { ...c, petitions: updatedPetitions } : c);
-      saveData('clients', updatedClients, !isAutoSave);
+      saveData('clients', updatedClients);
       
       if (!activePetition || activePetition.id === petition.id || !activePetition.id) {
           setActivePetition(petition);
@@ -690,7 +654,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         setRecords(updatedClients);
         
         // Persist to storage
-        await saveData('clients', updatedClients, true);
+        await saveData('clients', updatedClients);
     };
 
   const handleOpenPetition = (petition: any) => {
@@ -701,7 +665,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleDeleteAgendaEvent = (id: string) => {
       if (confirm('Excluir este compromisso?')) {
-          saveData('agenda', agendaEvents.filter(e => e.id !== id), true);
+          saveData('agenda', agendaEvents.filter(e => e.id !== id));
       }
   };
 
