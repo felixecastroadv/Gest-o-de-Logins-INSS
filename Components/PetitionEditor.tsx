@@ -93,7 +93,7 @@ interface PetitionEditorProps {
   clients: ClientRecord[];
   onBack: () => void;
   initialPetition?: Petition | null;
-  onSavePetition?: (clientId: string, petition: Petition, isAutoSave: boolean) => void;
+  onSavePetition?: (clientId: string, petition: Petition) => void;
 }
 
 interface HeaderFooterConfig {
@@ -251,7 +251,7 @@ const PetitionEditor: React.FC<PetitionEditorProps> = ({ clients, onBack, initia
     };
 
     if (onSavePetition && selectedClient) {
-      onSavePetition(selectedClient.id, petitionData, isAutoSave);
+      onSavePetition(selectedClient.id, petitionData);
     }
 
     setLastSaved(new Date().toLocaleTimeString());
