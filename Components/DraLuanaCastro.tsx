@@ -20,7 +20,7 @@ import {
   XMarkIcon as XMark
 } from '@heroicons/react/24/outline';
 import { CheckIcon as Check } from '@heroicons/react/24/solid';
-import { extractTextFromPDF } from '../utils/pdfParser';
+import { extractTextFromPDF } from '../src/utils/pdfParser';
 import { supabaseService } from '../services/supabaseService';
 import { safeSetLocalStorage } from '../utils';
 
