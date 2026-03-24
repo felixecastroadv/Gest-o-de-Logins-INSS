@@ -682,11 +682,22 @@ const Dashboard: React.FC<DashboardProps> = ({
       const lowerSearch = searchTerm.toLowerCase();
       
       if (currentView === 'clients') {
-          return records.filter(r => 
-            ((r.name && r.name.toLowerCase().includes(lowerSearch)) ||
-            (r.cpf && r.cpf.includes(lowerSearch))) &&
-            (clientFilter === 'archived' ? r.isArchived : clientFilter === 'referral' ? r.isReferral : !r.isArchived && !r.isReferral)
-          ).sort((a, b) => {
+          return records.filter(r => {
+            const nameMatch = r.name ? r.name.toLowerCase().includes(lowerSearch) : false;
+            const cpfMatch = r.cpf ? r.cpf.includes(lowerSearch) : false;
+            const searchMatch = !lowerSearch || nameMatch || cpfMatch;
+            
+            let filterMatch = false;
+            if (clientFilter === 'archived') {
+                filterMatch = !!r.isArchived;
+            } else if (clientFilter === 'referral') {
+                filterMatch = !!r.isReferral;
+            } else {
+                filterMatch = !r.isArchived && !r.isReferral;
+            }
+            
+            return searchMatch && filterMatch;
+          }).sort((a, b) => {
               // Priority: Red (Urgent) > Yellow (Daily) > None
               const aScore = (a.isUrgentAttention ? 2 : 0) + (a.isDailyAttention ? 1 : 0);
               const bScore = (b.isUrgentAttention ? 2 : 0) + (b.isDailyAttention ? 1 : 0);
@@ -699,7 +710,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
                   if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
               }
-              return a.name.localeCompare(b.name);
+              return (a.name || '').localeCompare(b.name || '');
           });
       } else {
           return contracts.filter(c => 
