@@ -22,6 +22,7 @@ export interface SocialSecurityCalculationRecord {
     data: SocialSecurityData;
 }
 
+import LZString from 'lz-string';
 import { initSupabase } from '../supabaseClient';
 import { supabaseService } from '../services/supabaseService';
 import { isUrgentDate, formatCurrency } from '../utils';
@@ -172,14 +173,35 @@ const Dashboard: React.FC<DashboardProps> = ({
             ]).then(([cData, conData, labData, socData, agendaData, resData, lawsData]) => {
                 let partialSync = false;
 
-                if (cData && Array.isArray(cData)) {
-                    setRecords(cData);
-                    safeSetLocalStorage('inss_records', JSON.stringify(cData));
+                let parsedCData = cData;
+                if (typeof cData === 'string') {
+                    try {
+                        const decompressed = LZString.decompressFromUTF16(cData);
+                        parsedCData = decompressed ? JSON.parse(decompressed) : JSON.parse(cData);
+                    } catch (e) {
+                        console.error("Failed to decompress clients data", e);
+                    }
+                }
+
+                if (parsedCData && Array.isArray(parsedCData)) {
+                    setRecords(parsedCData);
+                    safeSetLocalStorage('inss_records', JSON.stringify(parsedCData));
                 } else partialSync = true;
 
-                if (conData && Array.isArray(conData)) {
-                    setContracts(conData);
-                    safeSetLocalStorage('inss_contracts', JSON.stringify(conData));
+                if (conData) {
+                    let parsedConData = conData;
+                    if (typeof conData === 'string') {
+                        try {
+                            const decompressed = LZString.decompressFromUTF16(conData);
+                            parsedConData = decompressed ? JSON.parse(decompressed) : JSON.parse(conData);
+                        } catch (e) {
+                            console.error("Failed to decompress contracts data", e);
+                        }
+                    }
+                    if (Array.isArray(parsedConData)) {
+                        setContracts(parsedConData);
+                        safeSetLocalStorage('inss_contracts', JSON.stringify(parsedConData));
+                    } else partialSync = true;
                 } else partialSync = true;
 
                 if (labData && Array.isArray(labData) && labData.length > 0) {
@@ -239,14 +261,32 @@ const Dashboard: React.FC<DashboardProps> = ({
                 (payload: any) => {
                      if (payload.new && payload.new.data) {
                          if (payload.new.id === 1) {
-                             if (Array.isArray(payload.new.data)) {
-                                 setRecords(payload.new.data);
-                                 safeSetLocalStorage('inss_records', JSON.stringify(payload.new.data));
+                             let newData = payload.new.data;
+                             if (typeof newData === 'string') {
+                                 try {
+                                     const decompressed = LZString.decompressFromUTF16(newData);
+                                     newData = decompressed ? JSON.parse(decompressed) : JSON.parse(newData);
+                                 } catch (e) {
+                                     console.error("Failed to decompress realtime clients data", e);
+                                 }
+                             }
+                             if (Array.isArray(newData)) {
+                                 setRecords(newData);
+                                 safeSetLocalStorage('inss_records', JSON.stringify(newData));
                              }
                          } else if (payload.new.id === 2) {
-                             if (Array.isArray(payload.new.data)) {
-                                 setContracts(payload.new.data);
-                                 safeSetLocalStorage('inss_contracts', JSON.stringify(payload.new.data));
+                             let newData = payload.new.data;
+                             if (typeof newData === 'string') {
+                                 try {
+                                     const decompressed = LZString.decompressFromUTF16(newData);
+                                     newData = decompressed ? JSON.parse(decompressed) : JSON.parse(newData);
+                                 } catch (e) {
+                                     console.error("Failed to decompress realtime contracts data", e);
+                                 }
+                             }
+                             if (Array.isArray(newData)) {
+                                 setContracts(newData);
+                                 safeSetLocalStorage('inss_contracts', JSON.stringify(newData));
                              }
                          } else if (payload.new.id === 8) {
                              if (Array.isArray(payload.new.data)) {
@@ -378,9 +418,16 @@ const Dashboard: React.FC<DashboardProps> = ({
               safeSetLocalStorage('inss_records', JSON.stringify(newData));
               if (supabase) {
                   // Background sync for large payloads
-                  const { error } = await supabase.from('clients').upsert({ id: 1, data: newData });
-                  if (error) {
-                      console.error("Sync error (clients):", error);
+                  try {
+                      // Compress data to avoid payload size limits
+                      const compressedData = LZString.compressToUTF16(JSON.stringify(newData));
+                      const { error } = await supabase.from('clients').upsert({ id: 1, data: compressedData });
+                      if (error) {
+                          console.error("Sync error (clients):", error);
+                          setSaveError("Erro de sincronização (Clientes).");
+                      }
+                  } catch (e) {
+                      console.error("Compression or sync error (clients):", e);
                       setSaveError("Erro de sincronização (Clientes).");
                   }
                   setIsSyncing(false);
@@ -390,8 +437,17 @@ const Dashboard: React.FC<DashboardProps> = ({
               setContracts(newData);
               safeSetLocalStorage('inss_contracts', JSON.stringify(newData));
               if (supabase) {
-                  const { error } = await supabase.from('clients').upsert({ id: 2, data: newData });
-                  if (error) console.error("Sync error (contracts):", error);
+                  try {
+                      const compressedData = LZString.compressToUTF16(JSON.stringify(newData));
+                      const { error } = await supabase.from('clients').upsert({ id: 2, data: compressedData });
+                      if (error) {
+                          console.error("Sync error (contracts):", error);
+                          setSaveError("Erro de sincronização (Contratos).");
+                      }
+                  } catch (e) {
+                      console.error("Compression or sync error (contracts):", e);
+                      setSaveError("Erro de sincronização (Contratos).");
+                  }
                   setIsSyncing(false);
                   return;
               }
