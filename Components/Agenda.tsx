@@ -170,7 +170,7 @@ const Agenda: React.FC<AgendaProps> = ({ events, clients, onSaveEvent, onDeleteE
         formattedDate = format(day, 'd');
         const cloneDay = day;
         const dateStr = format(day, 'yyyy-MM-dd');
-        const dayEvents = events.filter(e => e.date === dateStr).sort((a, b) => a.time.localeCompare(b.time));
+        const dayEvents = events.filter(e => e.date === dateStr).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
         const isToday = isSameDay(day, new Date());
         const isSelected = selectedDate && isSameDay(day, selectedDate);
         const pendingEvents = dayEvents.filter(e => e.status !== 'resolved' && e.status !== 'cancelled');
@@ -237,7 +237,7 @@ const Agenda: React.FC<AgendaProps> = ({ events, clients, onSaveEvent, onDeleteE
     if (!selectedDate) return null;
     
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
-    const dayEvents = events.filter(e => e.date === dateStr).sort((a, b) => a.time.localeCompare(b.time));
+    const dayEvents = events.filter(e => e.date === dateStr).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
 
     return (
       <div className={`fixed inset-y-0 right-0 w-full md:w-96 bg-white dark:bg-slate-900 shadow-2xl border-l border-slate-200 dark:border-slate-800 transform transition-transform duration-300 ease-in-out z-50 ${isPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
