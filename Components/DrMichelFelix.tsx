@@ -82,7 +82,7 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
     const loadFromSupabase = async () => {
       try {
         const dbSessions = await supabaseService.getAIConversations('michel');
-        let formattedSessions = dbSessions && dbSessions.length > 0 ? dbSessions.map(s => ({
+        let formattedSessions = dbSessions && dbSessions.length > 0 ? dbSessions.map((s: any) => ({
           id: s.id,
           title: s.title,
           date: s.date,
@@ -111,8 +111,8 @@ const DrMichelFelix: React.FC<DrMichelFelixProps> = ({ initialSessions, onSaveSe
         }
 
         if (formattedSessions.length > 0) {
-          formattedSessions.forEach(s => {
-            const dbMatch = dbSessions.find(dbS => dbS.id === s.id);
+          formattedSessions.forEach((s: any) => {
+            const dbMatch = dbSessions.find((dbS: any) => dbS.id === s.id);
             if (dbMatch && JSON.stringify(dbMatch.messages) === JSON.stringify(s.messages) && dbMatch.title === s.title) {
               lastSyncedSessionsRef.current[s.id] = JSON.stringify(s);
             }
