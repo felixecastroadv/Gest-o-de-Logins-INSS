@@ -236,13 +236,13 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
 
     useEffect(() => {
         const loadIndices = async () => {
+            const now = new Date().getTime();
+            
+            // Load INPC
             try {
-                // Check local storage first for INPC
                 const cachedInpc = localStorage.getItem('inpc_indices_cache');
                 const cachedInpcDate = localStorage.getItem('inpc_indices_date');
-                const now = new Date().getTime();
                 
-                // Cache for 24 hours
                 if (cachedInpc && cachedInpcDate && (now - parseInt(cachedInpcDate) < 24 * 60 * 60 * 1000)) {
                     const parsed = JSON.parse(cachedInpc);
                     setInpcIndices(processINPCIndices(parsed));
@@ -252,8 +252,13 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                     safeSetLocalStorage('inpc_indices_cache', JSON.stringify(data));
                     safeSetLocalStorage('inpc_indices_date', now.toString());
                 }
+            } catch (e) {
+                console.error("Failed to load INPC indices", e);
+                setInpcIndices(new Map()); // Fallback to empty map so app doesn't crash completely
+            }
 
-                // Check local storage for IBGE
+            // Load IBGE
+            try {
                 const cachedIbge = localStorage.getItem('ibge_table_cache');
                 const cachedIbgeDate = localStorage.getItem('ibge_table_date');
                 
@@ -266,7 +271,9 @@ const SocialSecurityCalc: React.FC<SocialSecurityCalcProps> = ({
                     safeSetLocalStorage('ibge_table_date', now.toString());
                 }
             } catch (e) {
-                console.error("Failed to load indices or IBGE table", e);
+                console.error("Failed to load IBGE table", e);
+                // The service already has a fallback, but just in case
+                setIbgeTable([]);
             }
         };
         loadIndices();
