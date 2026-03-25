@@ -97,26 +97,26 @@ export const supabaseService = {
     return data;
   },
 
-  async getCalculations() {
-    if (!supabase) return [];
-    
-    const { data, error } = await supabase
-      .from('social_security_calculations')
-      .select('*')
-      .order('date', { ascending: false });
-      
-    if (error) {
-      console.error('Error fetching calculations from Supabase:', error);
-      return [];
-    }
-    
-    return (data || []).map(item => ({
-      id: item.id,
-      clientName: item.client_name,
-      date: item.date,
-      data: item.data
-    }));
-  },
+    async getCalculations() {
+        if (!supabase) return [];
+        
+        const { data, error } = await supabase
+            .from('social_security_calculations')
+            .select('*')
+            .order('date', { ascending: false });
+            
+        if (error) {
+            console.error('Error fetching calculations from Supabase:', error);
+            return [];
+        }
+        
+        return (data || []).map((item: any) => ({
+            id: item.id,
+            clientName: item.client_name,
+            date: item.date,
+            data: item.data
+        }));
+    },
 
   async deleteCalculation(id: string) {
     if (!supabase) return null;
@@ -166,7 +166,7 @@ export const supabaseService = {
       return [];
     }
     
-    return (data || []).map(item => {
+    return (data || []).map((item: any) => {
       // Ensure backward compatibility for LaborData
       const laborData = item.data || {};
       
@@ -302,7 +302,7 @@ export const supabaseService = {
     }
     
     // Filter unique titles manually
-    const titles = (data || []).map(item => {
+    const titles = (data || []).map((item: any) => {
       const metadata = item.metadata as any;
       return metadata?.title ? String(metadata.title) : null;
     }).filter(Boolean) as string[];
