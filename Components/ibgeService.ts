@@ -66,7 +66,7 @@ export const fetchIBGELifeExpectancy = async (): Promise<IBGELifeExpectancy[]> =
         // Fallback to static table
         const staticResults: IBGELifeExpectancy[] = Object.entries(IBGE_LIFE_EXPECTANCY).map(([ageStr, expectancy]) => ({
             age: parseInt(ageStr),
-            expectancy: expectancy
+            expectancy: expectancy as number
         })).sort((a, b) => a.age - b.age);
         
         return staticResults;
