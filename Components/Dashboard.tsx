@@ -6,7 +6,7 @@ import {
   ArchiveBoxIcon, MagnifyingGlassIcon, PlusIcon, StarIcon, ArrowUturnLeftIcon, 
   PencilSquareIcon, TrashIcon, ExclamationTriangleIcon, ChevronUpIcon, ChevronDownIcon, 
   ChevronLeftIcon, ChevronRightIcon, CalendarIcon, CheckIcon, BookOpenIcon,
-  GlobeAltIcon, AcademicCapIcon
+  GlobeAltIcon, AcademicCapIcon, UserMinusIcon, UserPlusIcon, ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { StarIcon as StarIconSolid } from '@heroicons/react/24/solid';
 import Legislation from './Legislation';
@@ -624,6 +624,18 @@ const Dashboard: React.FC<DashboardProps> = ({
       
       if (confirm(`Deseja realmente ${action} este cliente?`)) {
           const updated = records.map(r => r.id === id ? { ...r, isArchived: newValue } : r);
+          saveData('clients', updated, true);
+      }
+  }
+
+  const handleToggleReferral = (id: string) => {
+      const record = records.find(r => r.id === id);
+      if (!record) return;
+      const newValue = !record.isReferral;
+      const action = newValue ? 'marcar como indicação' : 'remover das indicações';
+      
+      if (confirm(`Deseja realmente ${action} este cliente?`)) {
+          const updated = records.map(r => r.id === id ? { ...r, isReferral: newValue } : r);
           saveData('clients', updated, true);
       }
   }
@@ -1323,6 +1335,15 @@ const Dashboard: React.FC<DashboardProps> = ({
                                                 {renderDateCell(record.securityMandateDate, record.id, '_mand')}
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex justify-end gap-1">
+                                                        {clientFilter === 'referral' && (
+                                                            <button 
+                                                                onClick={() => handleToggleReferral(record.id)} 
+                                                                className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded"
+                                                                title="Remover das Indicações"
+                                                            >
+                                                                <UserMinusIcon className="h-4 w-4" />
+                                                            </button>
+                                                        )}
                                                         {clientFilter !== 'archived' ? (
                                                             <button 
                                                                 onClick={() => handleToggleArchive(record.id)} 
