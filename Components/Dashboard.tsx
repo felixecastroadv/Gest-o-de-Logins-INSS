@@ -148,7 +148,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                         .from('clients')
                         .select('data')
                         .eq('id', id)
-                        .single();
+                        .maybeSingle();
                     
                     if (error) {
                         if (error.message?.includes('timeout') || error.code === '57014') {
@@ -179,7 +179,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 }
             };
 
-            // Run fetches in parallel but don't block
+            // Run fetches in parallel for all data types (IDs 1-9)
             const fetchAttachments = async () => {
                 try {
                     const { data, error } = await supabase
@@ -190,19 +190,21 @@ const Dashboard: React.FC<DashboardProps> = ({
                     if (error) throw error;
                     
                     const allAttachments: any[] = [];
-                    for (const row of data) {
-                        let rowData = row.data;
-                        if (rowData && typeof rowData === 'object' && rowData.isCompressed) {
-                            try {
-                                let decompressed = LZString.decompressFromBase64(rowData.data);
-                                if (!decompressed) decompressed = LZString.decompressFromUTF16(rowData.data);
-                                if (decompressed) rowData = JSON.parse(decompressed);
-                            } catch (e) {
-                                console.error("Error decompressing attachment row:", e);
+                    if (data) {
+                        for (const row of data) {
+                            let rowData = row.data;
+                            if (rowData && typeof rowData === 'object' && rowData.isCompressed) {
+                                try {
+                                    let decompressed = LZString.decompressFromBase64(rowData.data);
+                                    if (!decompressed) decompressed = LZString.decompressFromUTF16(rowData.data);
+                                    if (decompressed) rowData = JSON.parse(decompressed);
+                                } catch (e) {
+                                    console.error("Error decompressing attachment row:", e);
+                                }
                             }
-                        }
-                        if (Array.isArray(rowData)) {
-                            allAttachments.push(...rowData);
+                            if (Array.isArray(rowData)) {
+                                allAttachments.push(...rowData);
+                            }
                         }
                     }
                     return allAttachments;
@@ -213,15 +215,17 @@ const Dashboard: React.FC<DashboardProps> = ({
             };
 
             Promise.all([
-                fetchWithTimeout(1),
-                fetchWithTimeout(2),
-                supabaseService.getLaborCalculations().catch(() => null),
-                supabaseService.getCalculations().catch(() => null),
-                fetchWithTimeout(7),
-                fetchWithTimeout(8),
-                fetchWithTimeout(9),
-                fetchAttachments()
-            ]).then(([cData, conData, labData, socData, agendaData, resData, lawsData, attachmentsData]) => {
+                fetchWithTimeout(1), // Clients
+                fetchWithTimeout(2), // Contracts
+                fetchWithTimeout(3), // Labor Calculations
+                fetchWithTimeout(4), // Social Security Calculations
+                fetchWithTimeout(5), // Dr. Michel Sessions
+                fetchWithTimeout(6), // Dra. Luana Sessions
+                fetchWithTimeout(7), // Agenda
+                fetchWithTimeout(8), // Resolved Alerts
+                fetchWithTimeout(9), // Custom Laws
+                fetchAttachments()   // Attachments (Special handling)
+            ]).then(([cData, conData, labData, socData, michelData, luanaData, agendaData, resData, lawsData, attachmentsData]) => {
                 let partialSync = false;
 
                 if (cData && Array.isArray(cData)) {
@@ -239,19 +243,19 @@ const Dashboard: React.FC<DashboardProps> = ({
                     });
                     setRecords(mergedClients);
                     safeSetLocalStorage('inss_records', JSON.stringify(mergedClients));
-                } else partialSync = true;
+                } else if (cData === null && isCloudConfigured) partialSync = true;
 
                 if (conData && Array.isArray(conData)) {
                     setContracts(conData);
                     safeSetLocalStorage('inss_contracts', JSON.stringify(conData));
-                } else partialSync = true;
+                } else if (conData === null && isCloudConfigured) partialSync = true;
 
-                if (labData && Array.isArray(labData) && labData.length > 0) {
+                if (labData && Array.isArray(labData)) {
                     setSavedCalculations(labData);
                     safeSetLocalStorage('inss_calculations', JSON.stringify(labData));
                 }
                 
-                if (socData && Array.isArray(socData) && socData.length > 0) {
+                if (socData && Array.isArray(socData)) {
                     setSavedSocialCalculations(socData);
                     safeSetLocalStorage('social_security_calculations', JSON.stringify(socData));
                 }
@@ -261,7 +265,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                     safeSetLocalStorage('agenda_events', JSON.stringify(agendaData));
                 }
 
-                if (resData) {
+                if (resData && Array.isArray(resData)) {
                     setResolvedAlerts(resData);
                     safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(resData));
                 }
@@ -272,7 +276,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                 }
 
                 if (partialSync) {
-                    setDbError("Sincronização parcial (Timeout). Dados locais preservados.");
+                    setDbError("Sincronização parcial ou banco vazio. Dados locais mantidos.");
                 }
                 setIsLoading(false);
             });
@@ -286,79 +290,52 @@ const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  // Setup Realtime Subscription
-  useEffect(() => {
-    fetchData();
+    // Setup Realtime Subscription
+    useEffect(() => {
+        fetchData();
 
-    const supabase = initSupabase();
-    if (supabase) {
-        const channel = supabase.channel('db-changes')
-            .on(
-                'postgres_changes',
-                {
-                    event: '*',
-                    schema: 'public',
-                    table: 'clients'
-                },
-                (payload: any) => {
-                     if (payload.new && payload.new.data) {
-                         let newData = payload.new.data;
-                         if (newData && typeof newData === 'object' && newData.isCompressed) {
-                             try {
-                                 let decompressed = LZString.decompressFromBase64(newData.data);
-                                 if (!decompressed) {
-                                     decompressed = LZString.decompressFromUTF16(newData.data);
-                                 }
-                                 if (decompressed) {
-                                     newData = JSON.parse(decompressed);
-                                 }
-                             } catch (e) {
-                                 console.error("Error decompressing real-time data:", e);
-                             }
-                         }
+        const supabase = initSupabase();
+        if (supabase) {
+            const channel = supabase.channel('db-changes')
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'clients'
+                    },
+                    (payload: any) => {
+                        // To avoid infinite loops and ensure data integrity (merging attachments),
+                        // we re-fetch the full state when any relevant change occurs in the cloud.
+                        const changedId = payload.new?.id || payload.old?.id;
+                        if (changedId && changedId <= 9 || changedId >= 10000) {
+                            // Debounce re-fetch to avoid spamming during bulk updates
+                            if (syncTimeouts.current['global_fetch']) {
+                                clearTimeout(syncTimeouts.current['global_fetch']);
+                            }
+                            syncTimeouts.current['global_fetch'] = setTimeout(() => {
+                                fetchData();
+                            }, 1000);
+                        }
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'social_security_calculations' },
+                    () => fetchData()
+                )
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'labor_calculations' },
+                    () => fetchData()
+                )
+                .subscribe();
 
-                         if (payload.new.id === 1) {
-                             if (Array.isArray(newData)) {
-                                 setRecords(newData);
-                                 safeSetLocalStorage('inss_records', JSON.stringify(newData));
-                             }
-                         } else if (payload.new.id === 2) {
-                             if (Array.isArray(newData)) {
-                                 setContracts(newData);
-                                 safeSetLocalStorage('inss_contracts', JSON.stringify(newData));
-                             }
-                         } else if (payload.new.id === 8) {
-                             if (Array.isArray(newData)) {
-                                 setResolvedAlerts(newData);
-                                 safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(newData));
-                             }
-                         } else if (payload.new.id === 9) {
-                             if (Array.isArray(newData)) {
-                                 setCustomLaws(newData);
-                                 safeSetLocalStorage('custom_laws', JSON.stringify(newData));
-                             }
-                         }
-                     }
-                }
-            )
-            // Removed ai_conversations subscription to prevent read loops and high I/O
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'social_security_calculations' },
-                () => fetchData()
-            )
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'labor_calculations' },
-                () => fetchData()
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }
-  }, [isCloudConfigured]);
+            return () => {
+                supabase.removeChannel(channel);
+            };
+        }
+    }, [isCloudConfigured]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1120,6 +1097,9 @@ const Dashboard: React.FC<DashboardProps> = ({
                  <button onClick={() => setIsNotificationsOpen(true)} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg relative">
                      <BellIcon className="h-5 w-5" />
                      {activeAlerts.length > 0 && <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-red-500 border border-white dark:border-slate-900 animate-pulse"></span>}
+                 </button>
+                 <button onClick={() => fetchData()} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg" title="Sincronizar agora">
+                     <ArrowPathIcon className={`h-5 w-5 ${isLoading ? 'animate-spin' : ''}`} />
                  </button>
                  <button onClick={onOpenSettings} className="p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
                      <Cog6ToothIcon className={`h-5 w-5 ${isCloudConfigured ? 'text-primary-500' : ''}`} />
