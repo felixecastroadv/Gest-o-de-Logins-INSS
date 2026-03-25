@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import * as LZString from 'lz-string';
 import { 
   ScaleIcon, UserGroupIcon, BriefcaseIcon, CalculatorIcon, ArrowRightOnRectangleIcon, 
   ArrowPathRoundedSquareIcon, CloudIcon, BellIcon, Cog6ToothIcon, SunIcon, MoonIcon,
@@ -22,7 +23,6 @@ export interface SocialSecurityCalculationRecord {
     data: SocialSecurityData;
 }
 
-import LZString from 'lz-string';
 import { initSupabase } from '../supabaseClient';
 import { supabaseService } from '../services/supabaseService';
 import { isUrgentDate, formatCurrency } from '../utils';
@@ -70,6 +70,7 @@ const Dashboard: React.FC<DashboardProps> = ({
   const [customLaws, setCustomLaws] = useState<any[]>([]);
   
   const [searchTerm, setSearchTerm] = useState('');
+  const syncTimeouts = useRef<{ [key: string]: ReturnType<typeof setTimeout> | null }>({});
   
   // Modals
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -83,6 +84,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const isSyncingRef = useRef(false);
   const [dbError, setDbError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -154,7 +156,23 @@ const Dashboard: React.FC<DashboardProps> = ({
                         }
                         throw error;
                     }
-                    return data?.data;
+                    
+                    let result = data?.data;
+                    if (result && typeof result === 'object' && result.isCompressed) {
+                        try {
+                            let decompressed = LZString.decompressFromBase64(result.data);
+                            if (!decompressed) {
+                                decompressed = LZString.decompressFromUTF16(result.data);
+                            }
+                            if (decompressed) {
+                                result = JSON.parse(decompressed);
+                            }
+                        } catch (e) {
+                            console.error(`Error decompressing data for ID ${id}:`, e);
+                        }
+                    }
+                    
+                    return result;
                 } catch (err) {
                     console.error(`Fetch error for ID ${id}:`, err);
                     return null;
@@ -162,6 +180,38 @@ const Dashboard: React.FC<DashboardProps> = ({
             };
 
             // Run fetches in parallel but don't block
+            const fetchAttachments = async () => {
+                try {
+                    const { data, error } = await supabase
+                        .from('clients')
+                        .select('data')
+                        .gte('id', 10000);
+                    
+                    if (error) throw error;
+                    
+                    const allAttachments: any[] = [];
+                    for (const row of data) {
+                        let rowData = row.data;
+                        if (rowData && typeof rowData === 'object' && rowData.isCompressed) {
+                            try {
+                                let decompressed = LZString.decompressFromBase64(rowData.data);
+                                if (!decompressed) decompressed = LZString.decompressFromUTF16(rowData.data);
+                                if (decompressed) rowData = JSON.parse(decompressed);
+                            } catch (e) {
+                                console.error("Error decompressing attachment row:", e);
+                            }
+                        }
+                        if (Array.isArray(rowData)) {
+                            allAttachments.push(...rowData);
+                        }
+                    }
+                    return allAttachments;
+                } catch (err) {
+                    console.error("Error fetching attachments:", err);
+                    return [];
+                }
+            };
+
             Promise.all([
                 fetchWithTimeout(1),
                 fetchWithTimeout(2),
@@ -169,39 +219,31 @@ const Dashboard: React.FC<DashboardProps> = ({
                 supabaseService.getCalculations().catch(() => null),
                 fetchWithTimeout(7),
                 fetchWithTimeout(8),
-                fetchWithTimeout(9)
-            ]).then(([cData, conData, labData, socData, agendaData, resData, lawsData]) => {
+                fetchWithTimeout(9),
+                fetchAttachments()
+            ]).then(([cData, conData, labData, socData, agendaData, resData, lawsData, attachmentsData]) => {
                 let partialSync = false;
 
-                let parsedCData = cData;
-                if (typeof cData === 'string') {
-                    try {
-                        const decompressed = LZString.decompressFromUTF16(cData);
-                        parsedCData = decompressed ? JSON.parse(decompressed) : JSON.parse(cData);
-                    } catch (e) {
-                        console.error("Failed to decompress clients data", e);
-                    }
-                }
-
-                if (parsedCData && Array.isArray(parsedCData)) {
-                    setRecords(parsedCData);
-                    safeSetLocalStorage('inss_records', JSON.stringify(parsedCData));
+                if (cData && Array.isArray(cData)) {
+                    // Merge attachments back into clients
+                    const mergedClients = cData.map(client => {
+                        const clientAttachments = attachmentsData?.find((a: any) => a.clientId === client.id);
+                        if (clientAttachments) {
+                            return {
+                                ...client,
+                                documents: clientAttachments.documents || [],
+                                petitions: clientAttachments.petitions || []
+                            };
+                        }
+                        return client;
+                    });
+                    setRecords(mergedClients);
+                    safeSetLocalStorage('inss_records', JSON.stringify(mergedClients));
                 } else partialSync = true;
 
-                if (conData) {
-                    let parsedConData = conData;
-                    if (typeof conData === 'string') {
-                        try {
-                            const decompressed = LZString.decompressFromUTF16(conData);
-                            parsedConData = decompressed ? JSON.parse(decompressed) : JSON.parse(conData);
-                        } catch (e) {
-                            console.error("Failed to decompress contracts data", e);
-                        }
-                    }
-                    if (Array.isArray(parsedConData)) {
-                        setContracts(parsedConData);
-                        safeSetLocalStorage('inss_contracts', JSON.stringify(parsedConData));
-                    } else partialSync = true;
+                if (conData && Array.isArray(conData)) {
+                    setContracts(conData);
+                    safeSetLocalStorage('inss_contracts', JSON.stringify(conData));
                 } else partialSync = true;
 
                 if (labData && Array.isArray(labData) && labData.length > 0) {
@@ -260,43 +302,40 @@ const Dashboard: React.FC<DashboardProps> = ({
                 },
                 (payload: any) => {
                      if (payload.new && payload.new.data) {
-                         if (payload.new.id === 1) {
-                             let newData = payload.new.data;
-                             if (typeof newData === 'string') {
-                                 try {
-                                     const decompressed = LZString.decompressFromUTF16(newData);
-                                     newData = decompressed ? JSON.parse(decompressed) : JSON.parse(newData);
-                                 } catch (e) {
-                                     console.error("Failed to decompress realtime clients data", e);
+                         let newData = payload.new.data;
+                         if (newData && typeof newData === 'object' && newData.isCompressed) {
+                             try {
+                                 let decompressed = LZString.decompressFromBase64(newData.data);
+                                 if (!decompressed) {
+                                     decompressed = LZString.decompressFromUTF16(newData.data);
                                  }
+                                 if (decompressed) {
+                                     newData = JSON.parse(decompressed);
+                                 }
+                             } catch (e) {
+                                 console.error("Error decompressing real-time data:", e);
                              }
+                         }
+
+                         if (payload.new.id === 1) {
                              if (Array.isArray(newData)) {
                                  setRecords(newData);
                                  safeSetLocalStorage('inss_records', JSON.stringify(newData));
                              }
                          } else if (payload.new.id === 2) {
-                             let newData = payload.new.data;
-                             if (typeof newData === 'string') {
-                                 try {
-                                     const decompressed = LZString.decompressFromUTF16(newData);
-                                     newData = decompressed ? JSON.parse(decompressed) : JSON.parse(newData);
-                                 } catch (e) {
-                                     console.error("Failed to decompress realtime contracts data", e);
-                                 }
-                             }
                              if (Array.isArray(newData)) {
                                  setContracts(newData);
                                  safeSetLocalStorage('inss_contracts', JSON.stringify(newData));
                              }
                          } else if (payload.new.id === 8) {
-                             if (Array.isArray(payload.new.data)) {
-                                 setResolvedAlerts(payload.new.data);
-                                 safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(payload.new.data));
+                             if (Array.isArray(newData)) {
+                                 setResolvedAlerts(newData);
+                                 safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(newData));
                              }
                          } else if (payload.new.id === 9) {
-                             if (Array.isArray(payload.new.data)) {
-                                 setCustomLaws(payload.new.data);
-                                 safeSetLocalStorage('custom_laws', JSON.stringify(payload.new.data));
+                             if (Array.isArray(newData)) {
+                                 setCustomLaws(newData);
+                                 safeSetLocalStorage('custom_laws', JSON.stringify(newData));
                              }
                          }
                      }
@@ -325,17 +364,20 @@ const Dashboard: React.FC<DashboardProps> = ({
     setCurrentPage(1);
   }, [searchTerm, itemsPerPage, currentView, clientFilter]);
 
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      const hasPendingSyncs = Object.values(syncTimeouts.current).some(timeout => timeout !== null);
+      if (hasPendingSyncs || isSyncingRef.current) {
+        e.preventDefault();
+        e.returnValue = 'Você tem alterações não salvas. Tem certeza que deseja sair?';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   const handleSaveCustomLaws = (newLaws: any[]) => {
-    setCustomLaws(newLaws);
-    safeSetLocalStorage('custom_laws', JSON.stringify(newLaws));
-    if (isCloudConfigured) {
-        const supabase = initSupabase();
-        if (supabase) {
-            supabase.from('clients').upsert({ id: 9, data: newLaws }).then(({ error }) => {
-                if (error) console.error("Error syncing laws:", error);
-            });
-        }
-    }
+    saveData('laws', newLaws, true);
   };
 
   // Compute Alerts
@@ -403,131 +445,184 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleResolveAlert = (id: string) => {
       const updated = [...resolvedAlerts, id];
-      saveData('resolved_alerts', updated);
+      saveData('resolved_alerts', updated, true);
   };
 
   // Save Logic (Generic)
-  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana' | 'agenda' | 'resolved_alerts', newData: any[]) => {
-      setIsSyncing(true);
-      setSaveError(null);
-      const supabase = initSupabase();
+  const saveData = async (type: 'clients' | 'contracts' | 'calculations' | 'social_calculations' | 'dr_michel' | 'dra_luana' | 'agenda' | 'resolved_alerts' | 'laws', newData: any[], forceSync: boolean = false) => {
+      // 1. Immediate local updates
+      const jsonString = JSON.stringify(newData);
+      if (type === 'clients') {
+          setRecords(newData);
+          safeSetLocalStorage('inss_records', jsonString);
+      } else if (type === 'contracts') {
+          setContracts(newData);
+          safeSetLocalStorage('inss_contracts', jsonString);
+      } else if (type === 'calculations') {
+          setSavedCalculations(newData);
+          safeSetLocalStorage('inss_calculations', jsonString);
+      } else if (type === 'social_calculations') {
+          setSavedSocialCalculations(newData);
+          safeSetLocalStorage('social_security_calculations', jsonString);
+      } else if (type === 'dr_michel') {
+          setDrMichelSessions(newData);
+          safeSetLocalStorage('dr_michel_sessions', jsonString);
+      } else if (type === 'dra_luana') {
+          setDraLuanaSessions(newData);
+          safeSetLocalStorage('dra_luana_sessions', jsonString);
+      } else if (type === 'agenda') {
+          setAgendaEvents(newData);
+          safeSetLocalStorage('agenda_events', jsonString);
+      } else if (type === 'resolved_alerts') {
+          setResolvedAlerts(newData);
+          safeSetLocalStorage('inss_resolved_alerts', jsonString);
+      } else if (type === 'laws') {
+          setCustomLaws(newData);
+          safeSetLocalStorage('custom_laws', jsonString);
+      }
 
-      try {
-          if (type === 'clients') {
-              setRecords(newData);
-              safeSetLocalStorage('inss_records', JSON.stringify(newData));
-              if (supabase) {
-                  // Background sync for large payloads
-                  try {
-                      // Compress data to avoid payload size limits
-                      const compressedData = LZString.compressToUTF16(JSON.stringify(newData));
-                      const { error } = await supabase.from('clients').upsert({ id: 1, data: compressedData });
-                      if (error) {
-                          console.error("Sync error (clients):", error);
-                          setSaveError("Erro de sincronização (Clientes).");
-                      }
-                  } catch (e) {
-                      console.error("Compression or sync error (clients):", e);
-                      setSaveError("Erro de sincronização (Clientes).");
+      const supabase = initSupabase();
+      if (!supabase) return;
+
+      // 2. Cloud Sync
+      if (syncTimeouts.current[type]) {
+          clearTimeout(syncTimeouts.current[type]);
+      }
+
+      setSaveError(null);
+
+      const syncOperation = async () => {
+          setIsSyncing(true);
+          isSyncingRef.current = true;
+          try {
+              if (type === 'clients') {
+                  // Separar clientes leves e anexos pesados
+                  const lightweightClients = newData.map((c: any) => {
+                      const { documents, petitions, ...rest } = c;
+                      return rest;
+                  });
+
+                  let payloadToSave: any = lightweightClients;
+                  const lwJsonString = JSON.stringify(lightweightClients);
+                  if (lwJsonString.length > 100000) {
+                      const compressed = LZString.compressToBase64(lwJsonString);
+                      payloadToSave = { isCompressed: true, data: compressed };
                   }
-                  setIsSyncing(false);
-                  return;
-              }
-          } else if (type === 'contracts') {
-              setContracts(newData);
-              safeSetLocalStorage('inss_contracts', JSON.stringify(newData));
-              if (supabase) {
-                  try {
-                      const compressedData = LZString.compressToUTF16(JSON.stringify(newData));
-                      const { error } = await supabase.from('clients').upsert({ id: 2, data: compressedData });
-                      if (error) {
-                          console.error("Sync error (contracts):", error);
-                          setSaveError("Erro de sincronização (Contratos).");
+
+                  const { error } = await supabase.from('clients').upsert({ id: 1, data: payloadToSave });
+                  if (error) throw error;
+
+                  // Encontrar clientes cujos anexos mudaram
+                  const changedAttachments = newData.filter((client: any) => {
+                      const oldClient = records.find(r => r.id === client.id);
+                      const oldDocs = oldClient?.documents || [];
+                      const oldPets = oldClient?.petitions || [];
+                      const newDocs = client.documents || [];
+                      const newPets = client.petitions || [];
+                      
+                      if (oldDocs.length === 0 && oldPets.length === 0 && newDocs.length === 0 && newPets.length === 0) return false;
+                      
+                      return JSON.stringify(oldDocs) !== JSON.stringify(newDocs) || 
+                             JSON.stringify(oldPets) !== JSON.stringify(newPets);
+                  });
+
+                  for (const client of changedAttachments) {
+                      const getNumericId = (strId: string): number => {
+                          let hash = 0;
+                          for (let i = 0; i < strId.length; i++) {
+                              hash = ((hash << 5) - hash) + strId.charCodeAt(i);
+                              hash |= 0;
+                          }
+                          return (Math.abs(hash) % 1000000) + 10000;
+                      };
+                      
+                      const numericId = getNumericId(client.id);
+                      
+                      // Buscar linha existente para lidar com colisões
+                      const { data: existingData } = await supabase.from('clients').select('data').eq('id', numericId).maybeSingle();
+                      
+                      let rowData: any[] = [];
+                      if (existingData?.data) {
+                          rowData = Array.isArray(existingData.data) ? existingData.data : [];
+                          if (existingData.data.isCompressed) {
+                              let decompressed = LZString.decompressFromBase64(existingData.data.data);
+                              if (!decompressed) decompressed = LZString.decompressFromUTF16(existingData.data.data);
+                              if (decompressed) rowData = JSON.parse(decompressed);
+                          }
                       }
-                  } catch (e) {
-                      console.error("Compression or sync error (contracts):", e);
-                      setSaveError("Erro de sincronização (Contratos).");
+                      
+                      const existingIndex = rowData.findIndex((item: any) => item.clientId === client.id);
+                      const attachmentData = { 
+                          clientId: client.id, 
+                          documents: client.documents || [], 
+                          petitions: client.petitions || [] 
+                      };
+                      
+                      if (existingIndex >= 0) {
+                          rowData[existingIndex] = attachmentData;
+                      } else {
+                          rowData.push(attachmentData);
+                      }
+                      
+                      let attachmentPayload: any = rowData;
+                      const attJson = JSON.stringify(rowData);
+                      if (attJson.length > 100000) {
+                          const compressed = LZString.compressToBase64(attJson);
+                          attachmentPayload = { isCompressed: true, data: compressed };
+                      }
+                      
+                      const { error: attError } = await supabase.from('clients').upsert({ id: numericId, data: attachmentPayload });
+                      if (attError) throw attError;
                   }
-                  setIsSyncing(false);
-                  return;
+              } else {
+                  let payloadToSave: any = newData;
+                  if (jsonString.length > 100000) {
+                      const compressed = LZString.compressToBase64(jsonString);
+                      payloadToSave = { isCompressed: true, data: compressed };
+                  }
+
+                  let id = 1;
+                  if (type === 'contracts') id = 2;
+                  else if (type === 'calculations') id = 3;
+                  else if (type === 'social_calculations') id = 4;
+                  else if (type === 'dr_michel') id = 5;
+                  else if (type === 'dra_luana') id = 6;
+                  else if (type === 'agenda') id = 7;
+                  else if (type === 'resolved_alerts') id = 8;
+                  else if (type === 'laws') id = 9;
+
+                  const { error } = await supabase.from('clients').upsert({ id, data: payloadToSave });
+                  
+                  if (error) {
+                      throw error;
+                  }
               }
-          } else if (type === 'calculations') {
-              setSavedCalculations(newData);
-              safeSetLocalStorage('inss_calculations', JSON.stringify(newData));
-              if (supabase) {
-                  const { error } = await supabase.from('clients').upsert({ id: 3, data: newData });
-                  if (error) console.error("Sync error (calculations):", error);
-                  setIsSyncing(false);
-                  return;
-              }
-          } else if (type === 'social_calculations') {
-              setSavedSocialCalculations(newData);
-              safeSetLocalStorage('social_security_calculations', JSON.stringify(newData));
-              if (supabase) {
-                  supabase.from('clients').upsert({ id: 4, data: newData }).then(({ error }) => {
-                      if (error) console.error("Sync error (social):", error);
-                      setIsSyncing(false);
-                  });
-                  return;
-              }
-          } else if (type === 'dr_michel') {
-              setDrMichelSessions(newData);
-              safeSetLocalStorage('dr_michel_sessions', JSON.stringify(newData));
-              if (supabase) {
-                  supabase.from('clients').upsert({ id: 5, data: newData }).then(({ error }) => {
-                      if (error) console.error("Sync error (Michel):", error);
-                      setIsSyncing(false);
-                  });
-                  return;
-              }
-          } else if (type === 'dra_luana') {
-              setDraLuanaSessions(newData);
-              safeSetLocalStorage('dra_luana_sessions', JSON.stringify(newData));
-              if (supabase) {
-                  supabase.from('clients').upsert({ id: 6, data: newData }).then(({ error }) => {
-                      if (error) console.error("Sync error (Luana):", error);
-                      setIsSyncing(false);
-                  });
-                  return;
-              }
-          } else if (type === 'agenda') {
-              setAgendaEvents(newData);
-              safeSetLocalStorage('agenda_events', JSON.stringify(newData));
-              if (supabase) {
-                  supabase.from('clients').upsert({ id: 7, data: newData }).then(({ error }) => {
-                      if (error) console.error("Sync error (Agenda):", error);
-                      setIsSyncing(false);
-                  });
-                  return;
-              }
-          } else if (type === 'resolved_alerts') {
-              setResolvedAlerts(newData);
-              safeSetLocalStorage('inss_resolved_alerts', JSON.stringify(newData));
-              if (supabase) {
-                  supabase.from('clients').upsert({ id: 8, data: newData }).then(({ error }) => {
-                      if (error) console.error("Sync error (Resolved Alerts):", error);
-                      setIsSyncing(false);
-                  });
-                  return;
-              }
+          } catch (err: any) {
+              console.error(`Sync error (${type}):`, err);
+              setSaveError("Erro: " + (err.message || "Falha na conexão"));
+          } finally {
+              setIsSyncing(false);
+              isSyncingRef.current = false;
+              syncTimeouts.current[type] = null;
           }
-          setIsSyncing(false);
-      } catch (err: any) {
-          console.error("Erro ao salvar:", err);
-          setSaveError("Erro: " + (err.message || "Falha na conexão"));
-          setIsSyncing(false);
+      };
+
+      if (forceSync) {
+          await syncOperation();
+      } else {
+          syncTimeouts.current[type] = setTimeout(syncOperation, 5000); // 5 seconds debounce for cloud sync
       }
   };
 
   // Handlers for Clients
   const handleClientCreate = (data: ClientRecord) => {
     const newRecord = { ...data, id: Math.random().toString(36).substr(2, 9) };
-    saveData('clients', [newRecord, ...records]);
+    saveData('clients', [newRecord, ...records], true);
     setIsModalOpen(false);
   };
   const handleClientUpdate = (data: ClientRecord) => {
     const updated = records.map(r => r.id === data.id ? data : r);
-    saveData('clients', updated);
+    saveData('clients', updated, true);
     setIsModalOpen(false);
   };
 
@@ -541,7 +636,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleClientDelete = (id: string) => {
     if (confirm('Excluir cliente permanentemente?')) {
-        saveData('clients', records.filter(r => r.id !== id));
+        saveData('clients', records.filter(r => r.id !== id), true);
     }
   };
   const handleToggleArchive = (id: string) => {
@@ -552,7 +647,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       
       if (confirm(`Deseja realmente ${action} este cliente?`)) {
           const updated = records.map(r => r.id === id ? { ...r, isArchived: newValue } : r);
-          saveData('clients', updated);
+          saveData('clients', updated, true);
       }
   }
 
@@ -571,18 +666,18 @@ const Dashboard: React.FC<DashboardProps> = ({
           }
           return r;
       });
-      saveData('clients', updated);
+      saveData('clients', updated, true);
   }
 
   // Handlers for Contracts
   const handleContractCreate = (data: ContractRecord) => {
       const newRec = { ...data, id: Math.random().toString(36).substr(2, 9) };
-      saveData('contracts', [newRec, ...contracts]);
+      saveData('contracts', [newRec, ...contracts], true);
       setIsContractModalOpen(false);
   }
   const handleContractUpdate = (data: ContractRecord) => {
       const updated = contracts.map(c => c.id === data.id ? data : c);
-      saveData('contracts', updated);
+      saveData('contracts', updated, true);
       setIsContractModalOpen(false);
   }
 
@@ -596,11 +691,13 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleContractDelete = (id: string) => {
       if (confirm('Excluir contrato e histórico financeiro?')) {
-          saveData('contracts', contracts.filter(c => c.id !== id));
+          saveData('contracts', contracts.filter(c => c.id !== id), true);
       }
   }
 
   const handleSaveCalculation = async (calc: CalculationRecord) => {
+      setIsSyncing(true);
+      isSyncingRef.current = true;
       try {
           await supabaseService.saveLaborCalculation(calc);
           const updated = await supabaseService.getLaborCalculations();
@@ -608,6 +705,9 @@ const Dashboard: React.FC<DashboardProps> = ({
           safeSetLocalStorage('inss_calculations', JSON.stringify(updated));
       } catch (error) {
           console.error("Error saving labor calculation:", error);
+      } finally {
+          setIsSyncing(false);
+          isSyncingRef.current = false;
       }
   };
 
@@ -632,6 +732,8 @@ const Dashboard: React.FC<DashboardProps> = ({
           data: data
       };
       
+      setIsSyncing(true);
+      isSyncingRef.current = true;
       try {
           await supabaseService.saveCalculation(newCalc);
           const updated = [newCalc, ...savedSocialCalculations];
@@ -641,6 +743,9 @@ const Dashboard: React.FC<DashboardProps> = ({
       } catch (error) {
           console.error("Error saving social calculation:", error);
           alert('Erro ao salvar cálculo no banco de dados.');
+      } finally {
+          setIsSyncing(false);
+          isSyncingRef.current = false;
       }
   };
 
@@ -663,10 +768,10 @@ const Dashboard: React.FC<DashboardProps> = ({
       } else {
           updated = [...agendaEvents, event];
       }
-      saveData('agenda', updated);
+      saveData('agenda', updated, true);
   };
 
-  const handleSavePetition = (clientId: string, petition: any) => {
+  const handleSavePetition = (clientId: string, petition: any, isAutoSave: boolean = false) => {
       const client = records.find(c => c.id === clientId);
       if (!client) return;
 
@@ -685,7 +790,7 @@ const Dashboard: React.FC<DashboardProps> = ({
       }
 
       const updatedClients = records.map(c => c.id === clientId ? { ...c, petitions: updatedPetitions } : c);
-      saveData('clients', updatedClients);
+      saveData('clients', updatedClients, !isAutoSave);
       
       if (!activePetition || activePetition.id === petition.id || !activePetition.id) {
           setActivePetition(petition);
@@ -710,7 +815,7 @@ const Dashboard: React.FC<DashboardProps> = ({
         setRecords(updatedClients);
         
         // Persist to storage
-        await saveData('clients', updatedClients);
+        await saveData('clients', updatedClients, true);
     };
 
   const handleOpenPetition = (petition: any) => {
@@ -721,7 +826,7 @@ const Dashboard: React.FC<DashboardProps> = ({
 
   const handleDeleteAgendaEvent = (id: string) => {
       if (confirm('Excluir este compromisso?')) {
-          saveData('agenda', agendaEvents.filter(e => e.id !== id));
+          saveData('agenda', agendaEvents.filter(e => e.id !== id), true);
       }
   };
 
@@ -738,22 +843,11 @@ const Dashboard: React.FC<DashboardProps> = ({
       const lowerSearch = searchTerm.toLowerCase();
       
       if (currentView === 'clients') {
-          return records.filter(r => {
-            const nameMatch = r.name ? r.name.toLowerCase().includes(lowerSearch) : false;
-            const cpfMatch = r.cpf ? r.cpf.includes(lowerSearch) : false;
-            const searchMatch = !lowerSearch || nameMatch || cpfMatch;
-            
-            let filterMatch = false;
-            if (clientFilter === 'archived') {
-                filterMatch = !!r.isArchived;
-            } else if (clientFilter === 'referral') {
-                filterMatch = !!r.isReferral;
-            } else {
-                filterMatch = !r.isArchived && !r.isReferral;
-            }
-            
-            return searchMatch && filterMatch;
-          }).sort((a, b) => {
+          return records.filter(r => 
+            ((r.name && r.name.toLowerCase().includes(lowerSearch)) ||
+            (r.cpf && r.cpf.includes(lowerSearch))) &&
+            (clientFilter === 'archived' ? r.isArchived : clientFilter === 'referral' ? r.isReferral : !r.isArchived && !r.isReferral)
+          ).sort((a, b) => {
               // Priority: Red (Urgent) > Yellow (Daily) > None
               const aScore = (a.isUrgentAttention ? 2 : 0) + (a.isDailyAttention ? 1 : 0);
               const bScore = (b.isUrgentAttention ? 2 : 0) + (b.isDailyAttention ? 1 : 0);
@@ -766,7 +860,7 @@ const Dashboard: React.FC<DashboardProps> = ({
                   if (aVal < bVal) return sortConfig.direction === 'ascending' ? -1 : 1;
                   if (aVal > bVal) return sortConfig.direction === 'ascending' ? 1 : -1;
               }
-              return (a.name || '').localeCompare(b.name || '');
+              return a.name.localeCompare(b.name);
           });
       } else {
           return contracts.filter(c => 
