@@ -25,7 +25,9 @@ import {
   UserIcon,
   TagIcon,
   DocumentTextIcon,
-  TrashIcon
+  TrashIcon,
+  CheckIcon,
+  ArrowUturnLeftIcon
 } from '@heroicons/react/24/outline';
 import { AgendaEvent, ClientRecord } from '../types';
 
@@ -106,11 +108,12 @@ const Agenda: React.FC<AgendaProps> = ({ events, clients, onSaveEvent, onDeleteE
     }
   };
 
-  const handleResolve = (event: AgendaEvent) => {
+  const handleToggleResolve = (event: AgendaEvent) => {
+    const isResolved = event.status === 'resolved';
     onSaveEvent({
       ...event,
-      status: 'resolved',
-      resolvedAt: new Date().toISOString()
+      status: isResolved ? 'pending' : 'resolved',
+      resolvedAt: isResolved ? undefined : new Date().toISOString()
     });
   };
 
@@ -293,15 +296,21 @@ const Agenda: React.FC<AgendaProps> = ({ events, clients, onSaveEvent, onDeleteE
                               {isOverdue && <span className="text-[10px] font-bold text-red-600 dark:text-red-400 uppercase tracking-wider animate-pulse">Atrasado</span>}
                             </div>
                             <div className="flex items-center gap-1">
-                              {!isResolved && (
-                                <button 
-                                  onClick={() => handleResolve(event)}
-                                  className="p-1.5 rounded-md bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-300 transition-colors"
-                                  title="Marcar como resolvido"
-                                >
-                                  <PlusIcon className="h-4 w-4" />
-                                </button>
-                              )}
+                              <button 
+                                onClick={() => handleToggleResolve(event)}
+                                className={`p-1.5 rounded-md transition-colors ${
+                                  isResolved 
+                                    ? 'bg-yellow-100 text-yellow-700 hover:bg-yellow-200 dark:bg-yellow-900/40 dark:text-yellow-300' 
+                                    : 'bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900/40 dark:text-green-300'
+                                }`}
+                                title={isResolved ? "Reabrir compromisso" : "Marcar como resolvido"}
+                              >
+                                {isResolved ? (
+                                  <ArrowUturnLeftIcon className="h-4 w-4" />
+                                ) : (
+                                  <CheckIcon className="h-4 w-4" />
+                                )}
+                              </button>
                               <button 
                                 onClick={() => onDeleteEvent(event.id)}
                                 className="p-1.5 rounded-md hover:bg-black/5 dark:hover:bg-white/10 transition-colors"
