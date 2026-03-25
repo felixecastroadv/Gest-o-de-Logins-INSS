@@ -48,27 +48,19 @@ export const getDbConfig = () => {
     return null;
 };
 
+let supabaseInstance: any = null;
+let lastConfig: string | null = null;
+
 export const initSupabase = () => {
-    // Prioridade 1: Configuração salva pelo usuário na interface (localStorage)
-    const stored = localStorage.getItem(DB_CONFIG_KEY);
-    if (stored) {
-        const config = JSON.parse(stored);
-        if (config && config.url && config.key) {
-            return createClient(config.url, config.key);
-        }
+    const config = getDbConfig();
+    if (!config) return null;
+
+    const configStr = JSON.stringify(config);
+    if (supabaseInstance && lastConfig === configStr) {
+        return supabaseInstance;
     }
 
-    // Prioridade 2: Variáveis de ambiente
-    const envUrl = getEnvVar('NEXT_PUBLIC_SUPABASE_URL') || getEnvVar('VITE_SUPABASE_URL');
-    const envKey = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY') || getEnvVar('VITE_SUPABASE_ANON_KEY');
-    if (envUrl && envKey) {
-        return createClient(envUrl, envKey);
-    }
-
-    // Prioridade 3: Configuração global (fallback)
-    if (GLOBAL_SUPABASE_URL && GLOBAL_SUPABASE_KEY) {
-        return createClient(GLOBAL_SUPABASE_URL, GLOBAL_SUPABASE_KEY);
-    }
-
-    return null;
+    lastConfig = configStr;
+    supabaseInstance = createClient(config.url, config.key);
+    return supabaseInstance;
 };
