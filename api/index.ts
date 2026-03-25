@@ -80,8 +80,8 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - Explique o conteúdo da norma com suas próprias palavras, conectando-a ao caso concreto.
    - Se precisar citar um trecho curto, faça-o entre aspas e com a devida referência, mas nunca copie parágrafos inteiros ou artigos longos de forma literal.
 3. TEXTO LIMPO E GRAMATICALMENTE PERFEITO:
-   - FORMATAÇÃO: Texto PLANO, pronto para Word.
-   - PROIBIDO: Markdown (*, #, ---).
+   - FORMATAÇÃO: Use exclusivamente os seguintes símbolos para formatação: **negrito**, *itálico* e __sublinhado__. O editor reconhece estes símbolos. NÃO use tags HTML ou Markdown estrutural (como # para títulos ou --- para linhas).
+   - ALINHAMENTO E RECUO: O texto deve ser gerado com alinhamento JUSTIFICADO (margem a margem) e com RECUO DE PARÁGRAFO (2cm) em todos os parágrafos, exceto em citações, que devem ter recuo de citação.
    - PERMITIDO: Símbolos essenciais (%, /, $, º, ª, -).
    - GRAMÁTICA: Acentuação e pontuação rigorosas (Norma Culta).
    - NUMERAÇÃO: Tópicos (1., 2.) e Pedidos (a), b)) obrigatórios.
@@ -359,8 +359,8 @@ REGRAS CRÍTICAS DE ESCRITA (DNA JURÍDICO):
    - Evite transcrições literais longas de artigos de lei ou súmulas, preferindo a explicação do conteúdo normativo com suas próprias palavras.
    - Se precisar citar um trecho curto, faça-o entre aspas e com a devida referência, mas nunca copie parágrafos inteiros ou artigos longos de forma literal.
 3. TEXTO LIMPO E GRAMATICALMENTE PERFEITO:
-   - FORMATAÇÃO: Texto PLANO, pronto para Word.
-   - PROIBIDO: Markdown (*, #, ---).
+   - FORMATAÇÃO: Use exclusivamente os seguintes símbolos para formatação: **negrito**, *itálico* e __sublinhado__. O editor reconhece estes símbolos. NÃO use tags HTML ou Markdown estrutural (como # para títulos ou --- para linhas).
+   - ALINHAMENTO E RECUO: O texto deve ser gerado com alinhamento JUSTIFICADO (margem a margem) e com RECUO DE PARÁGRAFO (2cm) em todos os parágrafos, exceto em citações, que devem ter recuo de citação.
    - PERMITIDO: Símbolos essenciais (%, /, $, º, ª, -).
    - GRAMÁTICA: Acentuação e pontuação rigorosas (Norma Culta).
    - NUMERAÇÃO: Tópicos (I., II.) e Pedidos (a), b)) obrigatórios.
